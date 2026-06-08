@@ -1,9 +1,21 @@
-import Image from "next/image";
+import { Navbar } from "@/components/layout/Navbar";
+import { Footer } from "@/components/layout/Footer";
+import { Hero } from "@/components/homepage/Hero";
+import { HowItWorks } from "@/components/homepage/HowItWorks";
+import { Features } from "@/components/homepage/Features";
+import { Testimonial } from "@/components/homepage/Testimonial";
+import { BottomCTA } from "@/components/homepage/BottomCTA";
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <h1 className="bg-info-dark text-white text-3xl">
-      Jobpilot - Your Ultimate Job Search Companion
-    </h1>
+    <main className="flex flex-col min-h-screen">
+      <Navbar />
+      <Hero />
+      <HowItWorks />
+      <Features />
+      <Testimonial />
+      <BottomCTA />
+      <Footer />
+    </main>
   );
 }
