@@ -1,59 +1,71 @@
-# Memory — Feature 06 Profile Save Logic (complete)
+# Memory — Feature 07 AI Profile Extraction (complete) + Session Fixes
 
 Last updated: 2026-06-09
 
 ## What was built
 
-**Feature 06 — Profile Save Logic (completed this session)**
+**This session — fixes and refinements across multiple features:**
 
-New files created:
+**Login page redesign (`app/auth/login/page.tsx`):**
+- Two-column card layout. Left panel: `bg-accent-muted` background, decorative blur blobs, "OAuth secured by InsForge" badge with shield icon, large bold headline, description, footer note. Right panel: "Welcome to / JobPilot" + Google + GitHub OAuth buttons with borders. Full-page `bg-background` wrapper.
 
-- `types/index.ts` — `WorkExperience`, `Education`, `Profile` (mirrors DB snake_case columns), `ProfileFormInput` (form camelCase fields)
-- `actions/profile.ts` — two Server Actions:
-  - `saveProfile(input)` — maps form camelCase→DB snake_case, splits comma strings to arrays, composes education jsonb, strips React `id` from work experience, calculates `is_complete` from 11 fields, checks if row exists first then does `update()` or `insert()` (InsForge has no upsert), calls `revalidatePath('/profile')`
-  - `updateResumeUrl(url)` — single-column update, called after storage upload
+**Auth fixes:**
+- `app/auth/callback/route.ts` — wrapped fetch + `.json()` in try/catch; any exception redirects to `/auth/login?error=auth_failed` instead of 500
+- `middleware.ts` — post-login redirect is `/dashboard` (not `/profile`)
+- `context/architecture.md` — updated: folder structure (`auth/` not `(auth)/`), auth section (`/auth/login`, redirect to `/dashboard`), InsForge client pattern (correct import `@insforge/sdk/ssr`, correct `get` cookie shape)
+- `context/build-plan.md` — redirect references updated to `/auth/login` and `/dashboard`
+- Logout (`handleLogout`) in both `app/profile/page.tsx` and `app/dashboard/page.tsx` — wrapped in try/catch; navigates to `/` regardless of failure
 
-Modified files:
+**Resume upload fix (`components/profile/ResumeUpload.tsx`):**
+- Removed `insforge.auth.getCurrentUser()` client-side call — was racing the browser client's async init, always returning null
+- Now accepts `userId: string | null` prop passed down from the server component
+- `app/profile/page.tsx` fetches userId server-side, passes it through `ProfilePageShell` → `ResumeUpload`
+- `components/profile/ProfilePageShell.tsx` updated to thread `userId` prop
 
-- `app/profile/page.tsx` — now async Server Component; fetches profile via `createInsforgeServer()`, computes `completionPercentage` + `missingFields` server-side, passes to all child components; added `key={profile?.updated_at ?? "empty"}` on `<ProfileForm>` to force remount after save
-- `components/profile/ProfileForm.tsx` — accepts `initialData?: Profile | null`; `profileToFormData()` maps DB→form; state initialized via `useState(() => profileToFormData(initialData))`; real `onSubmit` calls `saveProfile()`, shows saving/error/success states
-- `components/profile/ResumeUpload.tsx` — accepts `initialResumeUrl`; on file select: gets userId via `insforge.auth.getCurrentUser()`, deletes existing file at `${userId}/resume.pdf`, uploads, calls `updateResumeUrl(data.url)`
-- `context/progress-tracker.md` — Feature 06 marked complete, next = Feature 07
-
-Also added this session:
-
-- `components/profile/ConnectedAccounts.tsx` — Client component showing LinkedIn "Connect" UI (LinkedIn logo SVG, `bg-linkedin` token, connect button). OAuth flow is a future feature — button is a no-op.
+**PDF extraction fixes (`app/api/resume/extract/route.ts`):**
+- `pdf-parse` v2.4.5 completely changed API — no longer `pdfParse(buffer)`, now `new PDFParse({ data: buffer }).getText()`
+- Static `import { PDFParse } from "pdf-parse"` — works because `serverExternalPackages: ["pdf-parse"]` is in `next.config.ts`
+- Added `if (buffer.length === 0)` guard before parsing
+- Added `finish_reason === "length"` warning log
+- `max_tokens` raised from 800 → 4000 (800 was truncating responses)
+- Text trimmed to 12,000 chars before sending to OpenAI
+- Work experience limit raised from 3 → 10 roles in the system prompt
+- Added `OPENAI_API_KEY` guard returning 503 if key is missing
+- `OPENAI_API_KEY` added to `.env.local`
 
 ## Decisions made
 
-- **No upsert in InsForge SDK** — only `insert()`, `update()`, `delete()`, `select()`. `saveProfile` selects first to check row existence, then branches to update or insert.
-- **Server-side pre-fill** — `app/profile/page.tsx` fetches profile as async Server Component. No loading states, no client-side fetch.
-- **`key={profile?.updated_at}` on ProfileForm** — forces component remount after save so `useState` re-initializes from fresh `initialData`. Without this, React keeps the component alive and the lazy initializer doesn't re-run.
-- **InsForge storage auto-renames files** — must `remove()` before `upload()` to maintain consistent path. ResumeUpload deletes existing `${userId}/resume.pdf` first.
-- **`insforge.database` not `insforge.db`** — confirmed from TypeScript declarations.
+- **Post-login redirect is `/dashboard`** — build plan rule followed. Both `app/auth/callback/route.ts` and `middleware.ts` redirect to `/dashboard`.
+- **`userId` flows server → client as a prop** — never re-fetched client-side. `app/profile/page.tsx` (server) is the single source of truth for the authenticated user's ID in the profile page subtree.
+- **`pdf-parse` v2 API** — `new PDFParse({ data: buffer }).getText()` — NOT the old `pdfParse(buffer)` function. The package is `type: "module"` with both ESM and CJS builds; `serverExternalPackages: ["pdf-parse"]` in `next.config.ts` is required for it to work in Next.js.
+- **Work experience limit is 10** — DB stores `work_experience` as `jsonb` array with no hard limit. The "3 roles" limit was only in the extraction prompt. Changed to 10 to match real-world resumes.
 
 ## Problems solved
 
-- **Profiles table empty despite trigger** — `on_auth_user_created` trigger only fires for new signups. The existing users (`friis1978@gmail.com` and anonymous) were created before the trigger was set up in Feature 04. Backfilled both rows with direct SQL. `saveProfile` now also handles missing rows via insert fallback — resilient for any future edge cases.
-- **Silent save failure** — `update().eq('id', userId)` on a missing row updates 0 rows, returns no error, but data is never saved. Fixed by the check-then-insert/update pattern.
-- **InsForge storage RLS** — uses `bucket`/`key` columns (not Supabase's `bucket_id`/`name`). Storage RLS policies must use `split_part(key, '/', 1)` to extract user_id path segment.
-- **`useState` lazy initializer stale** — after `revalidatePath` triggers server re-render, React keeps ProfileForm mounted and `useState(() => ...)` doesn't re-run. Fixed with `key` prop on `<ProfileForm>` in page.
+- **`insforge.auth.getCurrentUser()` returning null in `ResumeUpload`** — `createBrowserClient` calls `POST /api/auth/refresh` async on init; calling `getCurrentUser()` before that completes returns null. Fixed by passing `userId` as prop from the server component where auth is always resolved before render.
+- **`pdf-parse` v2 breaking change** — `pdfParse(buffer)` no longer exists. The package exports a `PDFParse` class. `new PDFParse({ data: buffer }).getText()` is the correct API.
+- **Extraction truncation** — `max_tokens: 800` cut off the JSON response mid-object. Raised to 4000.
+- **OpenAI 429** — first API key had no quota. Replaced with a working key in `.env.local`.
+- **Stale context files** — `architecture.md` and `build-plan.md` had wrong route paths and redirect targets from the original spec. Corrected to match actual implementation.
 
 ## Current state
 
 - Phase 1 Foundation: **complete** (01–04)
 - Feature 05 Profile Page UI: **complete**
-- Feature 06 Profile Save Logic: **complete** — form saves, pre-fills on reload, completion ring is real, resume upload to InsForge Storage works
-- ConnectedAccounts card shown (LinkedIn connect button is a no-op — OAuth flow future feature)
-- No shadcn/ui installed — all UI is plain Tailwind
+- Feature 06 Profile Save Logic: **complete**
+- Feature 07 AI Profile Extraction: **complete** — uploads to InsForge Storage, extracts via GPT-4o, populates form. Up to 10 work experience roles extracted.
+- Login page: two-column redesign live and matching design reference
+- All context files accurate and consistent with codebase
 
 ## Next session starts with
 
-**Feature 07 — AI Profile Extraction from Resume.**
+**Feature 08 — Resume PDF Generation from Profile.**
 
-Run `/architect feature 07` first per project rules, then implement.
+Per `context/build-plan.md` under "08 Resume PDF Generation from Profile":
+- POST `/api/resume/generate`
+- Reads profile from DB, GPT-4o generates polished content, `@react-pdf/renderer` renders to PDF buffer, uploads to InsForge Storage, saves URL back to profiles table
 
-Reference: `context/build-plan.md` under "07 AI Profile Extraction from Resume" for full spec.
+Run `/architect feature 08` before starting.
 
 ## Open questions
 
