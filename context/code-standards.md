@@ -224,12 +224,16 @@ All PostHog events must use these exact event names. Never invent new event name
 
 | Event                | When                                       | Key Properties             |
 | -------------------- | ------------------------------------------ | -------------------------- |
+| `oauth_login_clicked`| OAuth button clicked on login page         | provider                   |
+| `user_signed_in`     | OAuth callback succeeds, user authenticated| userId, email              |
+| `auth_failed`        | OAuth callback fails                       | error                      |
+| `user_signed_out`    | User logs out                              | userId                     |
 | `job_search_started` | Find Jobs button clicked                   | userId, jobTitle, location |
 | `job_found`          | Each job discovered and saved              | userId, source, matchScore |
 | `profile_completed`  | User saves complete profile for first time | userId                     |
 | `company_researched` | Company research dossier generated         | userId, jobId, company     |
 
-These four events are the only events in this project. Do not add more without updating this list first.
+These eight events are the only events in this project. Do not add more without updating this list first.
 
 `job_found` powers the Jobs Found Over Time and Match Score Distribution dashboard charts.
 `company_researched` powers the Company Research Activity dashboard chart.

@@ -7,8 +7,8 @@ Update this file after every completed feature. Any AI agent reading this should
 ## Current Status
 
 **Phase:** Phase 1 — Foundation
-**Last completed:** 03 PostHog Initialization
-**Next:** 04 Database Schema
+**Last completed:** 04 Database Schema
+**Next:** 05 Profile Page — Full UI
 
 ---
 
@@ -19,7 +19,7 @@ Update this file after every completed feature. Any AI agent reading this should
 - [x] 01 Homepage
 - [x] 02 Auth
 - [x] 03 PostHog Initialization
-- [ ] 04 Database Schema
+- [x] 04 Database Schema
 
 ### Phase 2 — Profile Page
 
@@ -55,6 +55,8 @@ _Add decisions here as they are made during implementation._
 - 2026-06-09: Homepage sections and global nav/footer were updated for mobile-first responsiveness using breakpoint-based layout changes (no client-side menu state introduced).
 - 2026-06-09: `@insforge/ssr` does not exist as a separate npm package — SSR utilities (`createBrowserClient`, `createServerClient`, `updateSession`) are exported from `@insforge/sdk/ssr`. Cookie names are `insforge_access_token` and `insforge_refresh_token`.
 - 2026-06-09: Next.js `RequestCookies`/`ResponseCookies` types don't match InsForge `CookieStore` overload signatures exactly — using `as any` cast in `middleware.ts` (runtime behavior is correct).
+- 2026-06-09: DB trigger `on_auth_user_created` auto-creates a profiles row on auth.users INSERT — every authenticated user always has a profiles row. Features 05+ can assume non-null.
+- 2026-06-09: InsForge storage.objects schema uses `bucket` and `key` columns (not Supabase's `bucket_id` and `name`). Storage RLS uses `split_part(key, '/', 1)` to extract the user_id path segment.
 
 ---
 
