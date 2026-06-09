@@ -3,8 +3,8 @@ import Link from "next/link";
 export function BottomCTA() {
   return (
     <section className="w-full bg-background px-6 pb-5">
-      <div className="hero-gradient w-full max-w-300 mx-auto flex flex-col items-center text-center py-20 px-8">
-        <h2 className="font-bold text-text-primary max-w-lg text-4xl leading-tight tracking-tight">
+      <div className="hero-gradient w-full max-w-300 mx-auto flex flex-col items-center text-center py-14 sm:py-20 px-5 sm:px-8">
+        <h2 className="font-bold text-text-primary max-w-lg text-3xl sm:text-4xl leading-tight tracking-tight">
           Your next job search can feel a lot less overwhelming
         </h2>
 
@@ -12,16 +12,16 @@ export function BottomCTA() {
           Set up your profile, upload your resume, and start finding matches in minutes.
         </p>
 
-        <div className="mt-8 flex items-center gap-3">
+        <div className="mt-8 flex w-full max-w-xl flex-col sm:flex-row items-center gap-3">
           <Link
             href="/login"
-            className="bg-text-primary text-surface text-sm font-medium px-5 py-2.5 rounded-md hover:bg-text-darker transition-colors flex items-center gap-1.5"
+            className="bg-text-primary text-surface text-sm font-medium px-5 py-2.5 rounded-md hover:bg-text-darker transition-colors flex items-center justify-center gap-1.5 w-full sm:w-auto"
           >
             Get Started <span>→</span>
           </Link>
           <Link
             href="/login"
-            className="bg-surface text-text-primary text-sm font-medium px-5 py-2.5 rounded-md border border-border hover:bg-surface-secondary transition-colors"
+            className="bg-surface text-text-primary text-sm font-medium px-5 py-2.5 rounded-md hover:bg-surface-secondary transition-colors w-full sm:w-auto"
           >
             Find Your First Match
           </Link>

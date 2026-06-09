@@ -3,15 +3,12 @@ import Image from "next/image";
 export function Testimonial() {
   return (
     <section className="w-full bg-background px-6">
-      <div className="w-full max-w-300 mx-auto bg-surface border border-border px-8 py-24 flex flex-col items-center text-center">
+      <div className="w-full max-w-300 mx-auto bg-surface px-8 py-24 flex flex-col items-center text-center">
         <p className="text-xs font-semibold uppercase tracking-widest text-accent mb-8">
           Success Stories
         </p>
 
-        <blockquote
-          className="font-medium text-text-primary max-w-2xl"
-          style={{ fontSize: "24px", lineHeight: "1.45" }}
-        >
+        <blockquote className="font-medium text-text-primary max-w-2xl text-2xl leading-[1.45]">
           &ldquo;I used to spend my evenings copy-pasting resumes. Now I open my dashboard to see
           interviews waiting. It feels like cheating. Had 3 offers on the table
           simultaneously.&rdquo;

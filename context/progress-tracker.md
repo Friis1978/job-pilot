@@ -7,7 +7,7 @@ Update this file after every completed feature. Any AI agent reading this should
 ## Current Status
 
 **Phase:** Phase 1 — Foundation
-**Last completed:** 01 Homepage
+**Last completed:** 01 Homepage (responsive mobile polish)
 **Next:** 02 Auth
 
 ---
@@ -52,8 +52,16 @@ Update this file after every completed feature. Any AI agent reading this should
 
 _Add decisions here as they are made during implementation._
 
+- 2026-06-09: Homepage sections and global nav/footer were updated for mobile-first responsiveness using breakpoint-based layout changes (no client-side menu state introduced).
+
 ---
 
 ## Notes
 
 _Add notes here as the build progresses — workarounds, patterns, anything that differs from the context files._
+
+- 2026-06-09: 2-column homepage sections now use `grid-cols-1 lg:grid-cols-2` to avoid compressed text blocks on narrow screens.
+- 2026-06-09: Homepage consistency cleanup completed: typoed asset name normalized to `agent-log.png`, testimonial quote styling moved from inline styles to utility classes.
+- 2026-06-09: Features section background updated to white (`bg-surface`) to match homepage card consistency.
+- 2026-06-09: HowItWorks and Features section canvases aligned to muted gray (`bg-surface-muted`) to match final landing reference.
+- 2026-06-09: HowItWorks text list area moved back to white (`bg-surface`) while keeping the outer section canvas muted, matching mockup layering.

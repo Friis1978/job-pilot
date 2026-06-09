@@ -5,8 +5,8 @@ export function Hero() {
   return (
     <div className="w-full bg-background px-6 pt-5">
       {/* Gradient card — rounded, text + CTAs only */}
-      <div className="hero-gradient w-full max-w-300 mx-auto border border-border flex flex-col items-center text-center pt-16 pb-14">
-        <h1 className="font-bold text-text-primary max-w-2xl text-5xl leading-tight tracking-tight">
+      <div className="hero-gradient w-full max-w-300 mx-auto flex flex-col items-center text-center px-4 sm:px-8 pt-12 sm:pt-16 pb-10 sm:pb-14">
+        <h1 className="font-bold text-text-primary max-w-2xl text-3xl sm:text-5xl leading-tight tracking-tight">
           Job hunting is hard.
           <br />
           Your tools shouldn&apos;t be.
@@ -17,16 +17,16 @@ export function Hero() {
           everything you need to stand out.
         </p>
 
-        <div className="mt-8 flex items-center gap-3">
+        <div className="mt-8 flex w-full max-w-xl flex-col sm:flex-row items-center gap-3">
           <Link
             href="/login"
-            className="bg-text-primary text-surface text-sm font-medium px-5 py-2.5 rounded-md hover:bg-text-darker transition-colors flex items-center gap-1.5"
+            className="bg-text-primary text-surface text-sm font-medium px-5 py-2.5 rounded-md hover:bg-text-darker transition-colors flex items-center justify-center gap-1.5 w-full sm:w-auto"
           >
             Get Started <span>→</span>
           </Link>
           <Link
             href="/login"
-            className="bg-surface text-text-primary text-sm font-medium px-5 py-2.5 rounded-md border border-border hover:bg-surface-secondary transition-colors"
+            className="bg-surface text-text-primary text-sm font-medium px-5 py-2.5 rounded-md hover:bg-surface-secondary transition-colors w-full sm:w-auto"
           >
             Find Your First Match
           </Link>
@@ -34,7 +34,7 @@ export function Hero() {
       </div>
 
       {/* Dashboard preview — gray background, no rounded corners, separate section */}
-      <div className="w-full max-w-300 mx-auto bg-background border border-border p-10">
+      <div className="w-full max-w-300 mx-auto bg-surface-muted p-4 sm:p-10">
         <Image
           src="/images/dashboard-demo.png"
           alt="JobPilot dashboard"

@@ -20,28 +20,28 @@ After building any component — update this file with the component name, file 
 
 ### Navbar
 **File:** `components/layout/Navbar.tsx`
-**Pattern:** `h-16 bg-surface border-b border-border` header, `max-w-[1440px] mx-auto px-6` inner container, logo is `Image` 36×36 + bold `text-text-darkest` at 19px. Nav links: `text-sm font-medium text-text-dark hover:text-accent`. CTA: `bg-text-primary text-surface text-sm font-medium px-4 py-2 rounded-md`.
+**Pattern:** `bg-surface border-b border-border` header with responsive height/padding (`py-3 sm:h-16 sm:py-0`). Inner container uses `flex-wrap` on mobile and returns to single row on larger screens. Nav uses `order-3 w-full justify-center` on mobile and `sm:order-0 sm:w-auto` on larger screens. Nav links scale `text-xs sm:text-sm`. CTA scales `text-xs sm:text-sm` with `px-3 sm:px-4`.
 
 ### Footer
 **File:** `components/layout/Footer.tsx`
-**Pattern:** `bg-surface border-t border-border`, `max-w-[1440px] mx-auto px-8 py-6`, same logo as Navbar. Links: `text-sm text-text-secondary hover:text-text-primary`.
+**Pattern:** `bg-surface border-t border-border` with mobile wrap (`py-4 sm:h-16 sm:py-0`, `flex-wrap`). Footer nav mirrors navbar responsive behavior (`order-3 w-full justify-center` on mobile). Links scale `text-xs sm:text-sm text-text-secondary hover:text-text-primary`.
 
 ### Hero
 **File:** `components/homepage/Hero.tsx`
-**Pattern:** `hero-gradient` CSS class (defined in globals.css) for background. Headline: `font-bold text-text-primary` at 48px. Subheadline: `text-text-secondary text-base`. Primary CTA: `bg-text-primary text-surface text-sm font-medium px-5 py-2.5 rounded-md`. Secondary CTA: `bg-surface text-text-primary border border-border px-5 py-2.5 rounded-md`. Browser mockup uses `bg-surface rounded-t-xl border border-border shadow-lg` with a chrome bar showing traffic-light dots using `bg-error`, `bg-warning`, `bg-success`.
+**Pattern:** `hero-gradient` card with responsive padding (`px-4 sm:px-8`, `pt-12 sm:pt-16`, `pb-10 sm:pb-14`). Headline scales `text-3xl sm:text-5xl`. CTA group stacks on mobile (`flex-col w-full max-w-xl`) and switches to row on larger screens (`sm:flex-row`). CTA buttons use `w-full sm:w-auto`.
 
 ### HowItWorks
 **File:** `components/homepage/HowItWorks.tsx`
-**Pattern:** `bg-surface py-24`, two-column grid `grid-cols-2 gap-16 items-center`. Section heading: `font-bold text-text-primary` at 36px. Feature items: bold `text-sm font-semibold text-text-primary` title + `text-sm text-text-secondary` description. Screenshot in `rounded-2xl border border-border shadow-md overflow-hidden`.
+**Pattern:** card with responsive spacing and muted canvas (`bg-surface-muted`, `px-6 sm:px-10 lg:px-12`, `py-12 sm:py-16 lg:py-20`). Grid is mobile-first `grid-cols-1 lg:grid-cols-2` with `gap-10 lg:gap-20`. Heading scales `text-3xl sm:text-4xl`. Feature list block is white (`bg-surface border border-border`) with row separators and accent left border on the first item.
 
 ### Features
 **File:** `components/homepage/Features.tsx`
-**Pattern:** `bg-surface-muted py-24`, two-column grid (image left, text right). Same heading/feature pattern as HowItWorks. Image in `rounded-xl overflow-hidden shadow-md border border-border`.
+**Pattern:** same responsive card and grid strategy as HowItWorks, using muted card background (`bg-surface-muted`) with `grid-cols-1 lg:grid-cols-2` and responsive px/py/gap. Heading scales `text-3xl sm:text-4xl`.
 
 ### Testimonial
 **File:** `components/homepage/Testimonial.tsx`
-**Pattern:** `bg-surface py-24`, centered. Label: `text-xs font-semibold uppercase tracking-widest text-accent`. Quote: `font-medium text-text-primary` at 24px. Attribution: `Image` 40×40 `rounded-full` + name `text-sm font-semibold` + role `text-xs text-text-muted`.
+**Pattern:** `bg-surface py-24`, centered. Label: `text-xs font-semibold uppercase tracking-widest text-accent`. Quote: class-based typography `font-medium text-text-primary text-2xl leading-[1.45]` (no inline style). Attribution: `Image` 40×40 `rounded-full` + name `text-sm font-semibold` + role `text-xs text-text-muted`.
 
 ### BottomCTA
 **File:** `components/homepage/BottomCTA.tsx`
-**Pattern:** `hero-gradient py-24`, centered. Heading at 40px. Same CTA buttons as Hero.
+**Pattern:** `hero-gradient` with responsive spacing (`py-14 sm:py-20`, `px-5 sm:px-8`). Heading scales `text-3xl sm:text-4xl`. CTA group follows Hero responsive stack pattern (`flex-col sm:flex-row`, `w-full sm:w-auto` buttons).
