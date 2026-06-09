@@ -35,11 +35,11 @@
 ├── app/
 │   ├── layout.tsx                          → Root layout, PostHog provider
 │   ├── page.tsx                            → Homepage
-│   ├── (auth)/
+│   ├── auth/
 │   │   ├── login/
 │   │   │   └── page.tsx                   → Login page
 │   │   └── callback/
-│   │       └── page.tsx                   → OAuth callback handler
+│   │       └── route.ts                   → OAuth callback handler (server-side GET, sets cookies)
 │   ├── dashboard/
 │   │   └── page.tsx                       → Main dashboard
 │   ├── profile/
@@ -292,7 +292,7 @@ Access: authenticated users only, own files only.
 - Provider: InsForge Auth
 - Methods: Google OAuth, GitHub OAuth
 - Protected routes: /dashboard, /profile, /find-jobs, /find-jobs/[id]
-- Public routes: /, /login
+- Public routes: /, /auth/login
 - Middleware in middleware.ts checks session on every protected route
 - On login → redirect to /dashboard
 
@@ -305,33 +305,28 @@ Two separate InsForge instances — never mix them:
 ```typescript
 // lib/insforge-client.ts
 // Browser-side — used in client components for auth state
-import { createBrowserClient } from "@insforge/ssr";
-export const insforge = createBrowserClient(
-  process.env.NEXT_PUBLIC_INSFORGE_URL!,
-  process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY!,
-);
+import { createBrowserClient } from "@insforge/sdk/ssr";
+export const insforge = createBrowserClient({
+  baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL!,
+  anonKey: process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY!,
+});
 
 // lib/insforge-server.ts
 // Server-side — used in API routes, Server Actions, agent code
-import { createServerClient } from "@insforge/ssr";
+import { createServerClient } from "@insforge/sdk/ssr";
 import { cookies } from "next/headers";
 
 export const createInsforgeServer = async () => {
   const cookieStore = await cookies();
-  return createServerClient(
-    process.env.NEXT_PUBLIC_INSFORGE_URL!,
-    process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: (cookiesToSet) => {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options),
-          );
-        },
+  return createServerClient({
+    baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL!,
+    anonKey: process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY!,
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name);
       },
     },
-  );
+  });
 };
 ```
 

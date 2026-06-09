@@ -1,84 +1,71 @@
-# Memory — MCP Playwright Setup
+# Memory — 02 Auth Complete + Login Redesign
 
 Last updated: 2026-06-09
 
 ## What was built
 
-- Added Playwright MCP server (`@playwright/mcp@latest`) to Claude Code config for this project
-- Removed the deprecated Puppeteer MCP entry that was already present in `~/.claude.json`
+Auth flow is complete, reviewed, and all issues resolved. Login page redesigned.
+
+**Auth files (unchanged from previous session, confirmed working):**
+- `app/auth/login/page.tsx` — Google + GitHub OAuth. Uses `skipBrowserRedirect: true`, stores PKCE verifier in `insforge_pkce_verifier` cookie, manually redirects to OAuth provider
+- `app/auth/callback/route.ts` — Server-side GET handler. Exchanges code + verifier with InsForge server-to-server, calls `setAuthCookies()`, redirects to `/dashboard`. Now wrapped in try/catch — non-JSON InsForge responses redirect to `/auth/login?error=auth_failed` instead of crashing
+- `app/api/auth/refresh/route.ts` — `createRefreshAuthRouter()` from `@insforge/sdk/ssr`. Required by `createBrowserClient`
+- `app/api/auth/logout/route.ts` — `clearAuthCookies()` from `@insforge/sdk/ssr`
+- `middleware.ts` — Protects `/dashboard`, `/profile`, `/find-jobs`. Unauthenticated → `/auth/login`. Authenticated at `/auth/login` → `/dashboard`
+
+**Login page redesign (`app/auth/login/page.tsx`):**
+- Two-column card layout. Left panel: marketing copy (`bg-accent-muted` background, decorative blur blobs, "OAuth secured by InsForge" badge, hero headline, description, footer note). Right panel: "Welcome to / JobPilot" heading, Google + GitHub OAuth buttons
+- Removed the old centered single-card layout entirely
+- `GoogleIcon`, `GitHubIcon`, `ShieldIcon` defined as private helpers in the same file
+
+**Context files corrected:**
+- `context/architecture.md` — updated folder structure (`(auth)/` → `auth/`, callback `page.tsx` → `route.ts`), auth section (`/login` → `/auth/login`, redirect to `/dashboard`), InsForge client pattern (correct import `@insforge/sdk/ssr`, correct object config shape)
+- `context/build-plan.md` — updated redirect references to `/auth/login` and `/dashboard`
+
+**Logout error handling added:**
+- `app/profile/page.tsx` and `app/dashboard/page.tsx` — `handleLogout` now has try/catch. Navigation to `/` always runs regardless of whether SDK call or fetch fails
 
 ## Decisions made
 
-- Chose `@playwright/mcp` (Microsoft, actively maintained) over `@modelcontextprotocol/server-puppeteer` (deprecated as of 2025)
-- MCP servers are configured via `claude mcp add` CLI command, which writes to `~/.claude.json` under the project key — NOT in `settings.json` (that file doesn't support `mcpServers`)
+- **Post-login redirect is `/dashboard`** — not `/profile`. Build plan rule followed. Middleware and callback both redirect to `/dashboard`.
+- **Auth route structure:** `app/auth/login` and `app/auth/callback` — NOT `app/(auth)/...`. Route groups strip the segment, making URLs resolve to `/login` and `/callback` instead of `/auth/login` and `/auth/callback`.
+- **Server-side callback:** OAuth code exchange happens server-to-server in `app/auth/callback/route.ts`. `setAuthCookies()` writes HttpOnly cookies. This is what makes middleware sessions work.
+- **PKCE verifier in cookie:** `signInWithOAuth({ skipBrowserRedirect: true })` returns `codeVerifier`. Stored as `insforge_pkce_verifier` cookie (5-min TTL, path-scoped to `/auth/callback`).
+- **`/api/auth/refresh` is a local Next.js route:** `createBrowserClient` always calls `POST /api/auth/refresh` on localhost — not the InsForge backend. Must exist as a route handler.
+- **Login page uses `bg-accent-muted` on the left panel** — intentional deviation from ui-rules.md "no colored card backgrounds" rule. Rule applies to dashboard content cards, not the login marketing panel.
 
 ## Problems solved
 
-- Attempted to add `mcpServers` to `~/.claude/settings.json` — rejected by schema validation. Correct method is `claude mcp add` command.
+- `app/(auth)/callback` resolves to `/callback` not `/auth/callback` — route groups are invisible in URLs. Fixed by using `app/auth/` (no parentheses).
+- Middleware had stale `/login` references — updated to `/auth/login`.
+- `/api/auth/refresh` was 404 — `createBrowserClient` calls this local route. Created with `createRefreshAuthRouter()`.
+- After OAuth exchange, tokens in-memory only — middleware couldn't read them. Fixed by server-side callback + `setAuthCookies()`.
+- `401` console error on login page — `createBrowserClient` probing for session on init. Normal when no session exists. Not a real error.
+- Callback route had no try/catch — non-JSON InsForge responses (502s, timeouts) would produce 500. Fixed.
+- Context files documented wrong redirect target (`/dashboard` changed to `/profile` mid-session, then rolled back to `/dashboard`). Now accurate.
 
 ## Current state
 
-- Playwright MCP is configured in `~/.claude.json` under project `/Users/rfh/Documents/GitHub/job-pilot`
-- Puppeteer MCP entry removed
-- Claude Code restarted — Playwright MCP should now be active (look for `mcp__playwright__*` in deferred tools)
+- OAuth with Google works end to end: login → Google → `/auth/callback` → `/dashboard` ✓
+- GitHub OAuth wired identically, should work the same
+- Login page: two-column redesign live, matches user-provided design reference
+- Middleware protects all required routes
+- Context files are accurate and consistent with the codebase
+- `/api/auth/refresh` responds 401 when no session (correct), 200 with new token when session exists
 
 ## Next session starts with
 
-Verify Playwright MCP tools are available. If not, run `! claude mcp list` to debug.
+Feature 03 — PostHog Initialization. Per `context/build-plan.md`:
+- Create `lib/posthog-client.ts` — PostHog browser client
+- Create `lib/posthog-server.ts` — PostHog server client with `flushAt: 1` and `flushInterval: 0`
+- Initialize PostHog in root `app/layout.tsx` — wraps entire app
+- `posthog.identify()` called after successful login with user ID
+- `posthog.reset()` called on logout
+
+Run `/architect` before starting. Read `context/build-plan.md` feature 03 in full first.
 
 ## Open questions
 
-- Whether Playwright MCP should be added globally (all projects) rather than just this project
-
----
-
-# Memory — Homepage Polish
-
-Last updated: 2026-06-09
-
-## What was built
-
-Landing page QA and visual polish pass. No new components created — only existing homepage components modified.
-
-**Files modified:**
-- `components/layout/Navbar.tsx` — mobile-first responsive layout (flex-wrap, order-based nav stacking, text-xs sm:text-sm scaling)
-- `components/layout/Footer.tsx` — same responsive treatment as navbar, fixed "Terms & Condition" → "Terms & Conditions"
-- `components/homepage/Hero.tsx` — responsive headline (text-3xl sm:text-5xl), stacked CTAs on mobile (flex-col sm:flex-row, w-full sm:w-auto), dashboard image container uses bg-surface-muted, removed all borders
-- `components/homepage/HowItWorks.tsx` — split-panel layout: outer section bg-surface-muted, left column is full-bleed white card (bg-surface fills grid cell edge-to-edge, no padding on outer container), right column is image centered in muted canvas, removed image wrapper border, grid-cols-1 lg:grid-cols-2
-- `components/homepage/Features.tsx` — same split-panel layout, left column muted canvas with image, right column full-bleed white card, feature list items now use pl-4 border-l-2 accent pattern (border-accent on index 1 "AI-Powered Job Matching"), removed all borders
-- `components/homepage/Testimonial.tsx` — replaced inline style={{ fontSize, lineHeight }} with utility classes (text-2xl leading-[1.45]), removed border
-- `components/homepage/BottomCTA.tsx` — responsive spacing and stacked CTAs, removed border from secondary button
-- `public/images/agent-log.png` — renamed from agnet-log.png (typo fixed)
-- `context/ui-registry.md` — updated patterns for all modified components
-- `context/progress-tracker.md` — logged all decisions made
-
-## Decisions made
-
-- **Split-panel layout:** HowItWorks and Features use `overflow-hidden` on the outer container + `items-stretch` grid so the white card column fills 100% height edge-to-edge. No padding on the outer section wrapper — padding lives inside each column div.
-- **Section backgrounds:** Hero gradient card + BottomCTA use `hero-gradient`. Dashboard image, HowItWorks, and Features outer panels use `bg-surface-muted`. White text columns use `bg-surface`. Testimonial uses `bg-surface`.
-- **No borders on any landing page section** — all `border border-border` removed from section cards, image containers, and CTA secondary buttons.
-- **Accent left border:** First feature item in HowItWorks (index 0) uses `border-accent`. "AI-Powered Job Matching" in Features (index 1) uses `border-accent`. All others use `border-border`.
-- **Mobile nav:** Uses `flex-wrap` + CSS `order` to push nav links below logo/CTA on small screens without any JS/state. No hamburger menu — nav links stay visible, just stacked.
-
-## Problems solved
-
-- Horizontal overflow on mobile (390px) was caused by fixed 2-column grids — fixed with grid-cols-1 lg:grid-cols-2.
-- `max-w-[1440px]` flagged by linter → replaced with `max-w-360`.
-- `sm:order-none` flagged by linter → replaced with `sm:order-0`.
-- Asset typo `agnet-log.png` caused no 404 (Next.js image optimizer was masking it) but was inconsistent — renamed the file and updated the src reference.
-
-## Current state
-
-Homepage is complete and polished. All sections render correctly at mobile (390px) and desktop. No compile or lint errors. No horizontal overflow. Split-panel sections match the provided design mockup. All context/progress docs are up to date.
-
-**Next phase per build plan:** 02 Auth — InsForge authentication with Google and GitHub OAuth.
-
-## Next session starts with
-
-Build the login page (`app/(auth)/login/page.tsx`) with Google OAuth and GitHub OAuth buttons wired to InsForge. Then create the OAuth callback handler (`app/(auth)/callback/page.tsx`) and middleware protecting `/dashboard`, `/profile`, `/find-jobs`, `/find-jobs/[id]`. After login → redirect to `/dashboard`.
-
-Read `context/library-docs.md` InsForge section and check AGENTS.md for an installed InsForge skill before writing any auth code.
-
-## Open questions
-
-- None. Homepage is signed off. Ready to move to 02 Auth.
+- GitHub OAuth not yet verified in real browser (only Google was tested end-to-end)
+- `app/dashboard/page.tsx` is a placeholder ("Coming soon") — needs real content in Phase 5
+- `app/profile/page.tsx` is a placeholder ("Coming soon") — needs real content in Phase 2

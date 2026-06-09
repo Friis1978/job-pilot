@@ -7,8 +7,8 @@ Update this file after every completed feature. Any AI agent reading this should
 ## Current Status
 
 **Phase:** Phase 1 — Foundation
-**Last completed:** 01 Homepage (responsive mobile polish)
-**Next:** 02 Auth
+**Last completed:** 02 Auth
+**Next:** 03 PostHog Initialization
 
 ---
 
@@ -17,7 +17,7 @@ Update this file after every completed feature. Any AI agent reading this should
 ### Phase 1 — Foundation
 
 - [x] 01 Homepage
-- [ ] 02 Auth
+- [x] 02 Auth
 - [ ] 03 PostHog Initialization
 - [ ] 04 Database Schema
 
@@ -53,6 +53,8 @@ Update this file after every completed feature. Any AI agent reading this should
 _Add decisions here as they are made during implementation._
 
 - 2026-06-09: Homepage sections and global nav/footer were updated for mobile-first responsiveness using breakpoint-based layout changes (no client-side menu state introduced).
+- 2026-06-09: `@insforge/ssr` does not exist as a separate npm package — SSR utilities (`createBrowserClient`, `createServerClient`, `updateSession`) are exported from `@insforge/sdk/ssr`. Cookie names are `insforge_access_token` and `insforge_refresh_token`.
+- 2026-06-09: Next.js `RequestCookies`/`ResponseCookies` types don't match InsForge `CookieStore` overload signatures exactly — using `as any` cast in `middleware.ts` (runtime behavior is correct).
 
 ---
 

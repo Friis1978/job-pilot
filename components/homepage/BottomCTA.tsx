@@ -14,13 +14,13 @@ export function BottomCTA() {
 
         <div className="mt-8 flex w-full max-w-xl flex-col sm:flex-row items-center gap-3">
           <Link
-            href="/login"
+            href="/auth/login"
             className="bg-text-primary text-surface text-sm font-medium px-5 py-2.5 rounded-md hover:bg-text-darker transition-colors flex items-center justify-center gap-1.5 w-full sm:w-auto"
           >
             Get Started <span>→</span>
           </Link>
           <Link
-            href="/login"
+            href="/auth/login"
             className="bg-surface text-text-primary text-sm font-medium px-5 py-2.5 rounded-md hover:bg-surface-secondary transition-colors w-full sm:w-auto"
           >
             Find Your First Match

@@ -24,7 +24,7 @@ Build the complete homepage UI.
 
 **Logic:**
 
-- Get Started and Start for free → /login if not authenticated, /dashboard if authenticated
+- Get Started and Start for free → /auth/login if not authenticated, /dashboard if authenticated
 
 ---
 
