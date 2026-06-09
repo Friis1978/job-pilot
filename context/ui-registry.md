@@ -45,3 +45,15 @@ After building any component — update this file with the component name, file 
 ### BottomCTA
 **File:** `components/homepage/BottomCTA.tsx`
 **Pattern:** `hero-gradient` with responsive spacing (`py-14 sm:py-20`, `px-5 sm:px-8`). Heading scales `text-3xl sm:text-4xl`. CTA group follows Hero responsive stack pattern (`flex-col sm:flex-row`, `w-full sm:w-auto` buttons).
+
+### CompletionIndicator
+**File:** `components/profile/CompletionIndicator.tsx`
+**Pattern:** Server component. `flex items-start justify-between gap-6` layout. Left: warning icon SVG (orange, 20×20) + heading + description + orange pill badges (`bg-warning/10 text-warning rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide`). Right: `relative w-[88px] h-[88px]` container with SVG donut ring (`rotate(-90 50 50)` transform, orange `#FF8904` stroke, gray `#E7EAF3` track, `strokeDasharray`/`strokeDashoffset` for percentage) + absolutely positioned `%` text overlay.
+
+### ResumeUpload
+**File:** `components/profile/ResumeUpload.tsx`
+**Pattern:** Client component (`"use client"`). Card with dashed upload zone (`border-2 border-dashed border-border rounded-xl`, hover `border-accent/50`, drag-active `border-accent bg-accent-muted`). Hidden `<input type="file" accept=".pdf">` triggered by click/drop. Bottom row: `flex items-center justify-between` with muted text left, accent `Generate Resume from Profile` button right.
+
+### ProfileForm
+**File:** `components/profile/ProfileForm.tsx`
+**Pattern:** Client component (`"use client"`). Single card with 5 subsections separated by `border-t border-border` + `SectionDivider` helper. Labels: `text-xs font-medium uppercase tracking-wide text-text-secondary`. Inputs: `border border-border rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-accent`. Selects: same + `appearance-none` + custom chevron SVG overlay. Tag inputs: text input + Add button row, tags as `bg-surface-secondary border border-border rounded-full px-3 py-1` pills with × SVG remove button. Work experience: array of role cards (`border border-border rounded-xl p-4`) with add/remove. Save Profile: `w-full py-3 bg-accent text-accent-foreground rounded-lg` at bottom.

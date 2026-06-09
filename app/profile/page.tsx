@@ -1,36 +1,24 @@
-"use client";
-
-import { useRouter } from "next/navigation";
-import { insforge } from "@/lib/insforge-client";
-import posthog from "posthog-js";
+import { Navbar } from "@/components/layout/Navbar";
+import { CompletionIndicator } from "@/components/profile/CompletionIndicator";
+import { ConnectedAccounts } from "@/components/profile/ConnectedAccounts";
+import { ResumeUpload } from "@/components/profile/ResumeUpload";
+import { ProfileForm } from "@/components/profile/ProfileForm";
 
 export default function ProfilePage() {
-  const router = useRouter();
-
-  async function handleLogout() {
-    posthog.capture("user_signed_out");
-    posthog.reset();
-    try {
-      await insforge.auth.signOut();
-      await fetch("/api/auth/logout", { method: "POST" });
-    } catch {
-      // Clear cookies best-effort — navigate away regardless
-    }
-    router.replace("/");
-  }
-
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold text-text-primary mb-2">Profile</h1>
-        <p className="text-text-secondary mb-6">Coming soon.</p>
-        <button
-          onClick={handleLogout}
-          className="px-4 py-2 rounded-lg bg-surface border border-border text-sm text-text-primary hover:bg-surface-secondary transition-colors"
-        >
-          Log out
-        </button>
-      </div>
-    </div>
+    <>
+      <Navbar />
+      <main className="min-h-screen bg-background py-8">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 flex flex-col gap-6 pb-12">
+          <CompletionIndicator
+            percentage={70}
+            missingFields={["PHONE", "LOCATION", "EDUCATION"]}
+          />
+          <ConnectedAccounts />
+          <ResumeUpload />
+          <ProfileForm />
+        </div>
+      </main>
+    </>
   );
 }

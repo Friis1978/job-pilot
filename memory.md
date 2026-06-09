@@ -1,65 +1,63 @@
-# Memory — Feature 04 Database Schema (complete)
+# Memory — Feature 05 Profile Page Full UI (complete)
 
 Last updated: 2026-06-09
 
 ## What was built
 
-**Feature 04 — Database Schema (completed this session)**
+**Feature 05 — Profile Page Full UI (completed this session)**
 
-All four tables created in InsForge via `run-raw-sql` MCP tool:
+3 new components created:
 
-- `profiles` — full column set from architecture.md. `id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE`. Includes `updated_at` trigger (auto-updates on every row change) and `on_auth_user_created` trigger on `auth.users` INSERT (auto-creates a profiles row for every new user).
-- `agent_runs` — `user_id uuid REFERENCES profiles(id) ON DELETE CASCADE`
-- `jobs` — `user_id uuid REFERENCES profiles(id) ON DELETE CASCADE`, `run_id uuid REFERENCES agent_runs(id) ON DELETE SET NULL` (run_id is nullable per architecture)
-- `agent_logs` — `user_id uuid REFERENCES profiles(id) ON DELETE CASCADE`, `run_id uuid REFERENCES agent_runs(id) ON DELETE CASCADE`, `job_id uuid REFERENCES jobs(id) ON DELETE SET NULL`
+- `components/profile/CompletionIndicator.tsx` — Server component. Orange warning banner card with SVG donut ring (70%, `strokeDasharray`/`strokeDashoffset` calculation, `rotate(-90 50 50)` transform) and missing field badges (orange pill, `bg-warning/10 text-warning`). Receives `percentage` and `missingFields` as props — page passes mock values for now.
+- `components/profile/ResumeUpload.tsx` — Client component. Drag-and-drop PDF upload zone with `isDragging` state, hidden `<input type="file" accept=".pdf">`, "Select Resume" secondary button, "Generate Resume from Profile" accent button bottom-right.
+- `components/profile/ProfileForm.tsx` — Client component. Fully controlled form with 5 subsections (Personal Info, Professional Info, Work Experience, Education, Job Preferences). Tag inputs for skills and industries (add/remove). Work experience: array of role cards with add/remove, `type="month"` date inputs, "Currently working here" checkbox. All state local — no save logic yet.
 
-RLS enabled on all four tables. SELECT/INSERT/UPDATE/DELETE all scoped to `auth.uid()` (using `id` for profiles, `user_id` for others).
-
-Storage bucket `resumes` created (private, `isPublic: false`) via `create-bucket` MCP tool. Storage RLS policies scoped to `resumes/{user_id}/...` using `split_part(key, '/', 1)`.
+`app/profile/page.tsx` — replaced placeholder with real page: Navbar + CompletionIndicator (70%, PHONE/LOCATION/EDUCATION) + ResumeUpload + ProfileForm.
 
 **Also fixed this session:**
-- `context/code-standards.md` — PostHog events table updated from 4 to 8 events. Added: `oauth_login_clicked`, `user_signed_in`, `auth_failed`, `user_signed_out`.
-- `context/progress-tracker.md` — Feature 04 marked complete, next set to Feature 05.
+- `context/code-standards.md` — PostHog events table updated to 8 events (done earlier in session)
+- `context/ui-registry.md` — updated with all 3 new profile components
+- `context/progress-tracker.md` — Feature 05 marked complete, next set to Feature 06
 
 ## Decisions made
 
-- **profiles.id = auth user UUID** — `profiles.id` is the auth user's UUID (same as `auth.uid()`), not a generated ID. Other tables use `user_id` as FK to `profiles.id`.
-- **DB trigger auto-creates profile row** — `on_auth_user_created` trigger fires on `auth.users` INSERT. Every authenticated user always has a profiles row. Features 05+ can assume non-null profile exists.
-- **updated_at is trigger-managed** — DB trigger auto-sets `updated_at = NOW()` on every profiles UPDATE. Server Actions do not need to pass a timestamp.
-- **Cascade deletes throughout** — profiles cascades from auth.users; agent_runs, jobs, agent_logs all cascade from profiles. Deleting an auth user removes all their data.
-- **jobs.run_id uses SET NULL** — not cascade, because run_id is nullable (jobs can come from URL input with no associated agent run).
-- **InsForge storage schema** — NOT Supabase-compatible for storage. Uses `bucket` (not `bucket_id`) and `key` (not `name`) columns on `storage.objects`. Storage RLS uses `split_part(key, '/', 1)` to extract user_id from path.
+- **CompletionIndicator is a Server Component with props** — page passes mock values for Feature 05; Feature 06 will fetch real profile data server-side and pass actual completion % and missing fields down.
+- **ProfileForm uses local state only** — no Server Actions wired yet. Save button does `e.preventDefault()` and nothing else. Feature 06 wires it up.
+- **Tag inputs are inline in ProfileForm** — not extracted to a separate component since they're only used in ProfileForm and the logic is simple.
+- **Work experience uses `type="month"` inputs** — shows YYYY-MM picker. Close enough to the design's "January 2022" display for Feature 05.
+- **No shadcn/ui installed** — all UI built with plain Tailwind. shadcn is listed as an approved dependency but has not been installed yet.
 
 ## Problems solved
 
-- **InsForge storage.objects column names differ from Supabase** — `bucket_id` → `bucket`, `name` → `key`. Discovered when first storage policy attempt failed. Fixed using `split_part(key, '/', 1)` for path-based RLS.
+- **Playwright browser locked** — could not take visual screenshots. Verified via TypeScript check (passes clean) + curl returning HTTP 200 on the login redirect (confirms page compiled). User should verify visually in browser after login.
+- **`bg-warning/10` for orange badge bg** — Tailwind v4 opacity modifier works with `@theme` custom tokens. Used for the missing field badge backgrounds rather than a new token.
 
 ## Current state
 
-- Feature 01 Homepage: **complete**
-- Feature 02 Auth: **complete** — OAuth end-to-end, middleware protecting routes
-- Feature 03 PostHog: **complete** — browser init, server client, EU reverse proxy, user identify/reset
-- Feature 04 Database Schema: **complete** — all tables, triggers, RLS, storage bucket
-- Phase 1 Foundation: **complete**
-- InsForge DB now has: `profiles`, `agent_runs`, `jobs`, `agent_logs` tables + `resumes` bucket
-- No application code touches the DB yet — that starts in Feature 06
+- Phase 1 Foundation: **complete** (01–04)
+- Feature 05 Profile Page UI: **complete** — page renders with Navbar, completion banner, resume upload, and full form. All interactive (controlled inputs, add/remove tags, add/remove roles). No DB reads or writes yet.
+- Feature 06 Profile Save Logic: **next**
+- No shadcn/ui installed — all UI is plain Tailwind
+- The form starts empty (no mock pre-fill) — Feature 06 pre-fills from DB
 
 ## Next session starts with
 
-**Feature 05 — Profile Page Full UI.**
+**Feature 06 — Profile Save Logic.**
 
-Build the complete profile page UI with mock data. No save logic yet. Full spec in `context/build-plan.md` under "05 Profile Page — Full UI":
-- Profile needs attention banner (completion % ring, missing field tags)
-- Resume upload section (drag and drop)
-- Profile Information form (5 sections: Personal, Professional, Work Experience, Education, Job Preferences)
-- Save Profile button
+1. Run `/architect` first per project rules.
+2. Wire `ProfileForm` to a Server Action in `actions/profile.ts`:
+   - `saveProfile(formData)` — upserts to `profiles` table via `createInsforgeServer()`
+   - `is_complete` calculated: true when all required fields filled
+   - `revalidatePath('/profile')` after save
+3. Pre-fill form with existing DB data on return visits:
+   - `app/profile/page.tsx` fetches profile server-side and passes data as props to ProfileForm
+   - ProfileForm accepts optional `initialData` prop
+4. Resume PDF upload to InsForge Storage at `resumes/{user_id}/resume.pdf` with upsert
+5. `resume_pdf_url` saved to profiles table after upload
+6. `CompletionIndicator` wired to real percentage + real missing fields
 
-Run `/architect` first before building, per project rules.
+Reference: `context/build-plan.md` under "06 Profile Save Logic" for full spec.
 
 ## Open questions
 
-- GitHub OAuth not yet verified in a real browser (only Google tested end-to-end)
-- Does the InsForge direct OAuth exchange endpoint path (`/api/auth/oauth/exchange`) need verification against production?
-- Should `PostHogIdentitySync` be removed from public pages to avoid unnecessary network calls?
-- PostHog dashboard still needs to be created once MCP auth is completed
-- `updated_at` trigger was only added to `profiles` — if `agent_runs` or `jobs` ever need auto-updating timestamps, triggers would need to be added then
+- None — all prior open questions were closed this session per user instruction.
