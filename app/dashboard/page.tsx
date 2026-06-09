@@ -2,11 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { insforge } from "@/lib/insforge-client";
+import posthog from "posthog-js";
 
 export default function DashboardPage() {
   const router = useRouter();
 
   async function handleLogout() {
+    posthog.capture("user_signed_out");
+    posthog.reset();
     try {
       await insforge.auth.signOut();
       await fetch("/api/auth/logout", { method: "POST" });

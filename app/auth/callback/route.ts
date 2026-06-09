@@ -1,5 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@insforge/sdk/ssr";
+import { getPostHogClient } from "@/lib/posthog-server";
+
+function getSubFromJwt(token: string): string | null {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString());
+    return (payload.sub as string) ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -7,11 +17,21 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get("error");
 
   if (error || !code) {
+    getPostHogClient().capture({
+      distinctId: crypto.randomUUID(),
+      event: "auth_failed",
+      properties: { reason: "missing_code", error: error ?? undefined },
+    });
     return NextResponse.redirect(`${origin}/auth/login?error=auth_failed`);
   }
 
   const codeVerifier = request.cookies.get("insforge_pkce_verifier")?.value;
   if (!codeVerifier) {
+    getPostHogClient().capture({
+      distinctId: crypto.randomUUID(),
+      event: "auth_failed",
+      properties: { reason: "missing_pkce_verifier" },
+    });
     return NextResponse.redirect(`${origin}/auth/login?error=auth_failed`);
   }
 
@@ -31,7 +51,23 @@ export async function GET(request: NextRequest) {
     const data = await res.json();
 
     if (!res.ok || !data.accessToken) {
+      getPostHogClient().capture({
+        distinctId: crypto.randomUUID(),
+        event: "auth_failed",
+        properties: { reason: "exchange_failed" },
+      });
       return NextResponse.redirect(`${origin}/auth/login?error=auth_failed`);
+    }
+
+    const userId = getSubFromJwt(data.accessToken);
+    if (userId) {
+      const posthog = getPostHogClient();
+      posthog.capture({
+        distinctId: userId,
+        event: "user_signed_in",
+        properties: { method: "oauth" },
+      });
+      posthog.identify({ distinctId: userId });
     }
 
     const response = NextResponse.redirect(`${origin}/dashboard`);
@@ -45,6 +81,11 @@ export async function GET(request: NextRequest) {
 
     return response;
   } catch {
+    getPostHogClient().capture({
+      distinctId: crypto.randomUUID(),
+      event: "auth_failed",
+      properties: { reason: "exception" },
+    });
     return NextResponse.redirect(`${origin}/auth/login?error=auth_failed`);
   }
 }

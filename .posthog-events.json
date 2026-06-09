@@ -1,0 +1,54 @@
+[
+  {
+    "event": "oauth_login_clicked",
+    "description": "User clicks a Google or GitHub OAuth button on the login page",
+    "file": "app/auth/login/page.tsx",
+    "status": "captured"
+  },
+  {
+    "event": "user_signed_in",
+    "description": "User completes OAuth exchange and is authenticated — server-side event fires in the callback route",
+    "file": "app/auth/callback/route.ts",
+    "status": "captured"
+  },
+  {
+    "event": "auth_failed",
+    "description": "OAuth code exchange fails (missing code, missing PKCE verifier, or exchange exception)",
+    "file": "app/auth/callback/route.ts",
+    "status": "captured"
+  },
+  {
+    "event": "user_signed_out",
+    "description": "User explicitly signs out from a protected page",
+    "file": "app/dashboard/page.tsx",
+    "status": "captured"
+  },
+  {
+    "event": "job_search_started",
+    "description": "User submits the Find Jobs form — fires when the agent begins searching Adzuna",
+    "file": "app/api/agent/find/route.ts",
+    "status": "planned",
+    "properties": ["userId", "jobTitle", "location"]
+  },
+  {
+    "event": "job_found",
+    "description": "A single job has been scored and saved to the database — fires once per job",
+    "file": "app/api/agent/find/route.ts",
+    "status": "planned",
+    "properties": ["userId", "source", "matchScore"]
+  },
+  {
+    "event": "profile_completed",
+    "description": "User saves a fully complete profile for the first time (is_complete flips to true)",
+    "file": "actions/profile.ts",
+    "status": "planned",
+    "properties": ["userId"]
+  },
+  {
+    "event": "company_researched",
+    "description": "Company research dossier is generated and saved to jobs.company_research",
+    "file": "app/api/agent/research/route.ts",
+    "status": "planned",
+    "properties": ["userId", "jobId", "company"]
+  }
+]

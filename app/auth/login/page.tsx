@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { insforge } from "@/lib/insforge-client";
+import posthog from "posthog-js";
 
 function GoogleIcon() {
   return (
@@ -57,6 +58,8 @@ export default function LoginPage() {
   async function handleOAuth(provider: "google" | "github") {
     setLoading(provider);
     setError(null);
+
+    posthog.capture("oauth_login_clicked", { provider });
 
     const { data, error } = await insforge.auth.signInWithOAuth(provider, {
       redirectTo: `${window.location.origin}/auth/callback`,
