@@ -135,12 +135,10 @@ const { data, error } = await insforge.storage
     upsert: true, // overwrites existing file
   });
 
-// Get public URL
-const { data } = insforge.storage
+// Get public URL — returns a string directly (not { data: { publicUrl } })
+const url = insforge.storage
   .from("resumes")
   .getPublicUrl(`${userId}/resume.pdf`);
-
-const url = data.publicUrl;
 ```
 
 **Storage paths:**

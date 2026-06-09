@@ -20,6 +20,11 @@ export function ResumeUpload({ initialResumeUrl, userId, onExtract }: Props) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [generated, setGenerated] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
@@ -91,6 +96,57 @@ export function ResumeUpload({ initialResumeUrl, userId, onExtract }: Props) {
       setExtractError("Something went wrong. Please try again.");
     } finally {
       setExtracting(false);
+    }
+  }
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setGenerateError(null);
+
+    try {
+      const response = await fetch("/api/resume/generate", { method: "POST" });
+      const json = await response.json() as { data?: { url: string }; error?: string };
+
+      if (!response.ok || json.error) {
+        setGenerateError(json.error ?? "Generation failed. Please try again.");
+        return;
+      }
+
+      if (json.data?.url) {
+        setGenerated(true);
+      }
+    } catch (err) {
+      console.error("[ResumeUpload] generate error", err);
+      setGenerateError("Something went wrong. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleDownload() {
+    if (!userId) return;
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      const { data: blob, error } = await insforge.storage
+        .from("resumes")
+        .download(`${userId}/generated-resume.pdf`);
+      if (error || !blob) {
+        console.error("[ResumeUpload] download error", error);
+        setDownloadError("Download failed. Please try again.");
+        return;
+      }
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = "resume.pdf";
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      console.error("[ResumeUpload] download error", err);
+      setDownloadError("Something went wrong. Please try again.");
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -185,19 +241,74 @@ export function ResumeUpload({ initialResumeUrl, userId, onExtract }: Props) {
         <p className="text-xs text-text-muted">Need a fresh document based on the fields below?</p>
         <button
           type="button"
-          className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground text-sm font-medium rounded-lg hover:bg-accent-dark transition-colors shrink-0"
+          disabled={generating}
+          onClick={handleGenerate}
+          className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground text-sm font-medium rounded-lg hover:bg-accent-dark transition-colors shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-            <path
-              d="M7.5 1.5c3.314 0 6 2.686 6 6s-2.686 6-6 6-6-2.686-6-6 2.686-6 6-6zM7.5 4v7M4 7.5h7"
-              stroke="currentColor"
-              strokeWidth="1.4"
-              strokeLinecap="round"
-            />
-          </svg>
-          Generate Resume from Profile
+          {generating ? (
+            <>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="animate-spin">
+                <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="10 8" />
+              </svg>
+              Generating…
+            </>
+          ) : (
+            <>
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+                <path
+                  d="M7.5 1.5c3.314 0 6 2.686 6 6s-2.686 6-6 6-6-2.686-6-6 2.686-6 6-6zM7.5 4v7M4 7.5h7"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                />
+              </svg>
+              Generate Resume from Profile
+            </>
+          )}
         </button>
       </div>
+
+      {generateError && (
+        <p className="mt-2 text-xs text-error">{generateError}</p>
+      )}
+
+      {generated && (
+        <div className="mt-3 pt-3 border-t border-border flex items-center justify-between gap-4 flex-wrap">
+          <p className="text-xs text-text-muted">✓ Resume generated successfully.</p>
+          <button
+            type="button"
+            disabled={downloading}
+            onClick={handleDownload}
+            className="flex items-center gap-2 px-4 py-2 bg-surface border border-accent text-accent text-sm font-medium rounded-lg hover:bg-accent/5 transition-colors shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {downloading ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="animate-spin">
+                  <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="10 8" />
+                </svg>
+                Downloading…
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path
+                    d="M7 2v7M4 6l3 3 3-3M2 10v1a1 1 0 001 1h8a1 1 0 001-1v-1"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                Download Resume
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {downloadError && (
+        <p className="mt-2 text-xs text-error">{downloadError}</p>
+      )}
 
       {fileName && (
         <div className="mt-3 pt-3 border-t border-border flex items-center justify-between gap-4 flex-wrap">

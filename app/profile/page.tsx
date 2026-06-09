@@ -1,6 +1,5 @@
 import { Navbar } from "@/components/layout/Navbar";
 import { CompletionIndicator } from "@/components/profile/CompletionIndicator";
-import { ConnectedAccounts } from "@/components/profile/ConnectedAccounts";
 import { ProfilePageShell } from "@/components/profile/ProfilePageShell";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import type { Profile } from "@/types";
@@ -90,7 +89,6 @@ export default async function ProfilePage() {
       <main className="min-h-screen bg-background py-8">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 flex flex-col gap-6 pb-12">
           <CompletionIndicator percentage={percentage} missingFields={missingFields} />
-          <ConnectedAccounts />
           <ProfilePageShell
             profile={profile}
             initialResumeUrl={profile?.resume_pdf_url ?? null}

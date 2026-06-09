@@ -6,9 +6,9 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ## Current Status
 
-**Phase:** Phase 1 — Foundation
-**Last completed:** 07 AI Profile Extraction from Resume
-**Next:** 08 Resume PDF Generation from Profile
+**Phase:** Phase 2 — Profile Page (complete)
+**Last completed:** 08 Resume PDF Generation from Profile
+**Next:** 09 Find Jobs Page — Full UI
 
 ---
 
@@ -26,7 +26,7 @@ Update this file after every completed feature. Any AI agent reading this should
 - [x] 05 Profile Page — Full UI
 - [x] 06 Profile Save Logic
 - [x] 07 AI Profile Extraction from Resume
-- [ ] 08 Resume PDF Generation from Profile
+- [x] 08 Resume PDF Generation from Profile
 
 ### Phase 3 — Find Jobs Page
 
@@ -57,6 +57,9 @@ _Add decisions here as they are made during implementation._
 - 2026-06-09: Next.js `RequestCookies`/`ResponseCookies` types don't match InsForge `CookieStore` overload signatures exactly — using `as any` cast in `middleware.ts` (runtime behavior is correct).
 - 2026-06-09: DB trigger `on_auth_user_created` auto-creates a profiles row on auth.users INSERT — every authenticated user always has a profiles row. Features 05+ can assume non-null.
 - 2026-06-09: InsForge storage.objects schema uses `bucket` and `key` columns (not Supabase's `bucket_id` and `name`). Storage RLS uses `split_part(key, '/', 1)` to extract the user_id path segment.
+- 2026-06-09: `@react-pdf/renderer` must be in `serverExternalPackages` in next.config.ts. Server-side PDF rendering uses `renderToBuffer()` — pass element via `createElement()` with a `as unknown as ReactElement<DocumentProps>` cast. Convert the returned `Buffer` to `Uint8Array` before wrapping in `Blob` for InsForge storage upload.
+- 2026-06-09: InsForge storage `upload()` takes exactly 2 args (path, data) — no options object. To overwrite an existing file: call `remove(path)` first, then `upload(path, new Blob([new Uint8Array(buffer)], { type: "..." }))`.
+- 2026-06-09: Generated resume is stored at `resumes/{userId}/generated-resume.pdf` (separate from uploaded `resumes/{userId}/resume.pdf`). Extraction always reads from the fixed upload path, so generating never breaks re-extraction.
 
 ---
 
