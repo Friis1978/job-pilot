@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { saveProfile } from "@/actions/profile";
+import type { Profile, ProfileFormInput } from "@/types";
 
 type WorkExperienceEntry = {
   id: string;
@@ -56,33 +58,108 @@ function SectionDivider({ title }: { title: string }) {
   );
 }
 
-export function ProfileForm() {
-  const [data, setData] = useState<FormData>({
-    fullName: "",
-    email: "",
-    phone: "",
-    location: "",
-    linkedinUrl: "",
-    portfolioUrl: "",
-    workAuthorization: "",
-    currentTitle: "",
-    experienceLevel: "",
-    yearsExperience: "",
-    skills: [],
+type Props = {
+  initialData?: Profile | null;
+  extractedFormData?: Partial<ProfileFormInput> | null;
+};
+
+function profileToFormData(p: Profile | null | undefined): FormData {
+  if (!p) {
+    return {
+      fullName: "", email: "", phone: "", location: "",
+      linkedinUrl: "", portfolioUrl: "", workAuthorization: "",
+      currentTitle: "", experienceLevel: "", yearsExperience: "",
+      skills: [], skillInput: "", industries: [], industryInput: "",
+      workExperience: [], highestDegree: "", fieldOfStudy: "",
+      institution: "", graduationYear: "", jobTitlesSeeking: "",
+      remotePreference: "", salaryExpectation: "", preferredLocations: "",
+      coverLetterTone: "",
+    };
+  }
+  const edu = p.education as { degree?: string; field?: string; institution?: string; year?: string } | null;
+  return {
+    fullName: p.full_name ?? "",
+    email: p.email ?? "",
+    phone: p.phone ?? "",
+    location: p.location ?? "",
+    linkedinUrl: p.linkedin_url ?? "",
+    portfolioUrl: p.portfolio_url ?? "",
+    workAuthorization: p.work_authorization ?? "",
+    currentTitle: p.current_title ?? "",
+    experienceLevel: p.experience_level ?? "",
+    yearsExperience: p.years_experience?.toString() ?? "",
+    skills: p.skills ?? [],
     skillInput: "",
-    industries: [],
+    industries: p.industries ?? [],
     industryInput: "",
-    workExperience: [],
-    highestDegree: "",
-    fieldOfStudy: "",
-    institution: "",
-    graduationYear: "",
-    jobTitlesSeeking: "",
-    remotePreference: "",
-    salaryExpectation: "",
-    preferredLocations: "",
-    coverLetterTone: "",
+    workExperience: (p.work_experience ?? []).map((r) => ({
+      id: crypto.randomUUID(),
+      company: r.company ?? "",
+      title: r.title ?? "",
+      startDate: r.startDate ?? "",
+      endDate: r.endDate ?? "",
+      currentlyWorking: r.currentlyWorking ?? false,
+      responsibilities: r.responsibilities ?? "",
+    })),
+    highestDegree: edu?.degree ?? "",
+    fieldOfStudy: edu?.field ?? "",
+    institution: edu?.institution ?? "",
+    graduationYear: edu?.year ?? "",
+    jobTitlesSeeking: (p.job_titles_seeking ?? []).join(", "),
+    remotePreference: p.remote_preference ?? "",
+    salaryExpectation: p.salary_expectation ?? "",
+    preferredLocations: (p.preferred_locations ?? []).join(", "),
+    coverLetterTone: p.cover_letter_tone ?? "",
+  };
+}
+
+function mergeExtracted(
+  base: FormData,
+  extracted: Partial<ProfileFormInput>,
+): FormData {
+  return {
+    ...base,
+    fullName: extracted.fullName || base.fullName,
+    phone: extracted.phone || base.phone,
+    location: extracted.location || base.location,
+    linkedinUrl: extracted.linkedinUrl || base.linkedinUrl,
+    portfolioUrl: extracted.portfolioUrl || base.portfolioUrl,
+    currentTitle: extracted.currentTitle || base.currentTitle,
+    experienceLevel: extracted.experienceLevel || base.experienceLevel,
+    yearsExperience: extracted.yearsExperience || base.yearsExperience,
+    skills: extracted.skills?.length ? extracted.skills : base.skills,
+    industries: extracted.industries?.length ? extracted.industries : base.industries,
+    workExperience: extracted.workExperience?.length
+      ? extracted.workExperience.map((r) => ({ ...r, id: crypto.randomUUID() }))
+      : base.workExperience,
+    highestDegree: extracted.highestDegree || base.highestDegree,
+    fieldOfStudy: extracted.fieldOfStudy || base.fieldOfStudy,
+    institution: extracted.institution || base.institution,
+    graduationYear: extracted.graduationYear || base.graduationYear,
+  };
+}
+
+export function ProfileForm({ initialData, extractedFormData }: Props) {
+  const [data, setData] = useState<FormData>(() => {
+    const base = profileToFormData(initialData);
+    return extractedFormData ? mergeExtracted(base, extractedFormData) : base;
   });
+  const [hasUnreviewedExtraction, setHasUnreviewedExtraction] = useState(
+    () => extractedFormData != null,
+  );
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!hasUnreviewedExtraction || saveSuccess) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnreviewedExtraction, saveSuccess]);
 
   function setField<K extends keyof FormData>(key: K, value: FormData[K]) {
     setData((prev) => ({ ...prev, [key]: value }));
@@ -150,8 +227,32 @@ export function ProfileForm() {
         This section is used to accurately represent you in agent interactions.
       </p>
 
+      {hasUnreviewedExtraction && !saveSuccess && (
+        <div className="mt-4 p-3 rounded-lg bg-warning/10 border border-warning/20 flex items-start gap-2">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0 mt-0.5 text-warning">
+            <path d="M8 1.5L1 14.5h14L8 1.5zM8 6v4M8 11.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <p className="text-sm text-warning">
+            Your profile was auto-populated from your resume — review the fields below and save your changes.
+          </p>
+        </div>
+      )}
+
       <form
-        onSubmit={(e) => e.preventDefault()}
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setSaving(true);
+          setSaveError(null);
+          setSaveSuccess(false);
+          const result = await saveProfile(data);
+          setSaving(false);
+          if (result.success) {
+            setSaveSuccess(true);
+            setHasUnreviewedExtraction(false);
+          } else {
+            setSaveError(result.error ?? "Something went wrong. Please try again.");
+          }
+        }}
         className="mt-6 flex flex-col gap-0"
       >
         {/* Personal Info */}
@@ -656,11 +757,19 @@ export function ProfileForm() {
           </div>
         </div>
 
+        {saveError && (
+          <p className="mt-4 text-sm text-error text-center">{saveError}</p>
+        )}
+        {saveSuccess && (
+          <p className="mt-4 text-sm text-success text-center">Profile saved successfully.</p>
+        )}
+
         <button
           type="submit"
-          className="mt-8 w-full py-3 bg-accent text-accent-foreground text-sm font-medium rounded-lg hover:bg-accent-dark transition-colors"
+          disabled={saving}
+          className="mt-4 w-full py-3 bg-accent text-accent-foreground text-sm font-medium rounded-lg hover:bg-accent-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Save Profile
+          {saving ? "Saving…" : "Save Profile"}
         </button>
       </form>
     </div>

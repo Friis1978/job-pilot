@@ -1,11 +1,98 @@
 "use client";
 
 import { useState, useRef, type DragEvent, type ChangeEvent } from "react";
+import { insforge } from "@/lib/insforge-client";
+import { updateResumeUrl } from "@/actions/profile";
+import type { ProfileFormInput } from "@/types";
 
-export function ResumeUpload() {
+type Props = {
+  initialResumeUrl?: string | null;
+  userId: string | null;
+  onExtract?: (data: Partial<ProfileFormInput>) => void;
+};
+
+export function ResumeUpload({ initialResumeUrl, userId, onExtract }: Props) {
   const [isDragging, setIsDragging] = useState(false);
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(
+    initialResumeUrl ? "resume.pdf" : null,
+  );
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(file: File) {
+    if (file.type !== "application/pdf") {
+      setUploadError("Only PDF files are supported.");
+      return;
+    }
+    setUploading(true);
+    setUploadError(null);
+    setExtractError(null);
+
+    try {
+      if (!userId) {
+        setUploadError("Not authenticated.");
+        setUploading(false);
+        return;
+      }
+
+      const resumePath = `${userId}/resume.pdf`;
+
+      // Delete existing file first so we can reuse the same path
+      await insforge.storage.from("resumes").remove(resumePath);
+
+      const { data, error } = await insforge.storage
+        .from("resumes")
+        .upload(resumePath, file);
+
+      if (error || !data) {
+        console.error("[ResumeUpload] upload error", error);
+        setUploadError("Upload failed. Please try again.");
+        setUploading(false);
+        return;
+      }
+
+      const result = await updateResumeUrl(data.url);
+      if (!result.success) {
+        setUploadError("Uploaded but failed to save URL. Please try again.");
+        setUploading(false);
+        return;
+      }
+
+      setFileName(file.name);
+    } catch (err) {
+      console.error("[ResumeUpload] unexpected error", err);
+      setUploadError("Something went wrong. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleExtract() {
+    setExtracting(true);
+    setExtractError(null);
+
+    try {
+      const response = await fetch("/api/resume/extract", { method: "POST" });
+      const json = await response.json() as { data?: Partial<ProfileFormInput>; error?: string };
+
+      if (!response.ok || json.error) {
+        setExtractError(json.error ?? "Extraction failed. Please try again.");
+        return;
+      }
+
+      if (json.data && onExtract) {
+        onExtract(json.data);
+      }
+    } catch (err) {
+      console.error("[ResumeUpload] extract error", err);
+      setExtractError("Something went wrong. Please try again.");
+    } finally {
+      setExtracting(false);
+    }
+  }
 
   function handleDragOver(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -20,14 +107,12 @@ export function ResumeUpload() {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file?.type === "application/pdf") {
-      setFileName(file.name);
-    }
+    if (file) handleFile(file);
   }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) setFileName(file.name);
+    if (file) handleFile(file);
   }
 
   return (
@@ -46,8 +131,8 @@ export function ResumeUpload() {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        onKeyDown={(e) => e.key === "Enter" && fileInputRef.current?.click()}
+        onClick={() => !uploading && fileInputRef.current?.click()}
+        onKeyDown={(e) => e.key === "Enter" && !uploading && fileInputRef.current?.click()}
       >
         <input
           ref={fileInputRef}
@@ -68,7 +153,9 @@ export function ResumeUpload() {
           />
         </svg>
 
-        {fileName ? (
+        {uploading ? (
+          <p className="text-sm font-medium text-text-secondary">Uploading…</p>
+        ) : fileName ? (
           <p className="text-sm font-medium text-text-primary">{fileName}</p>
         ) : (
           <>
@@ -79,15 +166,20 @@ export function ResumeUpload() {
 
         <button
           type="button"
+          disabled={uploading}
           onClick={(e) => {
             e.stopPropagation();
-            fileInputRef.current?.click();
+            if (!uploading) fileInputRef.current?.click();
           }}
-          className="mt-2 px-4 py-2 bg-surface border border-border text-sm font-medium text-text-primary rounded-lg hover:bg-surface-secondary transition-colors"
+          className="mt-2 px-4 py-2 bg-surface border border-border text-sm font-medium text-text-primary rounded-lg hover:bg-surface-secondary transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Select Resume
+          {uploading ? "Uploading…" : "Select Resume"}
         </button>
       </div>
+
+      {uploadError && (
+        <p className="mt-2 text-xs text-error">{uploadError}</p>
+      )}
 
       <div className="mt-4 flex items-center justify-between gap-4 flex-wrap">
         <p className="text-xs text-text-muted">Need a fresh document based on the fields below?</p>
@@ -106,6 +198,46 @@ export function ResumeUpload() {
           Generate Resume from Profile
         </button>
       </div>
+
+      {fileName && (
+        <div className="mt-3 pt-3 border-t border-border flex items-center justify-between gap-4 flex-wrap">
+          <p className="text-xs text-text-muted">
+            Auto-fill the form below with data extracted from your resume.
+          </p>
+          <button
+            type="button"
+            disabled={extracting}
+            onClick={handleExtract}
+            className="flex items-center gap-2 px-4 py-2 bg-surface border border-accent text-accent text-sm font-medium rounded-lg hover:bg-accent/5 transition-colors shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {extracting ? (
+              <>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="animate-spin">
+                  <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="10 8" />
+                </svg>
+                Extracting…
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path
+                    d="M2 7h10M7 2l5 5-5 5"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                Extract from Resume
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {extractError && (
+        <p className="mt-2 text-xs text-error">{extractError}</p>
+      )}
     </div>
   );
 }
