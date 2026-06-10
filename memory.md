@@ -1,77 +1,68 @@
-# Memory — Features 10–12 Complete + Maintenance
+# Memory — Nordic Job Search + LinkedIn + Scoring Fix
 
 Last updated: 2026-06-10
 
 ## What was built
 
-**Feature 10 — Adzuna Job Discovery:**
-- `lib/utils.ts` — `MATCH_THRESHOLD = 70` and `formatDateAgo()`
-- `lib/adzuna.ts` — `searchJobs()` with `category=it-jobs`, optional `where`, country param
-- `types/index.ts` — added `JobRow`, `AdzunaJob`, and `ScoredJob` types
-- `agent/find-jobs.ts` — full agent: profile load → PostHog `job_search_started` → create `agent_runs` record → Adzuna call → parallel GPT-4o scoring → filter by threshold → batch insert to `jobs` → PostHog `job_found` per match → update `agent_runs` complete. Insert failure marks run as `failed` and returns `{ success: false, error }`.
-- `app/api/agent/find/route.ts` — POST endpoint: auth → validate `jobTitle` → call `findJobs()` → return `{ jobsFound, jobsSaved }`
-- `components/find-jobs/SearchCard.tsx` — client component with `useState`, live fetch to `/api/agent/find`, `router.refresh()` after success, Enter key handler on both inputs, success/error banners
+**Multi-source Nordic job search (complete):**
+- `lib/jobtech.ts` — Swedish JobTech Dev API, no key required, open access
+- `lib/jooble.ts` — Jooble aggregator, needs `JOOBLE_API_KEY`
+- `lib/careerjet.ts` — Careerjet `da_DK`, needs `CAREERJET_API_KEY`, HTTP-only, requires `Referer: https://jobpilot.app/` header
+- `lib/linkedin-jobs.ts` — LinkedIn Jobs via RapidAPI (`linkedin-job-search-api.p.rapidapi.com`), endpoint `/active-jb-7d`, needs `RAPIDAPI_KEY`. Returns full descriptions. 28 DK + 100 SE jobs confirmed working.
+- `types/index.ts` — `NormalizedJob` with `source: "adzuna"|"jobtech"|"jooble"|"careerjet"|"linkedin"`
+- `agent/find-jobs.ts` — `detectSources()` routes by location, `Promise.allSettled` parallel fetching, `normalizeAdzunaJob()`, `scoreJob()` takes NormalizedJob
+- `lib/utils.ts` — `MATCH_THRESHOLD=50`, `stripHtml()` applied at all four source normalizers
 
-**Feature 11 — Filter + Sort + Pagination:**
-- `app/find-jobs/page.tsx` — async server component, fetches all jobs for current user, passes as props to JobsTable
-- `components/find-jobs/JobsTable.tsx` — client component with filter (All/High/Low), sort (Newest/Match Score/Oldest), live text search, pagination (20/page), rows navigate to `/find-jobs/[id]`
+**Indeed DK (RapidAPI) — built then removed:**
+- `lib/indeed-denmark.ts` was created but deleted — BASIC plan rate limit too strict (hits cap on first request), API also times out. Can re-add if user upgrades to paid plan. Correct endpoint confirmed as `/indeed-dk/` not `/indeed-se/`.
 
-**Feature 12 — Job Details Page:**
-- `app/find-jobs/[id]/page.tsx` — async server page (`params: Promise<{ id: string }>`); full detail view: header card, 4 info cards, AI Match Reasoning, Skills vs Profile (green matched / purple missing), Job Description with "View full description →" link, Company Research empty state (disabled button), full-width Apply Now
-
-**Session fix — Cookie persistence:**
-- `middleware.ts` — added `options: { accessToken: { maxAge: 7 days }, refreshToken: { maxAge: 30 days } }` to `updateSession()`. Previously cookies expired with JWT TTL, causing logout on every page refresh.
-
-**Clear jobs button:**
-- `app/api/jobs/clear/route.ts` — `DELETE` endpoint, removes all jobs for the authenticated user
-- `components/find-jobs/JobsTable.tsx` — "Clear all" button in the filter bar. Only shown when `jobs.length > 0`. Two-state confirmation: first click → "Confirm clear" (red border/text), second click → executes and calls `router.refresh()`. Resets on blur.
+**Scoring fix:**
+- `agent/find-jobs.ts` scoring prompt updated with strict rules: cap at 50 for descriptions <100 words, no inferring unstated requirements, penalise seniority/domain/stack mismatches. Root cause: Careerjet returns 150–270 char snippets → GPT-4o inflated scores due to lack of information.
 
 ## Decisions made
 
-- **Job data architecture**: Jobs fetched server-side in `page.tsx`, passed as props to client `JobsTable`. `router.refresh()` from client components triggers re-fetch.
-- **Filtering is client-side**: All filter/sort/pagination in memory after one server fetch. No DB round-trips per interaction.
-- **Next.js 16 async params**: Dynamic route pages use `params: Promise<{ id: string }>` and `await params`.
-- **InsForge DB pattern**: All DB calls use `insforge.database.from(...)` not `insforge.from(...)`.
-- **InsForge auth pattern**: `insforge.auth.getCurrentUser()` not `auth.getUser()`.
-- **PostHog server pattern**: Singleton `getPostHogClient()` from `lib/posthog-server.ts`; uses `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`.
-- **Cookie TTL override**: `updateSession` accepts `options.accessToken.maxAge` and `options.refreshToken.maxAge` to override JWT-derived expiry. This is the correct way to extend session lifetime.
-- **Destructive button pattern**: Two-click confirmation — no modal. Default: `border-border text-text-secondary`. Confirm state: `border-error text-error bg-surface-secondary`. No `error-lightest` token exists — `bg-surface-secondary` is the correct confirm highlight. Resets on blur.
-- **Company Research button**: Disabled in Feature 12 — wired in Feature 13.
+- **Source routing:**
+  - Sweden → JobTech + Jooble + LinkedIn (location_filter="Sweden")
+  - Denmark → Careerjet + Jooble + LinkedIn (location_filter="Denmark")
+  - UK/AU/CA → Adzuna
+  - Default → Adzuna
+- **LinkedIn API uses 7-day endpoint** (`active-jb-7d`) not 1-hour — 1h returns 0 Nordic results, 7d returns 28 DK / 100 SE
+- **LinkedIn location_filter** uses full English country name ("Denmark"/"Sweden"), not city names
+- **LinkedIn source detection** in agent: infers "Sweden" vs "Denmark" from the user's location string using regex, since LinkedIn doesn't support city-level filtering
+- **Careerjet is HTTP-only** — HTTPS port 443 refuses. Requires `Referer` header.
+- **Scoring conservatism**: descriptions under 100 words must score ≤50. GPT-4o must not infer requirements.
+- **MATCH_THRESHOLD = 50**
 
 ## Problems solved
 
-- **Jobs not showing after search**: JobsTable was using mock data. Fixed by making `find-jobs/page.tsx` an async server component fetching real DB data.
-- **Session logout on page refresh**: Cookies expired with JWT TTL. Fixed in `middleware.ts` with explicit `maxAge` overrides.
-- **Job description cut off**: Added "View full description →" link at bottom of Job Description card.
-- **`salary_max!` unsafe assertion**: Changed to safe double-check `r.job.salary_min && r.job.salary_max`.
-- **Insert failure returning success**: Agent now marks run as `failed` and returns `{ success: false }` when DB insert fails.
-- **MATCH_THRESHOLD hardcoded**: Moved to `lib/utils.ts`, imported everywhere.
+- **Careerjet false positives (95% match on irrelevant jobs)** — Careerjet returns 150–270 char snippets. GPT-4o had no requirements to score against so it inflated scores. Fixed via scoring prompt rules.
+- **Indeed DK rate limiting** — BASIC plan unusable, removed. Endpoint is `/indeed-dk/`.
+- **Careerjet HTTPS refused** — use `http://`.
+- **Careerjet "Undeclared referrer" error** — fixed with `Referer: https://jobpilot.app/`.
+- **JobTech open access** — no API key needed despite docs suggesting registration.
+- **LinkedIn `active-jb-1h` returns 0 Nordic results** — switched to `active-jb-7d`.
 
 ## Current state
 
-- Phase 1 Foundation (01–04): complete
-- Phase 2 Profile Page (05–08): complete
-- Phase 3 Find Jobs (09–11): complete
-- Phase 4 Job Details (12): complete — UI with real data, company research shows empty state
-- Session persistence: fixed — 7-day access / 30-day refresh token cookies
-- Clear all jobs: complete — button in filter bar with two-click confirmation
-- Feature 13 (Company Research Agent): not started
+- Phase 1–4 complete (Features 01–13)
+- Multi-source Nordic job search: complete and TypeScript-clean
+- Sweden: JobTech (✅ no key) + Jooble (⚠️ needs key) + LinkedIn (✅ key set)
+- Denmark: Careerjet (✅ key set) + Jooble (⚠️ needs key) + LinkedIn (✅ key set)
+- Scoring: conservative prompt in place, short descriptions capped at 50
 - Phase 5 Dashboard: not started
 
 ## Next session starts with
 
-**Feature 13 — Company Research Agent.**
+**Feature 14 — Dashboard Page Full UI.**
 
-Per `context/build-plan.md`:
-- POST `/api/agent/research` receives `jobId`
-- Resolve company homepage URL by following Adzuna redirect with `fetch(redirect_url, { redirect: "follow" })`, strip subdomain, construct `https://{rootDomain}`
-- Open Browserbase session with Stagehand — homepage extraction + max 3 sub-pages
-- GPT-4o synthesis (temperature 0.4) → dossier saved to `jobs.company_research` jsonb
-- Wire the Research Company button in `app/find-jobs/[id]/page.tsx` — needs a `"use client"` child component that POSTs to `/api/agent/research` and calls `router.refresh()`
-- PostHog event: `company_researched`
-
-Run `/architect feature 13` before starting — Browserbase + Stagehand + GPT-4o synthesis is complex.
+Run `/architect feature 14` before building. Phase 5 sequence:
+- 14 Dashboard Page — Full UI
+- 15 Stats Bar — Real Data
+- 16 Recent Activity — Real Data
+- 17 Analytics Charts — PostHog Data
 
 ## Open questions
 
-- For Feature 13, the Research Company button in the job details page needs a client wrapper. Pattern: extract the button + company research section into a separate `"use client"` component (like SearchCard is separate from the server page). The rest of the page stays a server component. Confirm this approach before building.
+- `JOOBLE_API_KEY` not yet registered — Jooble calls fail silently via `Promise.allSettled`.
+- Feature 13 company research blocks ~60–120s — will timeout on Vercel free tier. Address at deployment.
+- RapidAPI key (`c85c41390amsh...`) was pasted in chat — user should consider rotating it at rapidapi.com/developer/apps if this is a shared repo.

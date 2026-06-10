@@ -6,9 +6,9 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ## Current Status
 
-**Phase:** Phase 3 — Find Jobs Page (in progress)
-**Last completed:** 12 Job Details Page — Full UI
-**Next:** 13 Company Research Agent
+**Phase:** Phase 4 — Job Details Page (complete)
+**Last completed:** 13 Company Research Agent
+**Next:** 14 Dashboard Page — Full UI
 
 ---
 
@@ -37,7 +37,7 @@ Update this file after every completed feature. Any AI agent reading this should
 ### Phase 4 — Job Details Page
 
 - [x] 12 Job Details Page — Full UI
-- [ ] 13 Company Research Agent
+- [x] 13 Company Research Agent
 
 ### Phase 5 — Dashboard
 
@@ -62,6 +62,7 @@ _Add decisions here as they are made during implementation._
 - 2026-06-09: Generated resume is stored at `resumes/{userId}/generated-resume.pdf` (separate from uploaded `resumes/{userId}/resume.pdf`). Extraction always reads from the fixed upload path, so generating never breaks re-extraction.
 - 2026-06-10: Match score bar color thresholds in design differ from ui-rules.md. Design uses: ≥90% green, ≥80% blue, <80% orange. ui-rules.md says 80-100% green, 60-79% blue. Design values were used for Feature 09 mock data.
 - 2026-06-10: Feature 10 — agent code lives in `agent/find-jobs.ts`. GPT-4o scores all 10 Adzuna results in parallel (Promise.all). Only jobs with matchScore >= MATCH_THRESHOLD (70) are saved. lib/utils.ts holds MATCH_THRESHOLD. SearchCard converted to client component with live fetch to /api/agent/find.
+- 2026-06-10: Feature 13 — `@browserbasehq/stagehand` added to `serverExternalPackages` in next.config.ts (bundles native binaries). Stagehand v3.5 API: constructor uses `model: { modelName: "gpt-4o", apiKey: "..." }` (NOT `modelName`/`modelClientOptions`). extract() takes `(instruction, schema)` as separate args (NOT an object). Page access is `stagehand.context.activePage()!`. stagehand.close() always in finally block — never leave sessions open. GPT-4o synthesis always runs even if browser research fails entirely. Route blocks until agent completes (~60–120s) — will timeout on Vercel free tier (10s limit).
 
 ---
 

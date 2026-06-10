@@ -2,10 +2,14 @@ import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { searchJobs } from "@/lib/adzuna";
-import { MATCH_THRESHOLD } from "@/lib/utils";
-import type { Profile, AdzunaJob, ScoredJob } from "@/types";
+import { searchJobsSweden } from "@/lib/jobtech";
+import { searchJobsJooble } from "@/lib/jooble";
+import { searchJobsCareerjet } from "@/lib/careerjet";
+import { searchJobsLinkedIn } from "@/lib/linkedin-jobs";
+import { MATCH_THRESHOLD, stripHtml } from "@/lib/utils";
+import type { Profile, AdzunaJob, NormalizedJob, ScoredJob } from "@/types";
 
-type ScoringResult = ScoredJob & { job: AdzunaJob };
+type ScoringResult = ScoredJob & { job: NormalizedJob };
 
 type FindJobsResult = {
   success: boolean;
@@ -14,21 +18,64 @@ type FindJobsResult = {
   error?: string;
 };
 
-function detectCountry(location: string): string {
+type JobSource = "adzuna" | "jobtech" | "jooble" | "careerjet" | "linkedin";
+
+function detectSources(location: string): {
+  sources: JobSource[];
+  adzunaCountry: string;
+} {
   const loc = location.toLowerCase();
+  if (
+    /\bse\b|sweden|sverige|stockholm|gothenburg|g[öo]teborg|malm[öo]|uppsala|v[äa]ster[åa]s|[öo]rebro|link[öo]ping|helsingborg|norrk[öo]ping/.test(
+      loc,
+    )
+  ) {
+    return { sources: ["jobtech", "jooble", "linkedin"], adzunaCountry: "se" };
+  }
+  if (
+    /\bdk\b|denmark|danmark|copenhagen|k[øo]benhavn|aarhus|[åa]rhus|odense|aalborg/.test(
+      loc,
+    )
+  ) {
+    return { sources: ["careerjet", "jooble", "linkedin"], adzunaCountry: "dk" };
+  }
   if (
     /\buk\b|united kingdom|england|scotland|wales|london|manchester|birmingham/.test(
       loc,
     )
-  )
-    return "gb";
-  if (/australia|sydney|melbourne|brisbane|perth/.test(loc)) return "au";
-  if (/canada|toronto|vancouver|montreal|calgary/.test(loc)) return "ca";
-  return "us";
+  ) {
+    return { sources: ["adzuna"], adzunaCountry: "gb" };
+  }
+  if (/australia|sydney|melbourne|brisbane|perth/.test(loc)) {
+    return { sources: ["adzuna"], adzunaCountry: "au" };
+  }
+  if (/canada|toronto|vancouver|montreal|calgary/.test(loc)) {
+    return { sources: ["adzuna"], adzunaCountry: "ca" };
+  }
+  return { sources: ["adzuna"], adzunaCountry: "us" };
+}
+
+function normalizeAdzunaJob(job: AdzunaJob): NormalizedJob {
+  return {
+    id: job.id,
+    title: job.title,
+    company: job.company.display_name,
+    location: job.location.display_name,
+    description: stripHtml(job.description),
+    url: job.redirect_url,
+    salary:
+      job.salary_min && job.salary_max
+        ? `$${Math.round(job.salary_min / 1000)}k - $${Math.round(job.salary_max / 1000)}k`
+        : job.salary_min
+          ? `$${Math.round(job.salary_min / 1000)}k+`
+          : null,
+    job_type: job.contract_type ?? null,
+    source: "adzuna",
+  };
 }
 
 async function scoreJob(
-  job: AdzunaJob,
+  job: NormalizedJob,
   profile: Profile,
   openai: OpenAI,
 ): Promise<ScoringResult | null> {
@@ -48,14 +95,20 @@ Return ONLY valid JSON with this exact shape:
   "matchReason": "<one paragraph explaining the match quality>",
   "matchedSkills": ["<skill the candidate has that the job requires>"],
   "missingSkills": ["<skill the job requires that the candidate lacks>"]
-}`,
+}
+
+Scoring rules:
+- Be strict and realistic. A high score (80+) requires the job description to explicitly mention requirements that match the candidate's skills and experience level.
+- If the job description is a short snippet (under 100 words) without specific requirements, technologies, or experience criteria, set matchScore to 50 or below — there is not enough information to justify a high score.
+- Never infer requirements that are not stated. Missing information is a signal to score lower, not higher.
+- A mismatch in seniority, domain, or core technology stack should significantly reduce the score.`,
         },
         {
           role: "user",
           content: `JOB:
 Title: ${job.title}
-Company: ${job.company.display_name}
-Location: ${job.location.display_name}
+Company: ${job.company}
+Location: ${job.location}
 Description: ${job.description}
 
 CANDIDATE:
@@ -134,12 +187,56 @@ export async function findJobs(
   const runId = (runData as { id: string }).id;
 
   try {
-    const country = detectCountry(location);
-    const adzunaJobs = await searchJobs(jobTitle, location, country);
+    const { sources, adzunaCountry } = detectSources(location);
+
+    const fetches: Promise<NormalizedJob[]>[] = [];
+
+    if (sources.includes("adzuna")) {
+      fetches.push(
+        searchJobs(jobTitle, location, adzunaCountry).then((jobs) =>
+          jobs.map(normalizeAdzunaJob),
+        ),
+      );
+    }
+    if (sources.includes("jobtech")) {
+      fetches.push(searchJobsSweden(jobTitle));
+    }
+    if (sources.includes("jooble")) {
+      fetches.push(searchJobsJooble(jobTitle, location));
+    }
+    if (sources.includes("careerjet")) {
+      fetches.push(searchJobsCareerjet(jobTitle, location));
+    }
+    if (sources.includes("linkedin")) {
+      // LinkedIn location_filter uses full country name e.g. "Denmark" or "Sweden"
+      const linkedInLocation = /sweden|sverige|stockholm|g[öo]teborg|malm[öo]/i.test(location)
+        ? "Sweden"
+        : "Denmark";
+      fetches.push(searchJobsLinkedIn(jobTitle, linkedInLocation));
+    }
+
+    const settled = await Promise.allSettled(fetches);
+
+    // Log any source failures but continue with whatever succeeded
+    settled.forEach((result, i) => {
+      if (result.status === "rejected") {
+        console.error(
+          `[agent/find-jobs] source ${sources[i]} failed:`,
+          result.reason,
+        );
+      }
+    });
+
+    const allJobs = settled
+      .filter(
+        (r): r is PromiseFulfilledResult<NormalizedJob[]> =>
+          r.status === "fulfilled",
+      )
+      .flatMap((r) => r.value);
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const scoringResults = await Promise.all(
-      adzunaJobs.map((job) => scoreJob(job, profile, openai)),
+      allJobs.map((job) => scoreJob(job, profile, openai)),
     );
 
     const qualifyingJobs = scoringResults.filter(
@@ -151,18 +248,13 @@ export async function findJobs(
         user_id: userId,
         run_id: runId,
         source: "search",
-        source_url: r.job.redirect_url,
-        external_apply_url: r.job.redirect_url,
+        source_url: r.job.url,
+        external_apply_url: r.job.url,
         title: r.job.title,
-        company: r.job.company.display_name,
-        location: r.job.location.display_name,
-        salary:
-          r.job.salary_min && r.job.salary_max
-            ? `$${Math.round(r.job.salary_min / 1000)}k - $${Math.round(r.job.salary_max / 1000)}k`
-            : r.job.salary_min
-              ? `$${Math.round(r.job.salary_min / 1000)}k+`
-              : null,
-        job_type: r.job.contract_type ?? "fulltime",
+        company: r.job.company,
+        location: r.job.location,
+        salary: r.job.salary ?? null,
+        job_type: r.job.job_type ?? "fulltime",
         about_role: r.job.description,
         match_score: r.matchScore,
         match_reason: r.matchReason,
@@ -193,7 +285,11 @@ export async function findJobs(
         posthog.capture({
           distinctId: userId,
           event: "job_found",
-          properties: { userId, source: "search", matchScore: r.matchScore },
+          properties: {
+            userId,
+            source: r.job.source,
+            matchScore: r.matchScore,
+          },
         });
       });
     }
@@ -208,7 +304,7 @@ export async function findJobs(
 
     return {
       success: true,
-      jobsFound: adzunaJobs.length,
+      jobsFound: allJobs.length,
       jobsSaved: qualifyingJobs.length,
     };
   } catch (err) {

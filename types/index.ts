@@ -72,6 +72,18 @@ export type ScoredJob = {
   missingSkills: string[];
 };
 
+export type NormalizedJob = {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  description: string;
+  url: string;
+  salary?: string | null;
+  job_type?: string | null;
+  source: "adzuna" | "jobtech" | "jooble" | "careerjet" | "linkedin";
+};
+
 export type ProfileFormInput = {
   fullName: string;
   email: string;

@@ -3,6 +3,19 @@ import Link from "next/link";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { formatDateAgo } from "@/lib/utils";
 import { Navbar } from "@/components/layout/Navbar";
+import { ResearchButton } from "@/components/find-jobs/ResearchButton";
+
+type CompanyDossier = {
+  companyOverview: string;
+  techStack: string[];
+  culture: string[];
+  whyThisRole: string;
+  yourEdge: string[];
+  gapsToAddress: string[];
+  smartQuestions: string[];
+  interviewPrep: string[];
+  sources: string[];
+};
 
 type Job = {
   id: string;
@@ -219,33 +232,40 @@ export default async function JobDetailsPage({
           )}
 
           {/* Company Research */}
-          <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-6">
+          <div className="bg-surface border border-border rounded-2xl shadow-sm overflow-hidden">
+            <div className="flex items-center gap-3 px-6 py-5 border-b border-border">
               <BuildingIcon className="w-5 h-5 text-text-muted shrink-0" />
               <h2 className="flex-1 text-base font-semibold text-text-primary">
                 Company Research
               </h2>
-              <button
-                disabled
-                className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium opacity-80 cursor-not-allowed"
-              >
-                <SearchIcon className="w-4 h-4" />
-                Research Company
-              </button>
+              {!job.company_research && (
+                <ResearchButton jobId={job.id} />
+              )}
             </div>
 
-            {/* Empty state */}
-            <div className="flex flex-col items-center justify-center py-10 gap-3">
-              <div className="w-10 h-10 flex items-center justify-center">
-                <BuildingIcon className="w-8 h-8 text-border" />
-              </div>
-              <p className="text-sm font-medium text-text-primary">
-                No research yet
-              </p>
-              <p className="text-sm text-text-muted text-center max-w-xs">
-                Click &ldquo;Research Company&rdquo; to let the AI browse{" "}
-                {job.company}&apos;s public pages and build a dossier.
-              </p>
+            <div className="bg-surface-secondary p-5">
+              {job.company_research ? (
+                <CompanyDossierDisplay
+                  dossier={
+                    // Safe cast — shape is controlled by research-company agent
+                    job.company_research as unknown as CompanyDossier
+                  }
+                />
+              ) : (
+                /* Empty state */
+                <div className="flex flex-col items-center justify-center py-10 gap-3">
+                  <div className="w-10 h-10 flex items-center justify-center">
+                    <BuildingIcon className="w-8 h-8 text-border" />
+                  </div>
+                  <p className="text-sm font-medium text-text-primary">
+                    No research yet
+                  </p>
+                  <p className="text-sm text-text-muted text-center max-w-xs">
+                    Click &ldquo;Research Company&rdquo; to let the AI browse{" "}
+                    {job.company}&apos;s public pages and build a dossier.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -263,6 +283,167 @@ export default async function JobDetailsPage({
         </div>
       </main>
     </>
+  );
+}
+
+function CompanyDossierDisplay({ dossier }: { dossier: CompanyDossier }) {
+  return (
+    <div className="flex flex-col gap-4">
+
+      {/* Company Overview — full-width card */}
+      {dossier.companyOverview && (
+        <div className="bg-surface border border-border rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <TargetIcon className="w-4 h-4 text-accent shrink-0" />
+            <p className="text-sm font-semibold text-text-primary">Company Overview</p>
+          </div>
+          <p className="text-sm text-text-secondary leading-relaxed">{dossier.companyOverview}</p>
+        </div>
+      )}
+
+      {/* Tech Stack — pill tags with code icon */}
+      {dossier.techStack.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm font-semibold text-text-primary">Tech Stack</p>
+          <div className="flex flex-wrap gap-2">
+            {dossier.techStack.map((tech, i) => (
+              <span
+                key={i}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-muted text-accent rounded-full text-xs font-medium"
+              >
+                <CodeBracketIcon className="w-3 h-3 shrink-0" />
+                {tech}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Culture + Your Edge — 2-column grid */}
+      {(dossier.culture.length > 0 || dossier.yourEdge.length > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {dossier.culture.length > 0 && (
+            <div className="bg-surface border border-border rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <UsersIcon className="w-4 h-4 text-accent shrink-0" />
+                <p className="text-sm font-semibold text-text-primary">Culture</p>
+              </div>
+              <ul className="flex flex-col gap-2">
+                {dossier.culture.map((item, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                    <span className="mt-2 w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {dossier.yourEdge.length > 0 && (
+            <div className="bg-surface border border-border rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <ShieldCheckIcon className="w-4 h-4 text-success shrink-0" />
+                <p className="text-sm font-semibold text-text-primary">Your Edge</p>
+              </div>
+              <ul className="flex flex-col gap-2">
+                {dossier.yourEdge.map((item, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                    <span className="mt-2 w-1.5 h-1.5 rounded-full bg-success shrink-0" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Gaps to Address + Smart Questions — 2-column grid */}
+      {(dossier.gapsToAddress.length > 0 || dossier.smartQuestions.length > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {dossier.gapsToAddress.length > 0 && (
+            <div className="bg-surface border border-border rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <SlidersIcon className="w-4 h-4 text-accent shrink-0" />
+                <p className="text-sm font-semibold text-text-primary">Gaps to Address</p>
+              </div>
+              <ul className="flex flex-col gap-2">
+                {dossier.gapsToAddress.map((item, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                    <span className="mt-2 w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {dossier.smartQuestions.length > 0 && (
+            <div className="bg-surface border border-border rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <HelpCircleIcon className="w-4 h-4 text-accent shrink-0" />
+                <p className="text-sm font-semibold text-text-primary">Smart Questions</p>
+              </div>
+              <ul className="flex flex-col gap-2">
+                {dossier.smartQuestions.map((q, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                    <span className="mt-2 w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+                    {q}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Why This Role — full-width card */}
+      {dossier.whyThisRole && (
+        <div className="bg-surface border border-border rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <LightbulbIcon className="w-4 h-4 text-warning shrink-0" />
+            <p className="text-sm font-semibold text-text-primary">Why This Role</p>
+          </div>
+          <p className="text-sm text-text-secondary leading-relaxed">{dossier.whyThisRole}</p>
+        </div>
+      )}
+
+      {/* Interview Prep — full-width card */}
+      {dossier.interviewPrep.length > 0 && (
+        <div className="bg-surface border border-border rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <ClipboardIcon className="w-4 h-4 text-accent shrink-0" />
+            <p className="text-sm font-semibold text-text-primary">Interview Prep</p>
+          </div>
+          <ul className="flex flex-col gap-2">
+            {dossier.interviewPrep.map((item, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-text-secondary">
+                <span className="mt-2 w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Sources */}
+      {dossier.sources.length > 0 && (
+        <div className="flex flex-col gap-1.5 pt-3 border-t border-border">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Sources</p>
+          <div className="flex flex-col gap-1">
+            {dossier.sources.map((src, i) => (
+              <a
+                key={i}
+                href={src}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-text-muted hover:text-accent transition-colors truncate"
+              >
+                {src}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -391,6 +572,85 @@ function SearchIcon({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round">
       <circle cx="8.5" cy="8.5" r="5.5" />
       <path d="M13.5 13.5L17 17" />
+    </svg>
+  );
+}
+
+function TargetIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="6" />
+      <circle cx="12" cy="12" r="2" />
+    </svg>
+  );
+}
+
+function UsersIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function ShieldCheckIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  );
+}
+
+function SlidersIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <line x1="4" y1="6" x2="20" y2="6" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="18" x2="20" y2="18" />
+      <line x1="8" y1="3" x2="8" y2="9" />
+      <line x1="16" y1="9" x2="16" y2="15" />
+      <line x1="12" y1="15" x2="12" y2="21" />
+    </svg>
+  );
+}
+
+function HelpCircleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <path d="M12 17h.01" strokeWidth={2} />
+    </svg>
+  );
+}
+
+function CodeBracketIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5M9 3.5l-2 9" />
+    </svg>
+  );
+}
+
+function LightbulbIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21h6M12 3a6 6 0 0 1 6 6c0 3.5-2.5 5.5-3 7H9c-.5-1.5-3-3.5-3-7a6 6 0 0 1 6-6z" />
+      <path d="M9.5 16h5" />
+    </svg>
+  );
+}
+
+function ClipboardIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <rect x="8" y="2" width="8" height="4" rx="1" />
+      <path d="M9 12h6M9 16h4" />
     </svg>
   );
 }

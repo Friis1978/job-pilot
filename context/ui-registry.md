@@ -74,3 +74,7 @@ After building any component — update this file with the component name, file 
 **Destructive button (Clear all):** Only rendered when `jobs.length > 0`. Two-state: default `border-border text-text-secondary hover:bg-surface-secondary`; confirm state `border-error text-error bg-surface-secondary`. Text transitions: "Clear all" → "Confirm clear" → "Clearing...". Resets on blur via `onBlur`. Disabled with `opacity-50 cursor-not-allowed` while request is in flight. Icon: trash SVG `w-3.5 h-3.5` left of label.
 
 **Pattern note:** Destructive actions use `text-error` + `border-error` for the confirm state — no dedicated error background token exists, use `bg-surface-secondary` as the confirm highlight.
+
+### ResearchButton (Find Jobs / Job Details)
+**File:** `components/find-jobs/ResearchButton.tsx`
+**Pattern:** Client component (`"use client"`). Props: `{ jobId: string }`. Wrapper: `flex flex-col items-end gap-2`. Button: `flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium transition-colors`. Loading/done state appends `opacity-60 cursor-not-allowed`. Hover (when enabled): `hover:bg-accent-dark`. Text: "Research Company" → "Researching..." → "Research Complete". SearchIcon SVG defined inline (same path as in page.tsx). Error: `text-sm text-error` below the button. On success: `setDone(true)` then `router.refresh()` — server component re-fetches, company_research now non-null, conditional flips to show dossier, button disappears.
