@@ -6,9 +6,9 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ## Current Status
 
-**Phase:** Phase 2 — Profile Page (complete)
-**Last completed:** 08 Resume PDF Generation from Profile
-**Next:** 09 Find Jobs Page — Full UI
+**Phase:** Phase 3 — Find Jobs Page (in progress)
+**Last completed:** 12 Job Details Page — Full UI
+**Next:** 13 Company Research Agent
 
 ---
 
@@ -30,13 +30,13 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ### Phase 3 — Find Jobs Page
 
-- [ ] 09 Find Jobs Page — Full UI
-- [ ] 10 Adzuna Job Discovery
-- [ ] 11 Filter + Sort + Pagination
+- [x] 09 Find Jobs Page — Full UI
+- [x] 10 Adzuna Job Discovery
+- [x] 11 Filter + Sort + Pagination
 
 ### Phase 4 — Job Details Page
 
-- [ ] 12 Job Details Page — Full UI
+- [x] 12 Job Details Page — Full UI
 - [ ] 13 Company Research Agent
 
 ### Phase 5 — Dashboard
@@ -60,6 +60,8 @@ _Add decisions here as they are made during implementation._
 - 2026-06-09: `@react-pdf/renderer` must be in `serverExternalPackages` in next.config.ts. Server-side PDF rendering uses `renderToBuffer()` — pass element via `createElement()` with a `as unknown as ReactElement<DocumentProps>` cast. Convert the returned `Buffer` to `Uint8Array` before wrapping in `Blob` for InsForge storage upload.
 - 2026-06-09: InsForge storage `upload()` takes exactly 2 args (path, data) — no options object. To overwrite an existing file: call `remove(path)` first, then `upload(path, new Blob([new Uint8Array(buffer)], { type: "..." }))`.
 - 2026-06-09: Generated resume is stored at `resumes/{userId}/generated-resume.pdf` (separate from uploaded `resumes/{userId}/resume.pdf`). Extraction always reads from the fixed upload path, so generating never breaks re-extraction.
+- 2026-06-10: Match score bar color thresholds in design differ from ui-rules.md. Design uses: ≥90% green, ≥80% blue, <80% orange. ui-rules.md says 80-100% green, 60-79% blue. Design values were used for Feature 09 mock data.
+- 2026-06-10: Feature 10 — agent code lives in `agent/find-jobs.ts`. GPT-4o scores all 10 Adzuna results in parallel (Promise.all). Only jobs with matchScore >= MATCH_THRESHOLD (70) are saved. lib/utils.ts holds MATCH_THRESHOLD. SearchCard converted to client component with live fetch to /api/agent/find.
 
 ---
 

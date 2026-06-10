@@ -17,6 +17,10 @@ export async function middleware(request: NextRequest) {
     requestCookies: request.cookies as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     responseCookies: response.cookies as any,
+    options: {
+      accessToken: { maxAge: 60 * 60 * 24 * 7 },   // 7 days
+      refreshToken: { maxAge: 60 * 60 * 24 * 30 },  // 30 days
+    },
   });
 
   const { pathname } = request.nextUrl;

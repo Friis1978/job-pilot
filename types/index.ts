@@ -41,6 +41,37 @@ export type Profile = {
   updated_at: string;
 };
 
+export type JobRow = {
+  id: string;
+  company: string;
+  title: string;
+  match_score: number;
+  salary: string | null;
+  found_at: string;
+};
+
+export type AdzunaJob = {
+  id: string;
+  title: string;
+  company: { display_name: string };
+  location: { display_name: string };
+  description: string;
+  redirect_url: string;
+  salary_min?: number;
+  salary_max?: number;
+  salary_is_predicted: "0" | "1";
+  contract_type?: string;
+  created: string;
+  category: { tag: string; label: string };
+};
+
+export type ScoredJob = {
+  matchScore: number;
+  matchReason: string;
+  matchedSkills: string[];
+  missingSkills: string[];
+};
+
 export type ProfileFormInput = {
   fullName: string;
   email: string;

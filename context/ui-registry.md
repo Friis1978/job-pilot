@@ -57,3 +57,20 @@ After building any component — update this file with the component name, file 
 ### ProfileForm
 **File:** `components/profile/ProfileForm.tsx`
 **Pattern:** Client component (`"use client"`). Single card with 5 subsections separated by `border-t border-border` + `SectionDivider` helper. Labels: `text-xs font-medium uppercase tracking-wide text-text-secondary`. Inputs: `border border-border rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-accent`. Selects: same + `appearance-none` + custom chevron SVG overlay. Tag inputs: text input + Add button row, tags as `bg-surface-secondary border border-border rounded-full px-3 py-1` pills with × SVG remove button. Work experience: array of role cards (`border border-border rounded-xl p-4`) with add/remove. Save Profile: `w-full py-3 bg-accent text-accent-foreground rounded-lg` at bottom.
+
+### SearchCard (Find Jobs)
+**File:** `components/find-jobs/SearchCard.tsx`
+**Pattern:** Client component (`"use client"`). `bg-surface border border-border rounded-2xl p-6 shadow-sm` card. Inputs row uses `flex items-end gap-4` — JOB TITLE has left-icon search SVG (pl-9), LOCATION has no icon. Labels: `text-xs font-medium uppercase tracking-wide text-text-secondary`. Find Jobs button: `bg-accent text-accent-foreground rounded-lg px-5 py-2.5 disabled:opacity-60 disabled:cursor-not-allowed`. Button text is "Searching..." while loading. Success banner: conditional on `result !== null` — `mt-4 rounded-xl bg-success-lightest px-4 py-3 flex items-center gap-3` with sparkle SVG icon and `text-sm font-medium text-success-foreground` text showing real counts. Error: `mt-3 text-sm text-error`.
+
+### JobsTable (Find Jobs)
+**File:** `components/find-jobs/JobsTable.tsx`
+**Last updated:** 2026-06-10
+
+**Pattern:** Client component (`"use client"`). Returns two cards: (1) Filter bar — `bg-surface border border-border rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm` with search icon + borderless input + control buttons right-aligned in `flex items-center gap-2 shrink-0`. (2) Table card — `bg-surface border border-border rounded-2xl overflow-hidden shadow-sm`. Table uses `<table>` with `w-[22%/28%/24%/16%/10%]` column widths. Headers: `px-6 py-4 text-xs font-medium uppercase tracking-wide text-text-secondary`. Rows: `hover:bg-surface-secondary transition-colors cursor-pointer border-b border-border`. Company cell: `w-9 h-9 bg-surface-secondary border border-border rounded-lg` icon container + `font-semibold text-sm`. Match score: `w-32 h-1 bg-border rounded-full` track + colored fill (≥90% `bg-success`, ≥80% `bg-info`, else `bg-warning`) with inline `width: score%`. Pagination: `px-6 py-4 flex items-center justify-between border-t border-border` with `border border-border rounded-lg px-3 py-1.5` page buttons, active page gets `font-semibold bg-surface-secondary`.
+
+**Filter/sort buttons (inactive):** `border border-border rounded-lg px-3 py-1.5 text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors`
+**Filter/sort buttons (active):** `border-accent text-accent bg-accent-muted`
+
+**Destructive button (Clear all):** Only rendered when `jobs.length > 0`. Two-state: default `border-border text-text-secondary hover:bg-surface-secondary`; confirm state `border-error text-error bg-surface-secondary`. Text transitions: "Clear all" → "Confirm clear" → "Clearing...". Resets on blur via `onBlur`. Disabled with `opacity-50 cursor-not-allowed` while request is in flight. Icon: trash SVG `w-3.5 h-3.5` left of label.
+
+**Pattern note:** Destructive actions use `text-error` + `border-error` for the confirm state — no dedicated error background token exists, use `bg-surface-secondary` as the confirm highlight.
