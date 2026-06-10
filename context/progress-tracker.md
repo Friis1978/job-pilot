@@ -6,9 +6,9 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ## Current Status
 
-**Phase:** Phase 5 — Dashboard (complete)
-**Last completed:** 17 Analytics Charts — PostHog Data
-**Next:** Phase 6 (TBD)
+**Phase:** Phase 6 — Enhancements
+**Last completed:** 20 Application Status Tracking
+**Next:** 21 Scheduled Job Alert Emails
 
 ---
 
@@ -45,6 +45,13 @@ Update this file after every completed feature. Any AI agent reading this should
 - [x] 15 Stats Bar — Real Data
 - [x] 16 Recent Activity — Real Data
 - [x] 17 Analytics Charts — PostHog Data
+
+### Phase 6 — Enhancements
+
+- [x] 18 Middleware Auth Protection
+- [x] 19 Cover Letter Generator
+- [x] 20 Application Status Tracking
+- [ ] 21 Scheduled Job Alert Emails
 
 ---
 

@@ -9,6 +9,7 @@ import type { Profile } from "@/types";
 
 type GeneratedContent = {
   summary: string;
+  skills?: string[];
   workExperience: {
     company: string;
     title: string;
@@ -199,11 +200,11 @@ export function ResumePDF({ profile, generated }: Props) {
         ) : null}
 
         {/* Skills */}
-        {profile.skills && profile.skills.length > 0 ? (
+        {((generated.skills ?? profile.skills) ?? []).length > 0 ? (
           <View>
             <Text style={styles.sectionLabel}>Skills</Text>
             <View style={styles.divider} />
-            <Text style={styles.skillsText}>{profile.skills.join("  ·  ")}</Text>
+            <Text style={styles.skillsText}>{(generated.skills ?? profile.skills ?? []).join("  ·  ")}</Text>
           </View>
         ) : null}
 

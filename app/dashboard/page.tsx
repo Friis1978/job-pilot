@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { formatDateAgo } from "@/lib/utils";
 import { Navbar } from "@/components/layout/Navbar";
@@ -8,6 +7,7 @@ import type { ActivityItem } from "@/components/dashboard/RecentActivity";
 import { CompanyResearchChart } from "@/components/dashboard/CompanyResearchChart";
 import { JobsOverTimeChart } from "@/components/dashboard/JobsOverTimeChart";
 import { MatchScoreChart } from "@/components/dashboard/MatchScoreChart";
+import { PipelineCard } from "@/components/dashboard/PipelineCard";
 import {
   getDashboardStats,
   getJobsOverTime,
@@ -38,7 +38,6 @@ export default async function DashboardPage() {
   const {
     data: { user },
   } = await insforge.auth.getCurrentUser();
-  if (!user) redirect("/");
 
   // ── Recent Activity + Charts ───────────────────────────────────────────────
 
@@ -49,6 +48,7 @@ export default async function DashboardPage() {
     jobsOverTimeResult,
     matchScoreResult,
     companyResearchResult,
+    pipelineResult,
   ] = await Promise.allSettled([
     insforge.database
       .from("agent_runs")
@@ -68,6 +68,10 @@ export default async function DashboardPage() {
     getJobsOverTime(user.id),
     getMatchScoreDistribution(user.id),
     getCompanyResearchActivity(user.id),
+    insforge.database
+      .from("jobs")
+      .select("status")
+      .eq("user_id", user.id),
   ]);
   const rawRuns =
     runsResult.status === "fulfilled" ? runsResult.value.data : null;
@@ -85,6 +89,17 @@ export default async function DashboardPage() {
     companyResearchResult.status === "fulfilled"
       ? companyResearchResult.value
       : [];
+
+  const pipelineData = (() => {
+    const counts = { saved: 0, applied: 0, interviewing: 0, offer: 0, rejected: 0 };
+    if (pipelineResult.status === "fulfilled" && pipelineResult.value.data) {
+      for (const row of pipelineResult.value.data as { status: string }[]) {
+        const s = row.status as keyof typeof counts;
+        if (s in counts) counts[s]++;
+      }
+    }
+    return counts;
+  })();
 
   const statsData = {
     totalJobs: phStats?.totalJobs ?? 0,
@@ -132,12 +147,13 @@ export default async function DashboardPage() {
           <StatsBar {...statsData} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <RecentActivity activities={activities} />
-            <CompanyResearchChart data={companyResearchData} />
+            <PipelineCard data={pipelineData} />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <JobsOverTimeChart data={jobsOverTimeData} />
             <MatchScoreChart data={matchScoreData} />
           </div>
+          <CompanyResearchChart data={companyResearchData} />
         </div>
       </main>
     </>

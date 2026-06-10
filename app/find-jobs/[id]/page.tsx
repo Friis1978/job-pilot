@@ -1,9 +1,13 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { formatDateAgo } from "@/lib/utils";
 import { Navbar } from "@/components/layout/Navbar";
 import { ResearchButton } from "@/components/find-jobs/ResearchButton";
+import { CoverLetterSection } from "@/components/find-jobs/CoverLetterSection";
+import { TailoredResumeButton } from "@/components/find-jobs/TailoredResumeButton";
+import { StatusBadge } from "@/components/find-jobs/StatusBadge";
+import type { JobStatus } from "@/components/find-jobs/StatusBadge";
 
 type CompanyDossier = {
   companyOverview: string;
@@ -30,6 +34,8 @@ type Job = {
   matched_skills: string[] | null;
   missing_skills: string[] | null;
   company_research: Record<string, unknown> | null;
+  cover_letter: string | null;
+  status: string;
   external_apply_url: string | null;
   found_at: string;
 };
@@ -65,7 +71,6 @@ export default async function JobDetailsPage({
   const {
     data: { user },
   } = await insforge.auth.getCurrentUser();
-  if (!user) redirect("/");
 
   const { data, error } = await insforge.database
     .from("jobs")
@@ -109,6 +114,7 @@ export default async function JobDetailsPage({
                 </span>
               </p>
             </div>
+            <StatusBadge jobId={job.id} status={(job.status as JobStatus) ?? "saved"} />
             {job.external_apply_url && (
               <a
                 href={job.external_apply_url}
@@ -268,6 +274,25 @@ export default async function JobDetailsPage({
               )}
             </div>
           </div>
+
+          {/* Tailored Resume */}
+          <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
+            <div className="flex items-center gap-2 mb-4">
+              <DocIcon className="w-5 h-5 text-text-muted shrink-0" />
+              <h2 className="flex-1 text-base font-semibold text-text-primary">Tailored Resume</h2>
+            </div>
+            <p className="text-sm text-text-secondary mb-4 leading-5">
+              Generate a version of your resume with the summary and bullet points rewritten to match what {job.company} is looking for — based on the job description{job.company_research ? " and company research" : ""}.
+            </p>
+            <TailoredResumeButton
+              jobId={job.id}
+              companyName={job.company}
+              hasResearch={!!job.company_research}
+            />
+          </div>
+
+          {/* Cover Letter */}
+          <CoverLetterSection jobId={job.id} initialCoverLetter={job.cover_letter} />
 
           {/* Apply Now */}
           {job.external_apply_url && (

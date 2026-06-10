@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { Navbar } from "@/components/layout/Navbar";
 import { SearchCard } from "@/components/find-jobs/SearchCard";
@@ -11,12 +10,10 @@ export default async function FindJobsPage() {
     data: { user },
   } = await insforge.auth.getCurrentUser();
 
-  if (!user) redirect("/");
-
   const [jobsResult, searchesResult] = await Promise.allSettled([
     insforge.database
       .from("jobs")
-      .select("id, company, title, match_score, salary, found_at, matched_skills")
+      .select("id, company, title, match_score, salary, found_at, matched_skills, status")
       .eq("user_id", user.id)
       .order("found_at", { ascending: false }),
     insforge.database

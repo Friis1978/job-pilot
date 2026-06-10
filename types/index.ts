@@ -49,6 +49,7 @@ export type JobRow = {
   salary: string | null;
   found_at: string;
   matched_skills: string[] | null;
+  status: string;
 };
 
 export type AdzunaJob = {

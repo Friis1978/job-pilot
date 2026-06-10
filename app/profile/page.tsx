@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { CompletionIndicator } from "@/components/profile/CompletionIndicator";
 import { ProfilePageShell } from "@/components/profile/ProfilePageShell";
@@ -71,7 +70,6 @@ export default async function ProfilePage() {
   const insforge = await createInsforgeServer();
   const { data: authData } = await insforge.auth.getCurrentUser();
   const userId = authData?.user?.id;
-  if (!userId) redirect("/");
 
   let profile: Profile | null = null;
   if (userId) {

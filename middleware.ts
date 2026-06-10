@@ -30,7 +30,7 @@ export async function middleware(request: NextRequest) {
   );
 
   if (isProtected && !accessToken) {
-    return NextResponse.redirect(new URL("/auth/login", request.url));
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   if (pathname === "/auth/login" && accessToken) {

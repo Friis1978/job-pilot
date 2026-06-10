@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { MATCH_THRESHOLD, formatDateAgo } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import type { JobRow } from "@/types";
+import { StatusBadge } from "@/components/find-jobs/StatusBadge";
+import type { JobStatus } from "@/components/find-jobs/StatusBadge";
 
 export type { JobRow };
 
@@ -262,17 +264,20 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[22%]">
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[20%]">
                     Company
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[26%]">
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[22%]">
                     Role
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[22%]">
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[18%]">
                     Match Score
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[14%]">
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[12%]">
                     Salary Est.
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[12%]">
+                    Status
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[10%]">
                     Date Found
@@ -319,6 +324,9 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                       <span className="text-sm text-text-primary">
                         {job.salary ?? "—"}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <StatusBadge jobId={job.id} status={(job.status as JobStatus) ?? "saved"} />
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm text-text-muted">

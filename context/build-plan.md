@@ -444,13 +444,102 @@ Wire three dashboard charts to real PostHog event data for current user.
 
 ---
 
+## Phase 6 — Enhancements
+
+### 18 Middleware Auth Protection
+
+Replace per-page `getCurrentUser()` + redirect logic with a single Next.js middleware that protects all app routes centrally.
+
+**Logic:**
+
+- Create `middleware.ts` at project root
+- Use InsForge SSR `updateSession()` to refresh the session on every request
+- Protected routes: `/dashboard`, `/find-jobs`, `/profile` and all sub-paths
+- Unauthenticated requests to protected routes → `NextResponse.redirect` to `/`
+- Public routes (`/`, `/auth/login`, `/auth/callback`) pass through untouched
+- Remove manual `if (!user) redirect("/")` guards from all protected page components — middleware makes them redundant
+- Keep `getCurrentUser()` calls in page components only for reading user data (not for auth gating)
+
+---
+
+### 19 Cover Letter Generator
+
+GPT-4o generates a tailored cover letter for a specific job, saved to InsForge storage and displayed on the job details page.
+
+**UI:**
+
+- "Generate Cover Letter" button in the job details page, below the Company Research card
+- Loading state while generating
+- Generated cover letter rendered as readable text in a card with a "Copy" button and a "Download PDF" button
+- If a cover letter already exists for the job, show it immediately with a "Regenerate" button
+
+**Logic:**
+
+- `POST /api/agent/cover-letter` receives `jobId`
+- Load job data from DB: `title`, `company`, `about_role`, `match_reason`, `matched_skills`, `missing_skills`, `company_research`
+- Load user profile from DB: `full_name`, `current_title`, `years_experience`, `skills`, `work_experience`, `cover_letter_tone`
+- GPT-4o generates cover letter:
+  - Temperature: 0.7, max_tokens: 800, response_format: plain text (not JSON)
+  - System prompt: professional cover letter writer, adapts tone from profile `cover_letter_tone` field
+  - Personalised to role, company, candidate's actual experience — never generic
+- Save generated text to `jobs.cover_letter` (text column — add via migration)
+- `revalidatePath` the job details page
+- **PostHog event:** `cover_letter_generated` — `{ userId, jobId, company }`
+- Dashboard stat "Cover Letters Generated" wired to this event count via PostHog HogQL
+
+---
+
+### 20 Application Status Tracking
+
+Let users move each job through an application pipeline and see their pipeline at a glance.
+
+**UI:**
+
+- Status badge on each row in the jobs table — pill with colour: Saved (gray), Applied (blue), Interviewing (purple), Offer (green), Rejected (red)
+- Clicking the badge opens a small inline dropdown to change status
+- Job details page — status displayed in the header row with the same dropdown
+- Dashboard — new "Pipeline" card showing counts per status
+
+**Logic:**
+
+- Add `status` column to `jobs` table via migration: `text NOT NULL DEFAULT 'saved'`, constrained to `'saved' | 'applied' | 'interviewing' | 'offer' | 'rejected'`
+- `PATCH /api/jobs/[id]/status` — updates `status` for the job, scoped to `user_id`
+- Client component `StatusBadge` — renders pill + dropdown, calls PATCH, `router.refresh()` on success, toast on error
+- Dashboard pipeline card fetches status counts from InsForge DB grouped by status
+
+---
+
+### 21 Scheduled Job Alert Emails
+
+A daily cron job runs a job search for each active user based on their saved search history, and emails new matches.
+
+**UI:**
+
+- Settings section on the profile page — "Job Alerts" toggle (enabled/disabled) + preferred search (job title + location pre-filled from most recent search)
+- Email shows up to 5 new job matches with title, company, match score, and a "View Match" link
+
+**Logic:**
+
+- Add `alerts_enabled` (boolean, default false) and `alert_job_title` / `alert_location` (text) columns to `profiles` table via migration
+- Cron endpoint: `POST /api/cron/job-alerts` — protected by `CRON_SECRET` header check
+- For each user with `alerts_enabled = true`:
+  - Run `findJobs(userId, alert_job_title, alert_location)` — reuses existing agent
+  - If `jobsSaved > 0` — send email via Resend with the new matches
+  - Skip users with no new matches (no email sent)
+- Email template: plain transactional HTML, JobPilot branding, list of new jobs with match scores and direct links
+- Configure cron schedule in deployment (e.g. Vercel Cron or external scheduler) to call the endpoint daily
+- **PostHog event:** `job_alert_sent` — `{ userId, jobCount }`
+
+---
+
 ## Feature Count
 
-| Phase                 | Features |
-| --------------------- | -------- |
-| Phase 1 — Foundation  | 4        |
-| Phase 2 — Profile     | 4        |
-| Phase 3 — Find Jobs   | 3        |
-| Phase 4 — Job Details | 2        |
-| Phase 5 — Dashboard   | 4        |
-| **Total**             | **17**   |
+| Phase                    | Features |
+| ------------------------ | -------- |
+| Phase 1 — Foundation     | 4        |
+| Phase 2 — Profile        | 4        |
+| Phase 3 — Find Jobs      | 3        |
+| Phase 4 — Job Details    | 2        |
+| Phase 5 — Dashboard      | 4        |
+| Phase 6 — Enhancements   | 4        |
+| **Total**                | **21**   |
