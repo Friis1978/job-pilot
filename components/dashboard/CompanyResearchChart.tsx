@@ -1,96 +1,89 @@
-const DATA = [
-  { label: "Mon", value: 2 },
-  { label: "Tue", value: 5 },
-  { label: "Wed", value: 3 },
-  { label: "Thu", value: 8 },
-  { label: "Fri", value: 12 },
-  { label: "Sat", value: 4 },
-  { label: "Sun", value: 1 },
-];
+"use client";
 
-const Y_TICKS = [0, 3, 6, 9, 12];
-const Y_MAX = 12;
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import type { ChartPoint } from "@/lib/posthog-query";
 
-const PAD_L = 30;
-const PAD_R = 12;
-const PAD_T = 12;
-const PAD_B = 28;
-const VW = 560;
-const VH = 200;
-const CW = VW - PAD_L - PAD_R; // chart width
-const CH = VH - PAD_T - PAD_B; // chart height
+type Props = { data: ChartPoint[] };
 
-export function CompanyResearchChart() {
-  const slotW = CW / DATA.length;
-  const barW = Math.round(slotW * 0.52);
+type TooltipProps = {
+  active?: boolean;
+  payload?: Array<{ value: number }>;
+  label?: string;
+};
+
+function TooltipContent({ active, payload, label }: TooltipProps) {
+  if (!active || !payload?.length) return null;
+  const count = payload[0].value;
+  return (
+    <div className="bg-surface border border-border rounded-lg shadow-sm px-3 py-2">
+      <p className="text-xs text-text-muted mb-0.5">{label}</p>
+      <p className="text-sm font-semibold text-text-primary">
+        {count} {count === 1 ? "company" : "companies"} researched
+      </p>
+    </div>
+  );
+}
+
+export function CompanyResearchChart({ data }: Props) {
+  const isEmpty = data.every((d) => d.value === 0);
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
       <h2 className="text-base font-semibold text-text-primary mb-5">
         Company Research Activity
       </h2>
-      <svg
-        viewBox={`0 0 ${VW} ${VH}`}
-        className="w-full"
-        aria-hidden="true"
-      >
-        {/* Y-axis grid lines + labels */}
-        {Y_TICKS.map((tick) => {
-          const y = PAD_T + CH - (tick / Y_MAX) * CH;
-          return (
-            <g key={tick}>
-              <line
-                x1={PAD_L}
-                y1={y}
-                x2={VW - PAD_R}
-                y2={y}
-                stroke="var(--color-border)"
-                strokeWidth="1"
-                strokeDasharray="4 3"
-              />
-              <text
-                x={PAD_L - 6}
-                y={y + 4}
-                textAnchor="end"
-                fontSize="11"
-                fill="var(--color-text-muted)"
-              >
-                {tick}
-              </text>
-            </g>
-          );
-        })}
 
-        {/* Bars + X-axis labels */}
-        {DATA.map((d, i) => {
-          const barH = (d.value / Y_MAX) * CH;
-          const barX = PAD_L + i * slotW + (slotW - barW) / 2;
-          const barY = PAD_T + CH - barH;
-          const labelX = PAD_L + i * slotW + slotW / 2;
-
-          return (
-            <g key={d.label}>
-              <rect
-                x={barX}
-                y={barY}
-                width={barW}
-                height={barH}
-                fill="var(--color-info)"
-                rx="4"
-              />
-              <text
-                x={labelX}
-                y={VH - PAD_B + 14}
-                textAnchor="middle"
-                fontSize="11"
-                fill="var(--color-text-muted)"
-              >
-                {d.label}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+      {isEmpty ? (
+        <div className="flex flex-col items-center justify-center py-8 gap-2">
+          <p className="text-sm font-medium text-text-primary">No data yet</p>
+          <p className="text-xs text-text-muted text-center">
+            Research a company to see activity here.
+          </p>
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={172}>
+          <BarChart
+            data={data}
+            margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
+          >
+            <CartesianGrid
+              strokeDasharray="4 3"
+              stroke="var(--color-border)"
+              vertical={false}
+            />
+            <XAxis
+              dataKey="label"
+              tick={{ fill: "var(--color-text-muted)", fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fill: "var(--color-text-muted)", fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <Tooltip
+              content={(props) => <TooltipContent {...(props as unknown as TooltipProps)} />}
+              cursor={{ fill: "var(--color-surface-secondary)" }}
+            />
+            <Bar
+              dataKey="value"
+              fill="var(--color-info)"
+              radius={[4, 4, 0, 0]}
+              maxBarSize={40}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      )}
     </div>
   );
 }

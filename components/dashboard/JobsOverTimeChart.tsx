@@ -1,125 +1,107 @@
-const DATA = [
-  { label: "Mon", value: 15 },
-  { label: "Tue", value: 35 },
-  { label: "Wed", value: 30 },
-  { label: "Thu", value: 45 },
-  { label: "Fri", value: 85 },
-  { label: "Sat", value: 80 },
-  { label: "Sun", value: 15 },
-];
+"use client";
 
-const Y_TICKS = [0, 25, 50, 75, 100];
-const Y_MAX = 100;
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import type { ChartPoint } from "@/lib/posthog-query";
 
-const PAD_L = 30;
-const PAD_R = 12;
-const PAD_T = 12;
-const PAD_B = 28;
-const VW = 560;
-const VH = 220;
-const CW = VW - PAD_L - PAD_R;
-const CH = VH - PAD_T - PAD_B;
+type Props = { data: ChartPoint[] };
 
-// Catmull-Rom → cubic Bezier with tension 0.35
-function smoothPath(pts: [number, number][]): string {
-  if (pts.length < 2) return "";
-  const t = 0.35;
-  const px = (i: number) => pts[Math.max(0, Math.min(i, pts.length - 1))][0];
-  const py = (i: number) => pts[Math.max(0, Math.min(i, pts.length - 1))][1];
-  let d = `M ${pts[0][0]},${pts[0][1]}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const cp1x = (px(i) + (px(i + 1) - px(i - 1)) * t).toFixed(2);
-    const cp1y = (py(i) + (py(i + 1) - py(i - 1)) * t).toFixed(2);
-    const cp2x = (px(i + 1) - (px(i + 2) - px(i)) * t).toFixed(2);
-    const cp2y = (py(i + 1) - (py(i + 2) - py(i)) * t).toFixed(2);
-    d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${pts[i + 1][0]},${pts[i + 1][1]}`;
-  }
-  return d;
+type TooltipProps = {
+  active?: boolean;
+  payload?: Array<{ value: number }>;
+  label?: string;
+};
+
+function TooltipContent({ active, payload, label }: TooltipProps) {
+  if (!active || !payload?.length) return null;
+  const count = payload[0].value;
+  return (
+    <div className="bg-surface border border-border rounded-lg shadow-sm px-3 py-2">
+      <p className="text-xs text-text-muted mb-0.5">{label}</p>
+      <p className="text-sm font-semibold text-text-primary">
+        {count} {count === 1 ? "job" : "jobs"} found
+      </p>
+    </div>
+  );
 }
 
-export function JobsOverTimeChart() {
-  const slotW = CW / (DATA.length - 1);
-  const baseY = PAD_T + CH;
-
-  const points: [number, number][] = DATA.map((d, i) => [
-    PAD_L + i * slotW,
-    PAD_T + CH - (d.value / Y_MAX) * CH,
-  ]);
-
-  const linePath = smoothPath(points);
-  const areaPath = `${linePath} L ${points[points.length - 1][0]},${baseY} L ${points[0][0]},${baseY} Z`;
+export function JobsOverTimeChart({ data }: Props) {
+  const isEmpty = data.every((d) => d.value === 0);
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
       <h2 className="text-base font-semibold text-text-primary mb-5">
         Jobs Found Over Time
       </h2>
-      <svg
-        viewBox={`0 0 ${VW} ${VH}`}
-        className="w-full"
-        aria-hidden="true"
-      >
-        <defs>
-          <linearGradient id="jobsGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-accent)" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="var(--color-accent)" stopOpacity="0.02" />
-          </linearGradient>
-        </defs>
 
-        {/* Y-axis grid lines + labels */}
-        {Y_TICKS.map((tick) => {
-          const y = PAD_T + CH - (tick / Y_MAX) * CH;
-          return (
-            <g key={tick}>
-              <line
-                x1={PAD_L}
-                y1={y}
-                x2={VW - PAD_R}
-                y2={y}
-                stroke="var(--color-border)"
-                strokeWidth="1"
-                strokeDasharray="4 3"
-              />
-              <text
-                x={PAD_L - 6}
-                y={y + 4}
-                textAnchor="end"
-                fontSize="11"
-                fill="var(--color-text-muted)"
-              >
-                {tick}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Area fill */}
-        <path d={areaPath} fill="url(#jobsGradient)" />
-
-        {/* Curve line */}
-        <path
-          d={linePath}
-          fill="none"
-          stroke="var(--color-accent)"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {/* X-axis labels */}
-        {DATA.map((d, i) => (
-          <text
-            key={d.label}
-            x={PAD_L + i * slotW}
-            y={VH - PAD_B + 14}
-            textAnchor="middle"
-            fontSize="11"
-            fill="var(--color-text-muted)"
+      {isEmpty ? (
+        <div className="flex flex-col items-center justify-center py-8 gap-2">
+          <p className="text-sm font-medium text-text-primary">No data yet</p>
+          <p className="text-xs text-text-muted text-center">
+            Run a job search to see activity here.
+          </p>
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={192}>
+          <AreaChart
+            data={data}
+            margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
           >
-            {d.label}
-          </text>
-        ))}
-      </svg>
+            <defs>
+              <linearGradient id="jobsAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop
+                  offset="5%"
+                  stopColor="var(--color-accent)"
+                  stopOpacity={0.2}
+                />
+                <stop
+                  offset="95%"
+                  stopColor="var(--color-accent)"
+                  stopOpacity={0.02}
+                />
+              </linearGradient>
+            </defs>
+            <CartesianGrid
+              strokeDasharray="4 3"
+              stroke="var(--color-border)"
+              vertical={false}
+            />
+            <XAxis
+              dataKey="label"
+              interval={4}
+              tick={{ fill: "var(--color-text-muted)", fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fill: "var(--color-text-muted)", fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <Tooltip
+              content={(props) => <TooltipContent {...(props as unknown as TooltipProps)} />}
+              cursor={{ stroke: "var(--color-border)", strokeWidth: 1 }}
+            />
+            <Area
+              type="monotone"
+              dataKey="value"
+              stroke="var(--color-accent)"
+              strokeWidth={2.5}
+              fill="url(#jobsAreaGradient)"
+              dot={false}
+              activeDot={{ r: 4, fill: "var(--color-accent)", strokeWidth: 0 }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      )}
     </div>
   );
 }

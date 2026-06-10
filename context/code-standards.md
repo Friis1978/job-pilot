@@ -255,7 +255,10 @@ All environment variables defined in `.env.local` for development. Never hardcod
 | `ADZUNA_APP_ID`                 | lib/adzuna.ts          |
 | `ADZUNA_APP_KEY`                | lib/adzuna.ts          |
 | `NEXT_PUBLIC_POSTHOG_KEY`       | lib/posthog-client.ts  |
-| `NEXT_PUBLIC_POSTHOG_HOST`      | lib/posthog-client.ts  |
+| `NEXT_PUBLIC_POSTHOG_HOST`      | lib/posthog-client.ts (event ingestion) |
+| `POSTHOG_API_HOST`              | lib/posthog-query.ts (REST API / HogQL) |
+| `POSTHOG_PROJECT_ID`            | lib/posthog-query.ts   |
+| `POSTHOG_PERSONAL_API_KEY`      | lib/posthog-query.ts   |
 
 `NEXT_PUBLIC_` prefix means the variable is exposed to the browser. Never add `NEXT_PUBLIC_` to secret keys.
 
@@ -321,5 +324,6 @@ Approved dependencies for this project:
 - `lucide-react` — Icons
 - `tailwindcss` — Styling
 - `shadcn/ui` components — UI primitives
+- `recharts` — Dashboard charts (interactive, hover tooltips)
 
 Do not install any other packages without updating this list first.

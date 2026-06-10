@@ -234,9 +234,33 @@ export async function findJobs(
       )
       .flatMap((r) => r.value);
 
+    // Deduplicate against existing jobs for this user
+    const { data: existingJobs } = await insforge.database
+      .from("jobs")
+      .select("source_url, title, company")
+      .eq("user_id", userId);
+
+    const existingUrls = new Set(
+      (existingJobs ?? []).map((j: { source_url: string }) => j.source_url),
+    );
+    const existingTitleCompany = new Set(
+      (existingJobs ?? []).map(
+        (j: { title: string; company: string }) =>
+          `${j.title.toLowerCase()}|${j.company.toLowerCase()}`,
+      ),
+    );
+
+    const newJobs = allJobs.filter(
+      (job) =>
+        !existingUrls.has(job.url) &&
+        !existingTitleCompany.has(
+          `${job.title.toLowerCase()}|${job.company.toLowerCase()}`,
+        ),
+    );
+
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const scoringResults = await Promise.all(
-      allJobs.map((job) => scoreJob(job, profile, openai)),
+      newJobs.map((job) => scoreJob(job, profile, openai)),
     );
 
     const qualifyingJobs = scoringResults.filter(

@@ -8,12 +8,12 @@ import type { ActivityItem } from "@/components/dashboard/RecentActivity";
 import { CompanyResearchChart } from "@/components/dashboard/CompanyResearchChart";
 import { JobsOverTimeChart } from "@/components/dashboard/JobsOverTimeChart";
 import { MatchScoreChart } from "@/components/dashboard/MatchScoreChart";
-
-type JobStatsRow = {
-  match_score: number;
-  company_research: unknown;
-  found_at: string;
-};
+import {
+  getDashboardStats,
+  getJobsOverTime,
+  getMatchScoreDistribution,
+  getCompanyResearchActivity,
+} from "@/lib/posthog-query";
 
 type AgentRunRow = {
   job_title_searched: string | null;
@@ -28,13 +28,6 @@ type ResearchedJobRow = {
   found_at: string;
 };
 
-function rowAvg(rows: JobStatsRow[]): number {
-  if (rows.length === 0) return 0;
-  return Math.round(
-    rows.reduce((sum, j) => sum + j.match_score, 0) / rows.length,
-  );
-}
-
 function weekTrend(current: number, previous: number): number | null {
   if (previous === 0) return null;
   return Math.round(((current - previous) / previous) * 100);
@@ -47,55 +40,64 @@ export default async function DashboardPage() {
   } = await insforge.auth.getCurrentUser();
   if (!user) redirect("/auth/login");
 
-  // ── Stats ──────────────────────────────────────────────────────────────────
+  // ── Recent Activity + Charts ───────────────────────────────────────────────
 
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
-
-  const { data: rawJobs } = await insforge.database
-    .from("jobs")
-    .select("match_score, company_research, found_at")
-    .eq("user_id", user.id);
-
-  const jobs = (rawJobs ?? []) as JobStatsRow[];
-  const thisWeek = jobs.filter((j) => new Date(j.found_at) >= sevenDaysAgo);
-  const lastWeek = jobs.filter(
-    (j) =>
-      new Date(j.found_at) >= fourteenDaysAgo &&
-      new Date(j.found_at) < sevenDaysAgo,
-  );
-
-  const statsData = {
-    totalJobs: jobs.length,
-    avgMatchRate: rowAvg(jobs),
-    companiesResearched: jobs.filter((j) => j.company_research !== null).length,
-    jobsThisWeek: thisWeek.length,
-    totalJobsTrend: weekTrend(thisWeek.length, lastWeek.length),
-    matchRateTrend: weekTrend(rowAvg(thisWeek), rowAvg(lastWeek)),
-  };
-
-  // ── Recent Activity ────────────────────────────────────────────────────────
-
-  const [runsResult, researchedResult] = await Promise.allSettled([
+  const [
+    runsResult,
+    researchedResult,
+    dashboardStatsResult,
+    jobsOverTimeResult,
+    matchScoreResult,
+    companyResearchResult,
+  ] = await Promise.allSettled([
     insforge.database
       .from("agent_runs")
       .select("job_title_searched, jobs_found, started_at")
       .eq("user_id", user.id)
       .eq("status", "complete")
       .order("started_at", { ascending: false })
-      .limit(10),
+      .limit(20),
     insforge.database
       .from("jobs")
       .select("company, found_at")
       .eq("user_id", user.id)
       .not("company_research", "is", null)
       .order("found_at", { ascending: false })
-      .limit(10),
+      .limit(20),
+    getDashboardStats(user.id),
+    getJobsOverTime(user.id),
+    getMatchScoreDistribution(user.id),
+    getCompanyResearchActivity(user.id),
   ]);
   const rawRuns =
     runsResult.status === "fulfilled" ? runsResult.value.data : null;
   const rawResearched =
     researchedResult.status === "fulfilled" ? researchedResult.value.data : null;
+  const phStats =
+    dashboardStatsResult.status === "fulfilled"
+      ? dashboardStatsResult.value
+      : null;
+  const jobsOverTimeData =
+    jobsOverTimeResult.status === "fulfilled" ? jobsOverTimeResult.value : [];
+  const matchScoreData =
+    matchScoreResult.status === "fulfilled" ? matchScoreResult.value : [];
+  const companyResearchData =
+    companyResearchResult.status === "fulfilled"
+      ? companyResearchResult.value
+      : [];
+
+  const statsData = {
+    totalJobs: phStats?.totalJobs ?? 0,
+    avgMatchRate: phStats?.avgMatchRate ?? 0,
+    companiesResearched: phStats?.companiesResearched ?? 0,
+    jobsThisWeek: phStats?.jobsThisWeek ?? 0,
+    totalJobsTrend: phStats
+      ? weekTrend(phStats.jobsThisWeek, phStats.jobsLastWeek)
+      : null,
+    matchRateTrend: phStats
+      ? weekTrend(phStats.avgMatchRateThisWeek, phStats.avgMatchRateLastWeek)
+      : null,
+  };
 
   const runActivities: Timestamped[] = ((rawRuns ?? []) as AgentRunRow[])
     .filter((run) => (run.jobs_found ?? 0) > 0)
@@ -117,7 +119,7 @@ export default async function DashboardPage() {
 
   const activities: ActivityItem[] = [...runActivities, ...researchActivities]
     .sort((a, b) => b.ts - a.ts)
-    .slice(0, 8)
+    .slice(0, 20)
     .map(({ type, text, time }) => ({ type, text, time }));
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -130,11 +132,11 @@ export default async function DashboardPage() {
           <StatsBar {...statsData} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <RecentActivity activities={activities} />
-            <CompanyResearchChart />
+            <CompanyResearchChart data={companyResearchData} />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <JobsOverTimeChart />
-            <MatchScoreChart />
+            <JobsOverTimeChart data={jobsOverTimeData} />
+            <MatchScoreChart data={matchScoreData} />
           </div>
         </div>
       </main>

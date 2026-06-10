@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { findJobs } from "@/agent/find-jobs";
 
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
+    revalidatePath("/dashboard");
     return NextResponse.json({
       data: { jobsFound: result.jobsFound, jobsSaved: result.jobsSaved },
     });

@@ -1,61 +1,61 @@
-# Memory — Dashboard Phase 5 (Features 14–16 reviewed + fixed)
+# Memory — Job Deduplication + Dashboard Freshness
 
 Last updated: 2026-06-10
 
 ## What was built
 
-**This session — review + fixes for Features 15 and 16:**
+**Recent Activity modal (`components/dashboard/RecentActivity.tsx` — rewritten as client component):**
+- Shows first 4 activities in the card
+- "View all" button appears when `activities.length > 4`
+- Modal with fixed overlay, scrollable list of all activities, close button, click-outside-to-dismiss
+- `ActivityList` extracted as shared sub-component used by both card and modal
 
-`components/dashboard/StatsBar.tsx`:
-- `TrendBadge` now conditionally applies `bg-success-lightest text-success-darker` for positive trends and `bg-surface-secondary text-text-secondary` for negative/zero trends. Previously always rendered green.
+**`app/dashboard/page.tsx`:**
+- Activity DB query limits raised from 10 → 20
+- Activities merge slice raised from 8 → 20
 
-`app/dashboard/page.tsx` — four fixes:
-- `AgentRunRow.started_at` type changed from `string` to `string | null` (matches DB schema: `isNullable: YES`)
-- `type Timestamped` moved to module scope (was incorrectly declared inside async `DashboardPage` function)
-- `Promise.all` for activity queries replaced with `Promise.allSettled` — a DB failure no longer crashes the entire dashboard page
-- Zero-jobs filter added: `.filter((run) => (run.jobs_found ?? 0) > 0)` prevents "Found 0 jobs for X" appearing in the activity feed
+**Job deduplication in `agent/find-jobs.ts`:**
+- Before scoring: fetches existing `source_url`, `title`, `company` for the user from DB
+- Guard 1: skip if `source_url` already exists
+- Guard 2: skip if `title.toLowerCase() + company.toLowerCase()` already exists (catches cross-source duplicates)
+- Both checks happen before OpenAI scoring — no wasted GPT-4o calls on duplicates
+
+**Existing duplicates cleaned from DB:**
+- Ran SQL: `DELETE FROM jobs WHERE id IN (SELECT id ... ROW_NUMBER() OVER (PARTITION BY user_id, title, company ORDER BY found_at ASC) rn ... WHERE rn > 1)`
+- Deleted 10 duplicate rows, kept oldest per title+company+user
+
+**`app/api/agent/find/route.ts`:**
+- Added `revalidatePath("/dashboard")` after successful search
+- Dashboard cache is purged on every successful job search — numbers always fresh on next visit
 
 ## Decisions made
 
-- **`Promise.allSettled` for activity queries** — fault isolation: if `agent_runs` or `jobs` query fails independently, the page still renders with whatever data is available. Stats query (single query, no allSettled) is accepted as-is — if it fails the page can't render meaningful stats anyway.
-- **Negative trend styling uses `bg-surface-secondary text-text-secondary`** — neutral look, not red/error, because a lower match rate week-over-week is informational, not an error state.
-- **Dashboard page is a pure Server Component** — auth check + all data fetching in `app/dashboard/page.tsx`. No client-side data fetching on the dashboard.
-- **Charts use inline SVG with CSS variable colors** — no chart library. Feature 17 will replace static data with PostHog queries.
-- **`agent_runs.started_at` confirmed nullable in DB** — `isNullable: YES`. Null guarded with `?? new Date().toISOString()` in formatDateAgo call.
-- **No `researched_at` column on jobs** — `found_at` used as proxy for research timestamp. Accepted approximation.
+- **Deduplication before scoring** — save OpenAI API costs by filtering known jobs before GPT-4o runs
+- **Dual deduplication keys** — `source_url` (exact) + `title+company` lowercase (fuzzy cross-source). Same job on Jooble and CareerJet will have different URLs but same title+company.
+- **Keep oldest on dedup cleanup** — `ORDER BY found_at ASC` keeps the original entry, deletes re-fetched copies
+- **`revalidatePath("/dashboard")` not `revalidateTag`** — simple path revalidation is sufficient; dashboard has no custom cache tags
 
 ## Problems solved
 
-- **TrendBadge always green** — was `bg-success-lightest text-success-darker` hardcoded regardless of `isPositive`. Fixed with conditional className.
-- **Stagehand v3.5 API mismatch** — `library-docs.md` showed old object-form `extract({ instruction, schema })` and `"openai/gpt-4o"` model prefix. Fixed in earlier sessions.
-- **ATS domain research** — `resolveCompanyUrl` was resolving `greenhouse.io`/`lever.co` as company homepages. Fixed with ATS_AND_JOB_BOARD_DOMAINS blocklist.
+- Same job appearing multiple times in the jobs list (from multiple search runs or multiple sources)
+- Dashboard stats showing stale counts after a new search
 
 ## Current state
 
-- Phase 1–4 complete (Features 01–13)
-- Phase 5: Features 14, 15, 16 complete and reviewed — all issues resolved
-- Dashboard shows: real stat counts, real recent activity (job searches + company research)
-- Dashboard charts still use static placeholder data (Feature 17 pending)
-- TypeScript: clean (`tsc --noEmit` passes with 0 errors)
+- Phase 1–5 complete (Features 01–17)
+- Dashboard fully wired: real stats, real recent activity, real PostHog chart data
+- Job deduplication active: both URL and title+company guards in place
+- DB cleaned of 10 prior duplicates
+- TypeScript: clean (tsc --noEmit passes)
+- PostHog project: "Job Pilot" (id: 197754), org: "Friismusic", host: eu.posthog.com
 
 ## Next session starts with
 
-**Feature 17 — Analytics Charts — PostHog Data.**
-
-Build plan spec:
-- Jobs Found Over Time — query PostHog for `job_found` events for current userId, last 30 days, group by day
-- Match Score Distribution — query PostHog for `job_found` events, extract `matchScore` property, group into 50-60/60-70/70-80/80-90/90-100 buckets
-- Company Research Activity — query PostHog for `company_researched` events for current userId, last 7 days, group by day
-- All three charts rendered — replace static SVG placeholder data with real PostHog data
-- Empty state shown for each chart when no data exists
-
-PostHog server client is at `lib/posthog-server.ts`. Events are fired with `distinctId = userId`. The three chart components (`CompanyResearchChart`, `JobsOverTimeChart`, `MatchScoreChart`) need to accept real data as props.
-
-Run `/architect feature 17` before building — PostHog query API needs research (it uses the PostHog Events API or node client, not the browser capture API).
+Phase 6 — TBD. No next feature defined yet. Check `context/build-plan.md` for the next phase, or ask the user.
 
 ## Open questions
 
-- Feature 17 PostHog query API: the server-side `posthog-node` client has a `getFeatureFlag` and event capture API, but querying historical events requires either the PostHog REST API (api.posthog.com/api/events) or PostHog's Insights API. Needs investigation before building.
-- `JOOBLE_API_KEY` not registered — Jooble calls fail silently via `Promise.allSettled`.
-- Feature 13 company research blocks ~60–120s — will timeout on Vercel free tier. Address at deployment.
-- RapidAPI key was pasted in chat in a prior session — user should consider rotating it at rapidapi.com/developer/apps if this is a shared repo.
+- `JOOBLE_API_KEY` is in `.env.local` but not registered — Jooble calls fail silently.
+- Feature 13 company research blocks ~60–120s — will timeout on Vercel free tier (10s limit). Address at deployment.
+- RapidAPI key was pasted in chat in a prior session — consider rotating at rapidapi.com/developer/apps if this is a shared repo.
+- PostHog stats lag: `revalidatePath` forces a fresh DB + PostHog fetch on next dashboard visit, but PostHog event ingestion itself has some latency (~seconds). In practice this is fine.
