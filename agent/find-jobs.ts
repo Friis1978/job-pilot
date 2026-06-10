@@ -290,6 +290,7 @@ export async function findJobs(
         match_reason: r.matchReason,
         matched_skills: r.matchedSkills,
         missing_skills: r.missingSkills,
+        status: "saved",
         found_at: new Date().toISOString(),
       }));
 

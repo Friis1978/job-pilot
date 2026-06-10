@@ -74,6 +74,12 @@ export async function GET(request: NextRequest) {
 
     response.cookies.delete("insforge_pkce_verifier");
 
+    response.cookies.set("jp_has_account", "1", {
+      maxAge: 60 * 60 * 24 * 365, // 1 year
+      path: "/",
+      sameSite: "lax",
+    });
+
     setAuthCookies(
       response.cookies,
       { accessToken: data.accessToken, refreshToken: data.refreshToken },

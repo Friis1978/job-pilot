@@ -3,6 +3,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import OpenAI from "openai";
 import { createElement, type ReactElement } from "react";
 import { createInsforgeServer } from "@/lib/insforge-server";
+import { getPostHogClient } from "@/lib/posthog-server";
 import { ResumePDF } from "@/app/api/resume/ResumePDF";
 import type { Profile } from "@/types";
 import type { DocumentProps } from "@react-pdf/renderer";
@@ -141,6 +142,14 @@ ${JSON.stringify(profileInput, null, 2)}`,
       { profile, generated },
     ) as unknown as ReactElement<DocumentProps>;
     const buffer = await renderToBuffer(element);
+
+    const posthog = getPostHogClient();
+    posthog.capture({
+      distinctId: userId,
+      event: "tailored_resume_generated",
+      properties: { userId, jobId, company: job.company },
+    });
+    await posthog.shutdown();
 
     const safeCompany = job.company.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 

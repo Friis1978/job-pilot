@@ -26,7 +26,9 @@ export function TailoredResumeButton({ jobId, companyName, hasResearch }: Props)
       const a = document.createElement("a");
       a.href = url;
       a.download = `resume-${companyName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
       toast("Failed to generate resume. Please try again.");

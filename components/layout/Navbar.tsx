@@ -17,7 +17,7 @@ export type NavUser = {
   avatarUrl?: string | null;
 };
 
-type Props = { user?: NavUser };
+type Props = { user?: NavUser; hasAccount?: boolean };
 
 function getInitials(name?: string | null, email?: string | null): string {
   if (name?.trim()) {
@@ -30,7 +30,7 @@ function getInitials(name?: string | null, email?: string | null): string {
   return "?";
 }
 
-export function Navbar({ user }: Props) {
+export function Navbar({ user, hasAccount }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -59,24 +59,26 @@ export function Navbar({ user }: Props) {
           <Image src="/logo.png" alt="JobPilot" width={64} height={64} className="h-8 w-auto" />
         </Link>
 
-        <nav className="order-3 w-full flex items-center justify-center gap-5 sm:gap-8 sm:order-0 sm:w-auto">
-          {NAV_LINKS.map(({ href, label }) => {
-            const isActive = pathname === href || pathname.startsWith(href + "/");
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={
-                  isActive
-                    ? "text-xs sm:text-sm font-medium text-accent underline decoration-accent decoration-2 underline-offset-4"
-                    : "text-xs sm:text-sm font-medium text-text-dark hover:text-accent transition-colors"
-                }
-              >
-                {label}
-              </Link>
-            );
-          })}
-        </nav>
+        {user && (
+          <nav className="order-3 w-full flex items-center justify-center gap-5 sm:gap-8 sm:order-0 sm:w-auto">
+            {NAV_LINKS.map(({ href, label }) => {
+              const isActive = pathname === href || pathname.startsWith(href + "/");
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={
+                    isActive
+                      ? "text-xs sm:text-sm font-medium text-accent underline decoration-accent decoration-2 underline-offset-4"
+                      : "text-xs sm:text-sm font-medium text-text-dark hover:text-accent transition-colors"
+                  }
+                >
+                  {label}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
 
         {user ? (
           <div className="relative" ref={menuRef}>
@@ -135,7 +137,7 @@ export function Navbar({ user }: Props) {
             href="/auth/login"
             className="bg-text-primary text-surface text-xs sm:text-sm font-medium px-3 sm:px-4 py-2 rounded-md hover:bg-text-darker transition-colors"
           >
-            Start for free
+            {hasAccount ? "Log in" : "Start for free"}
           </Link>
         )}
       </div>

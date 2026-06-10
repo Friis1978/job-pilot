@@ -1,54 +1,64 @@
-# Memory — Feature 20 Complete + Tailored Resume
+# Memory — Review Fixes + UX Polish
 
 Last updated: 2026-06-10
 
 ## What was built
 
-### Feature 20 — Application Status Tracking (completed)
-- `types/index.ts` — added `status: string` to `JobRow`
-- `app/find-jobs/page.tsx` — added `status` to DB select query
-- `components/find-jobs/JobsTable.tsx` — imported `StatusBadge`, added Status column header + `StatusBadge` cell per row (between Salary and Date Found columns)
-- `app/find-jobs/[id]/page.tsx` — added `status: string` to `Job` type, imported `StatusBadge` + `JobStatus`, rendered `StatusBadge` in job header card (between the text block and "View Job Post" link)
-- `app/dashboard/page.tsx` — added pipeline fetch (`select("status").eq("user_id", ...)`) to `Promise.allSettled`, counts by status, renders `PipelineCard` paired with `RecentActivity` in first row. `CompanyResearchChart` moved to its own row at bottom.
-- `context/progress-tracker.md` — Feature 20 marked complete, next is Feature 21
+### Review fixes (post-/review)
+- `agent/find-jobs.ts` — added `status: "saved"` explicitly to job insert payload. No longer relies on DB DEFAULT alone.
+- `components/find-jobs/TailoredResumeButton.tsx` — fixed Firefox download bug: `document.body.appendChild(a)` before `.click()`, `document.body.removeChild(a)` after. `URL.revokeObjectURL` still called last.
+- `app/api/jobs/[id]/tailored-resume/route.ts` — added `getPostHogClient()` import + fires `tailored_resume_generated` event (userId, jobId, company) + `await posthog.shutdown()` before returning PDF stream.
+
+### Nav links hidden when logged out
+- `components/layout/Navbar.tsx` — `<nav>` wrapped in `{user && (...)}`. Dashboard/Find Jobs/Profile only visible when logged in.
+
+### "Start for free" → "Log in" for returning users
+- `app/auth/callback/route.ts` — sets `jp_has_account=1` cookie (1 year, path="/", sameSite=lax) on successful login.
+- `app/page.tsx` — made async, reads `jp_has_account` via `cookies()`, passes `hasAccount` to Navbar.
+- `components/layout/Navbar.tsx` — `hasAccount?: boolean` prop; renders "Log in" when `!user && hasAccount`, "Start for free" otherwise.
 
 ### Profile completion at 100%
-- `components/profile/CompletionIndicator.tsx` — when `percentage === 100`: green ring (#10b981), green checkmark icon, heading "Profile complete", positive description, no missing field chips
+- `components/profile/CompletionIndicator.tsx` — at percentage===100: green ring (#10b981), checkmark icon, "Profile complete" heading, positive description, no missing field chips.
 
-### Tailored Resume (bonus feature, not in original build plan)
-- `app/api/jobs/[id]/tailored-resume/route.ts` — POST handler. Loads job + full profile. GPT-4o generates tailored summary, reordered skills (most relevant first), and rewritten bullets. Returns PDF as download stream (no DB storage).
-- `components/find-jobs/TailoredResumeButton.tsx` — "use client". Fetches PDF blob, triggers download. Shows tip if hasResearch=false. toast() on error.
-- `app/find-jobs/[id]/page.tsx` — added "Tailored Resume" card using existing DocIcon, placed above Cover Letter section.
-- `app/api/resume/ResumePDF.tsx` — added optional `skills?: string[]` to GeneratedContent. Skills section renders `generated.skills ?? profile.skills`. Regular resume unaffected.
+### Feature 20 — Application Status Tracking (previous session, now confirmed correct)
+- `components/find-jobs/StatusBadge.tsx`, `components/dashboard/PipelineCard.tsx`, `app/api/jobs/[id]/status/route.ts` created.
+- `types/index.ts` — `status: string` in JobRow.
+- `app/find-jobs/page.tsx` — `status` in select query.
+- `components/find-jobs/JobsTable.tsx` — Status column with StatusBadge.
+- `app/find-jobs/[id]/page.tsx` — StatusBadge in job header.
+- `app/dashboard/page.tsx` — pipeline counts + PipelineCard paired with RecentActivity.
+
+### Tailored Resume (previous session, now confirmed correct)
+- `app/api/jobs/[id]/tailored-resume/route.ts` — GPT-4o generates tailored summary + reordered skills + rewritten bullets, streams PDF as download. PostHog event now fires.
+- `components/find-jobs/TailoredResumeButton.tsx` — download trigger, Firefox-safe.
+- `app/find-jobs/[id]/page.tsx` — "Tailored Resume" card above Cover Letter section.
+- `app/api/resume/ResumePDF.tsx` — optional `skills?: string[]` in GeneratedContent.
 
 ## Decisions made
 
-- Tailored resume streams PDF directly — no DB column or storage. Always generated fresh.
-- Skills reordering via GPT-4o — same skills reordered, not filtered. Prompt: "do not add or remove any". Prevents hallucinated skills.
-- ResumePDF skills override is optional — regular generate route continues without change.
-- Dashboard layout: Row 1: RecentActivity + PipelineCard. Row 2: JobsOverTimeChart + MatchScoreChart. Row 3: CompanyResearchChart alone.
-- StatusBadge cast: `(job.status as JobStatus) ?? "saved"` guards null/unexpected DB values.
+- **`status: "saved"` explicit in insert** — never rely on DB DEFAULT alone. Explicit is safer and self-documenting.
+- **jp_has_account cookie** — set server-side in auth callback, read server-side in homepage. No client flash. 1 year TTL.
+- **Tailored resume streams PDF directly** — no DB column, no storage. Always fresh on demand.
+- **Skills reordering via GPT-4o** — same skills list reordered, not filtered. Prompt: "do not add or remove any".
+- **Cover letter uses `cover_letter_tone`** — confirmed at agent/generate-cover-letter.ts:45. Defaults to "Professional".
 
-## Prior session context (still relevant)
+## Problems solved
 
-- Homepage stays sync — adding createInsforgeServer() to homepage caused blocking. Homepage always shows "Start for free".
-- Dashboard rendering forever fix — (1) PostHog 8s AbortController in lib/posthog-query.ts. (2) Homepage auth check removed.
-- Duplicate jobs — URL + title+company dedup before scoring in agent/find-jobs.ts.
-- PostHog: "Job Pilot" (id: 197754), org: "Friismusic", host: eu.posthog.com.
+- **Firefox download bug** — detached `<a>` elements don't trigger downloads in Firefox. Fixed by appending to body first.
+- **Status DEFAULT gap** — new jobs now explicitly set `status: "saved"` in insert, independent of DB column DEFAULT.
 
 ## Current state
 
-Features 01–20 all complete. Bonus: Tailored Resume done.
-One remaining planned feature: Feature 21 — Scheduled Job Alert Emails (not started).
+All features through Feature 20 complete. Tailored Resume done (bonus). All review issues resolved.
+Feature 21 (Scheduled Job Alert Emails) is on hold — architect session was started but not completed.
 
 ## Next session starts with
 
-Feature 21 — Scheduled Job Alert Emails. Run /architect feature 21 first. Check context/build-plan.md for original spec — likely specifies email service (Resend? SendGrid?).
+Either: resume Feature 21 (run /architect feature 21, check context/build-plan.md — uses Resend for email, cron endpoint at /api/cron/job-alerts protected by CRON_SECRET), or new UX polish as user directs.
 
 ## Open questions
 
-- Dashboard CompanyResearchChart at half-width on desktop (single child in 2-col grid) — may want col-span-2.
-- Tailored Resume not in progress-tracker.md or ui-registry.md — add if audit trail wanted.
 - Feature 13 company research ~60-120s — will timeout on Vercel free tier. Address at deployment.
-- next/image OAuth avatar URLs — domains may need remotePatterns in next.config.ts.
-- RapidAPI key pasted in prior session chat — consider rotating at rapidapi.com/developer/apps.
+- Dashboard CompanyResearchChart is single child in 2-col grid — renders half-width on desktop. Consider col-span-2 or pairing with another card.
+- next/image OAuth avatar URLs — may need remotePatterns in next.config.ts if broken images appear.
+- RapidAPI key was pasted in a prior session chat — consider rotating at rapidapi.com/developer/apps.
