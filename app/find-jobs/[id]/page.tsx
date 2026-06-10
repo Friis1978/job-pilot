@@ -567,15 +567,6 @@ function DocIcon({ className }: { className?: string }) {
   );
 }
 
-function SearchIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round">
-      <circle cx="8.5" cy="8.5" r="5.5" />
-      <path d="M13.5 13.5L17 17" />
-    </svg>
-  );
-}
-
 function TargetIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">

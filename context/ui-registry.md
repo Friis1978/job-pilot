@@ -75,6 +75,26 @@ After building any component — update this file with the component name, file 
 
 **Pattern note:** Destructive actions use `text-error` + `border-error` for the confirm state — no dedicated error background token exists, use `bg-surface-secondary` as the confirm highlight.
 
+### StatsBar (Dashboard)
+**File:** `components/dashboard/StatsBar.tsx`
+**Pattern:** Server component. `grid grid-cols-2 lg:grid-cols-4 gap-4`. Each card: `bg-surface border border-border rounded-2xl p-6 shadow-sm`. Label: `text-sm font-medium text-text-secondary`. Value: `text-3xl font-semibold text-text-primary`. Trend badge: `px-2 py-0.5 rounded-sm text-xs font-medium bg-success-lightest text-success-darker`. Subtitle: `text-xs text-text-muted`. All data is static placeholder for Feature 14 — real data added in Feature 15.
+
+### RecentActivity (Dashboard)
+**File:** `components/dashboard/RecentActivity.tsx`
+**Pattern:** Server component. Card: `bg-surface border border-border rounded-2xl p-6 shadow-sm`. Timeline: `flex gap-3` per item with a dot column and a connector line (`w-px bg-border`). Dot: 16×16 container with absolute colored ring and 8×8 inner dot. Job-found dot: `bg-success-light` ring, `bg-success-alt` inner. Researched dot: `bg-info-light` ring, `bg-info` inner. Item text: `text-sm font-medium text-text-primary`. Timestamp: `text-xs text-text-muted`. Static placeholder data for Feature 14 — real data in Feature 16.
+
+### CompanyResearchChart (Dashboard)
+**File:** `components/dashboard/CompanyResearchChart.tsx`
+**Pattern:** Server component. SVG bar chart, `viewBox="0 0 560 200"`, `className="w-full"`. Blue bars (`var(--color-info)`), `rx="4"`. Y-axis: 0–12, ticks at 0/3/6/9/12. X-axis: Mon–Sun. Grid lines: `stroke="var(--color-border)"` dashed. Axis labels: `fontSize="11" fill="var(--color-text-muted)"`. Static placeholder data for Feature 14 — real data in Feature 17.
+
+### JobsOverTimeChart (Dashboard)
+**File:** `components/dashboard/JobsOverTimeChart.tsx`
+**Pattern:** Server component. SVG area/line chart, `viewBox="0 0 560 220"`. Smooth curve via Catmull-Rom bezier (tension=0.35). Line: `stroke="var(--color-accent)"` width 2.5. Area: `fill="url(#jobsGradient)"` — linearGradient from `var(--color-accent)` 22% → 2% opacity. Y-axis: 0–100, ticks at 25 intervals. Static placeholder for Feature 14 — real data in Feature 17.
+
+### MatchScoreChart (Dashboard)
+**File:** `components/dashboard/MatchScoreChart.tsx`
+**Pattern:** Server component. SVG bar chart, `viewBox="0 0 560 220"`. Green bars (`var(--color-success)`), `rx="4"`. Y-axis: 0–100, ticks at 25 intervals. X-axis: score buckets 50-60% through 90-100%, `fontSize="10"`. Static placeholder for Feature 14 — real data in Feature 17.
+
 ### ResearchButton (Find Jobs / Job Details)
 **File:** `components/find-jobs/ResearchButton.tsx`
 **Pattern:** Client component (`"use client"`). Props: `{ jobId: string }`. Wrapper: `flex flex-col items-end gap-2`. Button: `flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium transition-colors`. Loading/done state appends `opacity-60 cursor-not-allowed`. Hover (when enabled): `hover:bg-accent-dark`. Text: "Research Company" → "Researching..." → "Research Complete". SearchIcon SVG defined inline (same path as in page.tsx). Error: `text-sm text-error` below the button. On success: `setDone(true)` then `router.refresh()` — server component re-fetches, company_research now non-null, conditional flips to show dossier, button disappears.

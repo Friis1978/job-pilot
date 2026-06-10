@@ -1,40 +1,139 @@
-"use client";
-
-import { useRouter } from "next/navigation";
-import { insforge } from "@/lib/insforge-client";
-import posthog from "posthog-js";
+import { redirect } from "next/navigation";
+import { createInsforgeServer } from "@/lib/insforge-server";
+import { formatDateAgo } from "@/lib/utils";
 import { Navbar } from "@/components/layout/Navbar";
+import { StatsBar } from "@/components/dashboard/StatsBar";
+import { RecentActivity } from "@/components/dashboard/RecentActivity";
+import type { ActivityItem } from "@/components/dashboard/RecentActivity";
+import { CompanyResearchChart } from "@/components/dashboard/CompanyResearchChart";
+import { JobsOverTimeChart } from "@/components/dashboard/JobsOverTimeChart";
+import { MatchScoreChart } from "@/components/dashboard/MatchScoreChart";
 
-export default function DashboardPage() {
-  const router = useRouter();
+type JobStatsRow = {
+  match_score: number;
+  company_research: unknown;
+  found_at: string;
+};
 
-  async function handleLogout() {
-    posthog.capture("user_signed_out");
-    posthog.reset();
-    try {
-      await insforge.auth.signOut();
-      await fetch("/api/auth/logout", { method: "POST" });
-    } catch {
-      // Clear cookies best-effort — navigate away regardless
-    }
-    router.replace("/");
-  }
+type AgentRunRow = {
+  job_title_searched: string | null;
+  jobs_found: number | null;
+  started_at: string;
+};
+
+type ResearchedJobRow = {
+  company: string;
+  found_at: string;
+};
+
+function rowAvg(rows: JobStatsRow[]): number {
+  if (rows.length === 0) return 0;
+  return Math.round(
+    rows.reduce((sum, j) => sum + j.match_score, 0) / rows.length,
+  );
+}
+
+function weekTrend(current: number, previous: number): number | null {
+  if (previous === 0) return null;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+export default async function DashboardPage() {
+  const insforge = await createInsforgeServer();
+  const {
+    data: { user },
+  } = await insforge.auth.getCurrentUser();
+  if (!user) redirect("/auth/login");
+
+  // ── Stats ──────────────────────────────────────────────────────────────────
+
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+
+  const { data: rawJobs } = await insforge.database
+    .from("jobs")
+    .select("match_score, company_research, found_at")
+    .eq("user_id", user.id);
+
+  const jobs = (rawJobs ?? []) as JobStatsRow[];
+  const thisWeek = jobs.filter((j) => new Date(j.found_at) >= sevenDaysAgo);
+  const lastWeek = jobs.filter(
+    (j) =>
+      new Date(j.found_at) >= fourteenDaysAgo &&
+      new Date(j.found_at) < sevenDaysAgo,
+  );
+
+  const statsData = {
+    totalJobs: jobs.length,
+    avgMatchRate: rowAvg(jobs),
+    companiesResearched: jobs.filter((j) => j.company_research !== null).length,
+    jobsThisWeek: thisWeek.length,
+    totalJobsTrend: weekTrend(thisWeek.length, lastWeek.length),
+    matchRateTrend: weekTrend(rowAvg(thisWeek), rowAvg(lastWeek)),
+  };
+
+  // ── Recent Activity ────────────────────────────────────────────────────────
+
+  const [{ data: rawRuns }, { data: rawResearched }] = await Promise.all([
+    insforge.database
+      .from("agent_runs")
+      .select("job_title_searched, jobs_found, started_at")
+      .eq("user_id", user.id)
+      .eq("status", "complete")
+      .order("started_at", { ascending: false })
+      .limit(10),
+    insforge.database
+      .from("jobs")
+      .select("company, found_at")
+      .eq("user_id", user.id)
+      .not("company_research", "is", null)
+      .order("found_at", { ascending: false })
+      .limit(10),
+  ]);
+
+  type Timestamped = ActivityItem & { ts: number };
+
+  const runActivities: Timestamped[] = ((rawRuns ?? []) as AgentRunRow[]).map(
+    (run) => ({
+      type: "job_found" as const,
+      text: `Found ${run.jobs_found ?? 0} job${run.jobs_found === 1 ? "" : "s"} for ${run.job_title_searched ?? "unknown role"}`,
+      time: formatDateAgo(run.started_at),
+      ts: new Date(run.started_at).getTime(),
+    }),
+  );
+
+  const researchActivities: Timestamped[] = (
+    (rawResearched ?? []) as ResearchedJobRow[]
+  ).map((job) => ({
+    type: "researched" as const,
+    text: `Researched ${job.company}`,
+    time: formatDateAgo(job.found_at),
+    ts: new Date(job.found_at).getTime(),
+  }));
+
+  const activities: ActivityItem[] = [...runActivities, ...researchActivities]
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, 8)
+    .map(({ type, text, time }) => ({ type, text, time }));
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-background">
+    <>
       <Navbar />
-      <div className="flex items-center justify-center" style={{ minHeight: "calc(100vh - 64px)" }}>
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold text-text-primary mb-2">Dashboard</h1>
-          <p className="text-text-secondary mb-6">Coming soon.</p>
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 rounded-lg bg-surface border border-border text-sm text-text-primary hover:bg-surface-secondary transition-colors"
-          >
-            Log out
-          </button>
+      <main className="min-h-screen bg-background">
+        <div className="w-full max-w-360 mx-auto px-4 sm:px-6 py-8 flex flex-col gap-5">
+          <StatsBar {...statsData} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <RecentActivity activities={activities} />
+            <CompanyResearchChart />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <JobsOverTimeChart />
+            <MatchScoreChart />
+          </div>
         </div>
-      </div>
-    </div>
+      </main>
+    </>
   );
 }

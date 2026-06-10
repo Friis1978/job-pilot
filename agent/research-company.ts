@@ -76,25 +76,49 @@ const PREFERRED_PAGE_KINDS = [
   "other",
 ];
 
+const ATS_AND_JOB_BOARD_DOMAINS = [
+  "adzuna.com",
+  "greenhouse.io",
+  "lever.co",
+  "workday.com",
+  "myworkdayjobs.com",
+  "ashbyhq.com",
+  "taleo.net",
+  "icims.com",
+  "smartrecruiters.com",
+  "jobvite.com",
+  "breezy.hr",
+  "recruitee.com",
+  "linkedin.com",
+  "careerjet.dk",
+  "careerjet.se",
+  "jooble.org",
+  "indeed.com",
+];
+
 async function resolveCompanyUrl(
   sourceUrl: string,
   companyName: string,
 ): Promise<string> {
-  try {
-    const res = await fetch(sourceUrl, { redirect: "follow" });
-    const realUrl = new URL(res.url);
-    if (realUrl.hostname.includes("adzuna.com")) {
-      throw new Error("Still on adzuna");
-    }
-    const parts = realUrl.hostname.split(".");
-    return `https://${parts.slice(-2).join(".")}`;
-  } catch {
+  const fallback = () => {
     const clean = companyName
       .replace(/\s*(Inc\.?|LLC|Ltd\.?|Corp\.?|Co\.?).*$/i, "")
       .trim()
       .toLowerCase()
       .replace(/\s+/g, "");
     return `https://www.${clean}.com`;
+  };
+
+  try {
+    const res = await fetch(sourceUrl, { redirect: "follow" });
+    const realUrl = new URL(res.url);
+    if (ATS_AND_JOB_BOARD_DOMAINS.some((d) => realUrl.hostname.endsWith(d))) {
+      return fallback();
+    }
+    const parts = realUrl.hostname.split(".");
+    return `https://${parts.slice(-2).join(".")}`;
+  } catch {
+    return fallback();
   }
 }
 

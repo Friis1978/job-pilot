@@ -1,71 +1,73 @@
-# Memory — Nordic Job Search + LinkedIn + Scoring Fix
+# Memory — Dashboard Phase 5 (Features 14–16 complete)
 
 Last updated: 2026-06-10
 
 ## What was built
 
-**Multi-source Nordic job search (complete):**
-- `lib/jobtech.ts` — Swedish JobTech Dev API, no key required, open access
-- `lib/jooble.ts` — Jooble aggregator, needs `JOOBLE_API_KEY`
-- `lib/careerjet.ts` — Careerjet `da_DK`, needs `CAREERJET_API_KEY`, HTTP-only, requires `Referer: https://jobpilot.app/` header
-- `lib/linkedin-jobs.ts` — LinkedIn Jobs via RapidAPI (`linkedin-job-search-api.p.rapidapi.com`), endpoint `/active-jb-7d`, needs `RAPIDAPI_KEY`. Returns full descriptions. 28 DK + 100 SE jobs confirmed working.
-- `types/index.ts` — `NormalizedJob` with `source: "adzuna"|"jobtech"|"jooble"|"careerjet"|"linkedin"`
-- `agent/find-jobs.ts` — `detectSources()` routes by location, `Promise.allSettled` parallel fetching, `normalizeAdzunaJob()`, `scoreJob()` takes NormalizedJob
-- `lib/utils.ts` — `MATCH_THRESHOLD=50`, `stripHtml()` applied at all four source normalizers
+**Feature 13 review + fixes (session start):**
+- `agent/research-company.ts` — `resolveCompanyUrl` now checks an `ATS_AND_JOB_BOARD_DOMAINS` list (greenhouse.io, lever.co, workday.com, etc.) before extracting root domain; falls back to `https://www.${cleanName}.com` for ATS/job-board redirects
+- `app/find-jobs/[id]/page.tsx` — removed dead `SearchIcon` function (was defined but never called after ResearchButton moved to its own file)
+- `context/library-docs.md` — Stagehand section corrected to v3.5 API: `modelName: "gpt-4o"` (no `"openai/"` prefix), `extract(instruction, schema)` positional args (not object form)
 
-**Indeed DK (RapidAPI) — built then removed:**
-- `lib/indeed-denmark.ts` was created but deleted — BASIC plan rate limit too strict (hits cap on first request), API also times out. Can re-add if user upgrades to paid plan. Correct endpoint confirmed as `/indeed-dk/` not `/indeed-se/`.
+**Feature 14 — Dashboard Page Full UI:**
+- `components/dashboard/StatsBar.tsx` — 4 stat cards (Total Jobs Found, Avg Match Rate, Companies Researched, Jobs This Week)
+- `components/dashboard/RecentActivity.tsx` — timeline list with colored dots and connector lines
+- `components/dashboard/CompanyResearchChart.tsx` — blue SVG bar chart, 7-day week, Y-axis 0–12
+- `components/dashboard/JobsOverTimeChart.tsx` — purple SVG area/line chart, Catmull-Rom smooth curve, gradient fill
+- `components/dashboard/MatchScoreChart.tsx` — green SVG bar chart, 5 score buckets (50-60% through 90-100%)
+- `app/dashboard/page.tsx` — replaced `"use client"` stub with Server Component; auth redirect + 3-row responsive grid layout
 
-**Scoring fix:**
-- `agent/find-jobs.ts` scoring prompt updated with strict rules: cap at 50 for descriptions <100 words, no inferring unstated requirements, penalise seniority/domain/stack mismatches. Root cause: Careerjet returns 150–270 char snippets → GPT-4o inflated scores due to lack of information.
+**Feature 15 — Stats Bar Real Data:**
+- `StatsBar.tsx` — now accepts `StatsData` props (totalJobs, avgMatchRate, companiesResearched, jobsThisWeek, totalJobsTrend, matchRateTrend). `TrendBadge` subcomponent renders +X%/-X% when prior-week data exists.
+- `app/dashboard/page.tsx` — single DB query on `jobs` table fetches `match_score, company_research, found_at`; computes all 4 stats + week-over-week trends in JS
+
+**Feature 16 — Recent Activity Real Data:**
+- `RecentActivity.tsx` — `ActivityItem` type exported, accepts `activities: ActivityItem[]` prop, has empty state ("No activity yet")
+- `app/dashboard/page.tsx` — two parallel DB queries via `Promise.all`:
+  - `agent_runs` filtered by `status = "complete"`, ordered by `started_at DESC`, limit 10 → "Found N jobs for [title]"
+  - `jobs` filtered by `company_research IS NOT NULL`, ordered by `found_at DESC`, limit 10 → "Researched [company]"
+  - Merged, sorted by timestamp DESC, trimmed to 8 entries
 
 ## Decisions made
 
-- **Source routing:**
-  - Sweden → JobTech + Jooble + LinkedIn (location_filter="Sweden")
-  - Denmark → Careerjet + Jooble + LinkedIn (location_filter="Denmark")
-  - UK/AU/CA → Adzuna
-  - Default → Adzuna
-- **LinkedIn API uses 7-day endpoint** (`active-jb-7d`) not 1-hour — 1h returns 0 Nordic results, 7d returns 28 DK / 100 SE
-- **LinkedIn location_filter** uses full English country name ("Denmark"/"Sweden"), not city names
-- **LinkedIn source detection** in agent: infers "Sweden" vs "Denmark" from the user's location string using regex, since LinkedIn doesn't support city-level filtering
-- **Careerjet is HTTP-only** — HTTPS port 443 refuses. Requires `Referer` header.
-- **Scoring conservatism**: descriptions under 100 words must score ≤50. GPT-4o must not infer requirements.
-- **MATCH_THRESHOLD = 50**
+- **Dashboard page is a pure Server Component** — auth check + all data fetching in `app/dashboard/page.tsx`. No client-side data fetching on the dashboard.
+- **Charts use inline SVG with CSS variable colors** — no chart library installed. `var(--color-info)` for blue bars, `var(--color-accent)` for line chart, `var(--color-success)` for green bars. Features 14–16 use static placeholder data; Feature 17 will replace charts with PostHog data.
+- **agent_runs.started_at confirmed default `now()`** — schema checked via MCP. No `created_at` column on agent_runs. Status value for completed runs is `"complete"` (not `"completed"`).
+- **No `researched_at` column on jobs** — company research timestamp approximated with `found_at`. Jobs table has no `updated_at` either. Accepted approximation for Feature 16.
+- **Trend badges fall back gracefully** — when no last-week data exists (`previous === 0`), `weekTrend()` returns `null` and the badge is replaced with static "vs last week" muted text.
+- **Logout removed from dashboard** — the placeholder `"use client"` dashboard had a logout button. Removed when converting to Server Component. No logout in design; can be added to Navbar later.
 
 ## Problems solved
 
-- **Careerjet false positives (95% match on irrelevant jobs)** — Careerjet returns 150–270 char snippets. GPT-4o had no requirements to score against so it inflated scores. Fixed via scoring prompt rules.
-- **Indeed DK rate limiting** — BASIC plan unusable, removed. Endpoint is `/indeed-dk/`.
-- **Careerjet HTTPS refused** — use `http://`.
-- **Careerjet "Undeclared referrer" error** — fixed with `Referer: https://jobpilot.app/`.
-- **JobTech open access** — no API key needed despite docs suggesting registration.
-- **LinkedIn `active-jb-1h` returns 0 Nordic results** — switched to `active-jb-7d`.
+- **Stagehand v3.5 API mismatch** — `library-docs.md` showed old object-form `extract({ instruction, schema })` and `"openai/gpt-4o"` model prefix. Fixed to positional args and `"gpt-4o"`.
+- **ATS domain research** — `resolveCompanyUrl` was resolving `greenhouse.io`/`lever.co` as company homepages for non-Adzuna jobs. Fixed with ATS_AND_JOB_BOARD_DOMAINS blocklist.
 
 ## Current state
 
 - Phase 1–4 complete (Features 01–13)
-- Multi-source Nordic job search: complete and TypeScript-clean
-- Sweden: JobTech (✅ no key) + Jooble (⚠️ needs key) + LinkedIn (✅ key set)
-- Denmark: Careerjet (✅ key set) + Jooble (⚠️ needs key) + LinkedIn (✅ key set)
-- Scoring: conservative prompt in place, short descriptions capped at 50
-- Phase 5 Dashboard: not started
+- Phase 5: Features 14, 15, 16 complete
+- Dashboard shows: real stat counts, real recent activity (job searches + company research)
+- Dashboard charts still use static placeholder data (Feature 17 pending)
+- TypeScript: clean (`tsc --noEmit` passes with 0 errors)
 
 ## Next session starts with
 
-**Feature 14 — Dashboard Page Full UI.**
+**Feature 17 — Analytics Charts — PostHog Data.**
 
-Run `/architect feature 14` before building. Phase 5 sequence:
-- 14 Dashboard Page — Full UI
-- 15 Stats Bar — Real Data
-- 16 Recent Activity — Real Data
-- 17 Analytics Charts — PostHog Data
+Build plan spec:
+- Jobs Found Over Time — query PostHog for `job_found` events for current userId, last 30 days, group by day
+- Match Score Distribution — query PostHog for `job_found` events, extract `matchScore` property, group into 50-60/60-70/70-80/80-90/90-100 buckets
+- Company Research Activity — query PostHog for `company_researched` events for current userId, last 7 days, group by day
+- All three charts rendered — replace static SVG placeholder data with real PostHog data
+- Empty state shown for each chart when no data exists
 
-**Session persistence fix:**
-- `app/auth/callback/route.ts` — `setAuthCookies` now passes `settings.options` with `accessToken: { maxAge: 7 days }` and `refreshToken: { maxAge: 30 days }`. Root cause: initial login was setting session cookies (no maxAge) that expired on browser close. Middleware `updateSession` had maxAge set but can't upgrade session cookies to persistent ones — the fix had to be at the source (login callback).
+PostHog server client is at `lib/posthog-server.ts`. Events are fired with `distinctId = userId`. The three chart components (`CompanyResearchChart`, `JobsOverTimeChart`, `MatchScoreChart`) need to accept real data as props.
+
+Run `/architect feature 17` before building — PostHog query API needs research (it uses the PostHog Events API or node client, not the browser capture API).
 
 ## Open questions
 
-- `JOOBLE_API_KEY` not yet registered — Jooble calls fail silently via `Promise.allSettled`.
+- Feature 17 PostHog query API: the server-side `posthog-node` client has a `getFeatureFlag` and event capture API, but querying historical events requires either the PostHog REST API (api.posthog.com/api/events) or PostHog's Insights API. Needs investigation before building.
+- `JOOBLE_API_KEY` not registered — Jooble calls fail silently via `Promise.allSettled`.
 - Feature 13 company research blocks ~60–120s — will timeout on Vercel free tier. Address at deployment.
-- RapidAPI key (`c85c41390amsh...`) was pasted in chat — user should consider rotating it at rapidapi.com/developer/apps if this is a shared repo.
+- RapidAPI key was pasted in chat in a prior session — user should consider rotating it at rapidapi.com/developer/apps if this is a shared repo.
