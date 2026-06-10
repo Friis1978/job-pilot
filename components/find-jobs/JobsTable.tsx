@@ -297,9 +297,16 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                         <div className="shrink-0 w-9 h-9 bg-surface-secondary border border-border rounded-lg flex items-center justify-center">
                           <BuildingIcon className="w-5 h-5 text-text-muted" />
                         </div>
-                        <span className="text-sm font-semibold text-text-primary">
-                          {job.company}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-sm font-semibold text-text-primary">
+                            {job.company}
+                          </span>
+                          {job.source === "url" && (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-info-lightest text-info-foreground border border-info-light w-fit">
+                              Imported
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">

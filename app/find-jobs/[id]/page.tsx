@@ -244,9 +244,7 @@ export default async function JobDetailsPage({
               <h2 className="flex-1 text-base font-semibold text-text-primary">
                 Company Research
               </h2>
-              {!job.company_research && (
-                <ResearchButton jobId={job.id} />
-              )}
+              <ResearchButton jobId={job.id} hasResearch={!!job.company_research} />
             </div>
 
             <div className="bg-surface-secondary p-5">

@@ -13,7 +13,7 @@ export default async function FindJobsPage() {
   const [jobsResult, searchesResult] = await Promise.allSettled([
     insforge.database
       .from("jobs")
-      .select("id, company, title, match_score, salary, found_at, matched_skills, status")
+      .select("id, company, title, match_score, salary, found_at, matched_skills, status, source")
       .eq("user_id", user.id)
       .order("found_at", { ascending: false }),
     insforge.database

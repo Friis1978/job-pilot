@@ -77,7 +77,22 @@ const PREFERRED_PAGE_KINDS = [
 ];
 
 const ATS_AND_JOB_BOARD_DOMAINS = [
+  // Job boards
   "adzuna.com",
+  "linkedin.com",
+  "indeed.com",
+  "careerjet.dk",
+  "careerjet.se",
+  "careerjet.com",
+  "jooble.org",
+  "jobindex.dk",
+  "stepstone.dk",
+  "stepstone.de",
+  "monster.com",
+  "glassdoor.com",
+  "simplyhired.com",
+  "ziprecruiter.com",
+  // ATS platforms
   "greenhouse.io",
   "lever.co",
   "workday.com",
@@ -89,25 +104,36 @@ const ATS_AND_JOB_BOARD_DOMAINS = [
   "jobvite.com",
   "breezy.hr",
   "recruitee.com",
-  "linkedin.com",
-  "careerjet.dk",
-  "careerjet.se",
-  "jooble.org",
-  "indeed.com",
+  "bamboohr.com",
+  "workable.com",
+  "pinpointhq.com",
+  "teamtailor.com",
+  "personio.com",
+  "personio.de",
+  "successfactors.com",
+  "successfactors.eu",
+  "sap.com",
+  // HR/payroll platforms used as ATS
+  "paychex.com",
+  "paychexflex.com",
+  "kronos.com",
+  "ultipro.com",
+  "adp.com",
+  "hrmanager.dk",
+  "hr-manager.net",
+  "emply.com",
+  "reachmee.com",
+  "webcruiter.no",
 ];
 
 async function resolveCompanyUrl(
   sourceUrl: string,
   companyName: string,
-): Promise<string> {
-  const fallback = () => {
-    const clean = companyName
-      .replace(/\s*(Inc\.?|LLC|Ltd\.?|Corp\.?|Co\.?).*$/i, "")
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, "");
-    return `https://www.${clean}.com`;
-  };
+): Promise<{ url: string; needsGptLookup: boolean }> {
+  const fallback = (): { url: string; needsGptLookup: boolean } => ({
+    url: `https://www.${companyName.toLowerCase().replace(/\s+/g, "")}.com`,
+    needsGptLookup: true,
+  });
 
   try {
     const res = await fetch(sourceUrl, { redirect: "follow" });
@@ -116,7 +142,22 @@ async function resolveCompanyUrl(
       return fallback();
     }
     const parts = realUrl.hostname.split(".");
-    return `https://${parts.slice(-2).join(".")}`;
+    const resolvedDomain = parts.slice(-2).join(".");
+
+    // Sanity check: if the resolved domain shares no words with the company name,
+    // it's likely an ATS/redirect we don't recognise — ask GPT-4o for the real URL.
+    const companyWords = companyName
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2);
+    const domainStr = resolvedDomain.toLowerCase();
+    const matchesCompany = companyWords.some((w) => domainStr.includes(w));
+    if (!matchesCompany && companyWords.length > 0) {
+      return fallback();
+    }
+
+    return { url: `https://${resolvedDomain}`, needsGptLookup: false };
   } catch {
     return fallback();
   }
@@ -181,10 +222,44 @@ export async function researchCompany(
       | "work_experience"
     >;
 
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+
     // Resolve company homepage URL
-    const homepageUrl = job.source_url
+    const { url: resolvedUrl, needsGptLookup } = job.source_url
       ? await resolveCompanyUrl(job.source_url, job.company)
-      : `https://www.${job.company.toLowerCase().replace(/\s+/g, "")}.com`;
+      : { url: `https://www.${job.company.toLowerCase().replace(/\s+/g, "")}.com`, needsGptLookup: true };
+
+    let homepageUrl = resolvedUrl;
+
+    // When the redirect didn't land on the company's own site, ask GPT-4o for
+    // the official URL — it knows most companies including non-English ones.
+    if (needsGptLookup) {
+      try {
+        const urlResponse = await openai.chat.completions.create({
+          model: "gpt-4o",
+          response_format: { type: "json_object" },
+          temperature: 0,
+          max_tokens: 100,
+          messages: [
+            {
+              role: "system",
+              content: `Return the official website URL for the given company. Only return a URL you are confident about — do not guess. Return JSON: { "url": "<full url or null>" }`,
+            },
+            {
+              role: "user",
+              content: `Company: ${job.company}`,
+            },
+          ],
+        });
+        const parsed = JSON.parse(urlResponse.choices[0]?.message?.content ?? "{}") as { url?: string | null };
+        if (parsed.url) {
+          homepageUrl = parsed.url;
+        }
+      } catch (urlErr) {
+        console.error("[agent/research-company] GPT-4o URL lookup failed", urlErr);
+        // Keep resolvedUrl as fallback
+      }
+    }
 
     // Browser research — declared outside try so finally can close
     let stagehand: Stagehand | null = null;
@@ -287,10 +362,73 @@ export async function researchCompany(
       }
     }
 
-    // GPT-4o synthesis — always runs, even if browser research was empty
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+    // If browser research found nothing, ask GPT-4o to use its own knowledge about the company
+    const browserResearchEmpty =
+      !companyResearchRaw.oneLiner && !companyResearchRaw.productSummary;
 
-    const systemPrompt = `You are a sharp career strategist preparing a candidate to apply for a specific role. You are given (a) research collected from the company's own website, (b) the job posting, and (c) the candidate's profile. Produce a concise, concrete briefing that gives this specific candidate an edge for this specific role.
+    if (browserResearchEmpty) {
+      console.log(
+        "[agent/research-company] browser research empty — falling back to GPT-4o training knowledge",
+      );
+      try {
+        const knowledgeResponse = await openai.chat.completions.create({
+          model: "gpt-4o",
+          response_format: { type: "json_object" },
+          temperature: 0.3,
+          max_tokens: 500,
+          messages: [
+            {
+              role: "system",
+              content: `You are a company research assistant. Using only your training knowledge, provide factual information about the given company. Be conservative — only state facts you are confident about. If you have no reliable knowledge about this company, return empty strings and arrays rather than inventing details.
+
+Return ONLY valid JSON:
+{
+  "oneLiner": "<what the company does in one sentence, or empty string if unknown>",
+  "productSummary": "<what they build/sell and who it's for, or empty string if unknown>",
+  "signals": ["<notable fact: funding, customers, size, mission, known products>"]
+}`,
+            },
+            {
+              role: "user",
+              content: `Company: ${job.company}\nJob title: ${job.title}\nJob description excerpt: ${(job.about_role ?? "").slice(0, 600)}`,
+            },
+          ],
+        });
+
+        const raw = knowledgeResponse.choices[0]?.message?.content;
+        if (raw) {
+          const knowledge = JSON.parse(raw) as {
+            oneLiner?: string;
+            productSummary?: string;
+            signals?: string[];
+          };
+          companyResearchRaw.oneLiner = knowledge.oneLiner ?? "";
+          companyResearchRaw.productSummary = knowledge.productSummary ?? "";
+          companyResearchRaw.signals = knowledge.signals ?? [];
+          // Clear the ATS URL from sources so it doesn't appear in the dossier
+          companyResearchRaw.sourceUrls = [];
+        }
+      } catch (knowledgeErr) {
+        console.error(
+          "[agent/research-company] GPT-4o knowledge fallback failed",
+          knowledgeErr,
+        );
+        // Continue — synthesis will still run with whatever partial data exists
+      }
+    }
+
+    // If still empty after GPT-4o fallback, nothing is known about this company
+    if (!companyResearchRaw.oneLiner && !companyResearchRaw.productSummary) {
+      await posthog.shutdown();
+      return {
+        success: false,
+        error: `No information found for "${job.company}". The company may be too small or niche to appear in public records. Check the company name is correct and try again.`,
+      };
+    }
+
+    // GPT-4o synthesis — always runs, even if browser research was empty
+
+    const systemPrompt = `You are a sharp career strategist preparing a candidate to apply for a specific role. You are given (a) research about the company${browserResearchEmpty ? " (from AI training knowledge — treat as approximate)" : " (scraped from their website)"}, (b) the job posting, and (c) the candidate's profile. Produce a concise, concrete briefing that gives this specific candidate an edge for this specific role.
 
 Rules:
 - Ground every company claim in the provided research or job posting. Never invent funding, customers, headcount, or facts. If research was thin, infer carefully from the job posting and say what's inferred.

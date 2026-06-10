@@ -1,60 +1,52 @@
-# Memory — Review Fixes + UX Polish
+# Memory — URL Import + Company Research Fixes
 
 Last updated: 2026-06-10
 
 ## What was built
 
-### Review fixes (post-/review)
-- `agent/find-jobs.ts` — added `status: "saved"` explicitly to job insert payload. No longer relies on DB DEFAULT alone.
-- `components/find-jobs/TailoredResumeButton.tsx` — fixed Firefox download bug: `document.body.appendChild(a)` before `.click()`, `document.body.removeChild(a)` after. `URL.revokeObjectURL` still called last.
-- `app/api/jobs/[id]/tailored-resume/route.ts` — added `getPostHogClient()` import + fires `tailored_resume_generated` event (userId, jobId, company) + `await posthog.shutdown()` before returning PDF stream.
+### Feature — Import Job from URL (completed)
+- `agent/import-job-from-url.ts` — fetches page HTML, strips HTML, GPT-4o extracts job details, scores with `scoreJob()`, saves to DB with `source: "url"`. Dedup check by `source_url`.
+- `app/api/agent/import-url/route.ts` — POST handler, auth check, validates URL, calls `importJobFromUrl`, revalidates `/find-jobs` and `/dashboard`.
+- `types/index.ts` — `"url"` added to `NormalizedJob.source` union; `source: string` added to `JobRow`.
+- `components/find-jobs/SearchCard.tsx` — tab switcher (Find Jobs | Add from URL). URL tab: `LinkIcon`, URL input, "Import Job" button, 60s AbortController timeout, success banner, hint text about LinkedIn. `LinkIcon` SVG defined at bottom of file.
+- `app/find-jobs/page.tsx` — `source` added to DB select query.
+- `components/find-jobs/JobsTable.tsx` — "Imported" badge (info color, small uppercase) in Company cell when `job.source === "url"`.
 
-### Nav links hidden when logged out
-- `components/layout/Navbar.tsx` — `<nav>` wrapped in `{user && (...)}`. Dashboard/Find Jobs/Profile only visible when logged in.
+### Company Research — Re-run button
+- `components/find-jobs/ResearchButton.tsx` — added `hasResearch?: boolean` prop. When `true`: shows small "Re-run" secondary button with `RefreshIcon` (animate-spin while loading). When `false`: original "Research Company" primary button. All errors now go to `toast()` — no inline error text. `done` state resets on each run.
+- `app/find-jobs/[id]/page.tsx` — `ResearchButton` always rendered in Company Research header (not conditionally); passes `hasResearch={!!job.company_research}`.
 
-### "Start for free" → "Log in" for returning users
-- `app/auth/callback/route.ts` — sets `jp_has_account=1` cookie (1 year, path="/", sameSite=lax) on successful login.
-- `app/page.tsx` — made async, reads `jp_has_account` via `cookies()`, passes `hasAccount` to Navbar.
-- `components/layout/Navbar.tsx` — `hasAccount?: boolean` prop; renders "Log in" when `!user && hasAccount`, "Start for free" otherwise.
+### Company Research — URL resolution fix
+- `agent/research-company.ts` — `resolveCompanyUrl` now returns `{ url, needsGptLookup }` instead of `string`. When redirect lands on ATS (Paychex, Teamtailor, etc.) or domain doesn't match company name → `needsGptLookup: true`.
+- GPT-4o URL lookup added: when `needsGptLookup`, asks GPT-4o "What is the official URL for [company]?" before running Stagehand. Fixes non-English companies (e.g. Danish `.dk` domains) that a guessed `.com` fallback can't find.
+- Expanded `ATS_AND_JOB_BOARD_DOMAINS` with ~15 more ATS/HR platforms (Paychex, Teamtailor, Bamboo HR, Personio, SuccessFactors, ADP, emply.com, reachmee.com, webcruiter.no, etc.).
+- Improved fallback URL builder: strips Scandinavian legal suffixes (A/S, ApS), converts `&` → `and`, removes non-alphanumeric chars.
+- Domain/company similarity check: if resolved domain shares no words with company name → force `needsGptLookup`.
 
-### Profile completion at 100%
-- `components/profile/CompletionIndicator.tsx` — at percentage===100: green ring (#10b981), checkmark icon, "Profile complete" heading, positive description, no missing field chips.
-
-### Feature 20 — Application Status Tracking (previous session, now confirmed correct)
-- `components/find-jobs/StatusBadge.tsx`, `components/dashboard/PipelineCard.tsx`, `app/api/jobs/[id]/status/route.ts` created.
-- `types/index.ts` — `status: string` in JobRow.
-- `app/find-jobs/page.tsx` — `status` in select query.
-- `components/find-jobs/JobsTable.tsx` — Status column with StatusBadge.
-- `app/find-jobs/[id]/page.tsx` — StatusBadge in job header.
-- `app/dashboard/page.tsx` — pipeline counts + PipelineCard paired with RecentActivity.
-
-### Tailored Resume (previous session, now confirmed correct)
-- `app/api/jobs/[id]/tailored-resume/route.ts` — GPT-4o generates tailored summary + reordered skills + rewritten bullets, streams PDF as download. PostHog event now fires.
-- `components/find-jobs/TailoredResumeButton.tsx` — download trigger, Firefox-safe.
-- `app/find-jobs/[id]/page.tsx` — "Tailored Resume" card above Cover Letter section.
-- `app/api/resume/ResumePDF.tsx` — optional `skills?: string[]` in GeneratedContent.
+### Company Research — GPT-4o knowledge fallback + no-result toast
+- When browser research yields empty `oneLiner` + `productSummary`, GPT-4o asked to use its training knowledge about the company (conservative — only states facts it's confident about).
+- If STILL empty after GPT-4o fallback → returns `{ success: false, error: "No information found for \"[company]\"..." }`. User sees toast, no empty dossier saved.
+- OpenAI instance initialized earlier in `researchCompany()` (before Stagehand block) so it's reused for URL lookup, knowledge fallback, and synthesis.
+- Synthesis system prompt notes whether research came from live web scrape or AI training knowledge.
 
 ## Decisions made
 
-- **`status: "saved"` explicit in insert** — never rely on DB DEFAULT alone. Explicit is safer and self-documenting.
-- **jp_has_account cookie** — set server-side in auth callback, read server-side in homepage. No client flash. 1 year TTL.
-- **Tailored resume streams PDF directly** — no DB column, no storage. Always fresh on demand.
-- **Skills reordering via GPT-4o** — same skills list reordered, not filtered. Prompt: "do not add or remove any".
-- **Cover letter uses `cover_letter_tone`** — confirmed at agent/generate-cover-letter.ts:45. Defaults to "Professional".
+- **GPT-4o URL lookup is lazy** — only fires when `needsGptLookup: true` (ATS redirect or no source URL). Normal jobs where the source URL redirects to the company's own site skip this step entirely.
+- **No-result is an error, not a silent empty dossier** — if neither browser nor GPT-4o can find company info, the agent returns `success: false` so the user is informed rather than seeing a dossier with nothing useful.
+- **`toast()` for all ResearchButton errors** — cleaner than inline text, consistent with rest of app.
 
 ## Problems solved
 
-- **Firefox download bug** — detached `<a>` elements don't trigger downloads in Firefox. Fixed by appending to body first.
-- **Status DEFAULT gap** — new jobs now explicitly set `status: "saved"` in insert, independent of DB column DEFAULT.
+- **Paychex ATS redirect** — "Forsikring & Pension" jobs on Adzuna redirect to Paychex (their ATS). Paychex wasn't in the blocklist so research was about Paychex instead. Fixed by adding Paychex to `ATS_AND_JOB_BOARD_DOMAINS` + domain similarity check.
+- **Danish company domain guessing** — `forsikring&pension` → `forsikringandpension.com` (wrong: `.com`, English "and"). Fixed by asking GPT-4o for the actual URL (`forsikringogpension.dk`).
 
 ## Current state
 
-All features through Feature 20 complete. Tailored Resume done (bonus). All review issues resolved.
-Feature 21 (Scheduled Job Alert Emails) is on hold — architect session was started but not completed.
+All features through Feature 20 + URL Import complete. Company research now has re-run, correct URL resolution, GPT-4o fallback, and user-facing toast on failure. Feature 21 (Scheduled Job Alert Emails) still on hold.
 
 ## Next session starts with
 
-Either: resume Feature 21 (run /architect feature 21, check context/build-plan.md — uses Resend for email, cron endpoint at /api/cron/job-alerts protected by CRON_SECRET), or new UX polish as user directs.
+Feature 21 (Scheduled Job Alert Emails) — run `/architect feature 21`, check `context/build-plan.md`. Uses Resend for email, cron endpoint at `/api/cron/job-alerts` protected by `CRON_SECRET`. Or continue with user-directed UX polish.
 
 ## Open questions
 

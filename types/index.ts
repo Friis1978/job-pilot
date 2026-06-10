@@ -50,6 +50,7 @@ export type JobRow = {
   found_at: string;
   matched_skills: string[] | null;
   status: string;
+  source: string;
 };
 
 export type AdzunaJob = {
@@ -83,7 +84,7 @@ export type NormalizedJob = {
   url: string;
   salary?: string | null;
   job_type?: string | null;
-  source: "adzuna" | "jobtech" | "jooble" | "careerjet" | "linkedin";
+  source: "adzuna" | "jobtech" | "jooble" | "careerjet" | "linkedin" | "url";
 };
 
 export type ProfileFormInput = {

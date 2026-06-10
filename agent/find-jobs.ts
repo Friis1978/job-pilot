@@ -74,7 +74,7 @@ function normalizeAdzunaJob(job: AdzunaJob): NormalizedJob {
   };
 }
 
-async function scoreJob(
+export async function scoreJob(
   job: NormalizedJob,
   profile: Profile,
   openai: OpenAI,

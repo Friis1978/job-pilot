@@ -10,6 +10,9 @@ type Props = { recentSearches?: RecentSearch[] };
 
 export function SearchCard({ recentSearches = [] }: Props) {
   const router = useRouter();
+  const [tab, setTab] = useState<"search" | "url">("search");
+
+  // Search tab state
   const [jobTitle, setJobTitle] = useState("");
   const [location, setLocation] = useState("");
   const [minScore, setMinScore] = useState(50);
@@ -18,6 +21,11 @@ export function SearchCard({ recentSearches = [] }: Props) {
     jobsFound: number;
     jobsSaved: number;
   } | null>(null);
+
+  // URL tab state
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importSuccess, setImportSuccess] = useState(false);
 
   async function handleSearch() {
     if (!jobTitle.trim() || loading) return;
@@ -62,116 +70,244 @@ export function SearchCard({ recentSearches = [] }: Props) {
     }
   }
 
+  async function handleImport() {
+    if (!importUrl.trim() || importing) return;
+    setImporting(true);
+    setImportSuccess(false);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
+
+    try {
+      const res = await fetch("/api/agent/import-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: importUrl.trim() }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      const json = await res.json();
+
+      if (!res.ok || json.error) {
+        toast(json.error ?? "Import failed. Please try again.");
+        return;
+      }
+
+      setImportSuccess(true);
+      setImportUrl("");
+      router.refresh();
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === "AbortError") {
+        toast("Import timed out. Please try again.");
+      } else {
+        toast("Something went wrong. Please try again.");
+      }
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-      <div className="flex items-end gap-4">
-        {/* Job Title */}
-        <div className="flex-1 flex flex-col gap-1.5">
-          <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-            Job Title
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-              <SearchIcon className="w-4 h-4 text-text-muted" />
-            </div>
-            <input
-              type="text"
-              placeholder="Frontend Engineer"
-              value={jobTitle}
-              onChange={(e) => setJobTitle(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              className="w-full pl-9 pr-3 py-2.5 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
-            />
-          </div>
-        </div>
-
-        {/* Location */}
-        <div className="flex-1 flex flex-col gap-1.5">
-          <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-            Location
-          </label>
-          <input
-            type="text"
-            placeholder="Remote, New York..."
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            className="w-full px-3 py-2.5 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
-          />
-        </div>
-
-        {/* Min Match Score */}
-        <div className="flex flex-col gap-1.5 shrink-0">
-          <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-            Min Match
-          </label>
-          <select
-            value={minScore}
-            onChange={(e) => setMinScore(Number(e.target.value))}
-            className="px-3 py-2.5 border border-border rounded-lg text-sm text-text-primary bg-surface focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
-          >
-            {[50, 60, 70].map((v) => (
-              <option key={v} value={v}>
-                {v}%
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Find Jobs Button */}
+      {/* Tab switcher */}
+      <div className="flex gap-0 border-b border-border mb-5">
         <button
-          onClick={handleSearch}
-          disabled={loading || !jobTitle.trim()}
-          className="flex items-center gap-2 px-5 py-2.5 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent-dark transition-colors shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+          onClick={() => { setTab("search"); setResult(null); }}
+          className={`px-4 pb-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            tab === "search"
+              ? "border-accent text-accent"
+              : "border-transparent text-text-secondary hover:text-text-primary"
+          }`}
         >
-          {loading ? (
-            <SpinnerIcon className="w-4 h-4 animate-spin" />
-          ) : (
-            <SearchIcon className="w-4 h-4" />
-          )}
-          {loading ? "Searching..." : "Find Jobs"}
+          Find Jobs
+        </button>
+        <button
+          onClick={() => { setTab("url"); setImportSuccess(false); }}
+          className={`px-4 pb-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            tab === "url"
+              ? "border-accent text-accent"
+              : "border-transparent text-text-secondary hover:text-text-primary"
+          }`}
+        >
+          Add from URL
         </button>
       </div>
 
-      {result && (
-        <div className="mt-4 flex items-center gap-3 rounded-xl bg-success-lightest px-4 py-3">
-          <SparkleIcon className="w-5 h-5 text-success shrink-0" />
-          <span className="text-sm font-medium text-success-foreground">
-            Found {result.jobsFound} jobs and saved {result.jobsSaved} strong
-            matches.
-          </span>
-        </div>
-      )}
-
-      {recentSearches.length > 0 && (
-        <div className="mt-5 flex flex-col gap-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-            Recent Searches
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {recentSearches.map((s, i) => (
-              <button
-                key={i}
-                onClick={() => {
-                  setJobTitle(s.jobTitle);
-                  setLocation(s.location);
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 bg-surface-secondary border border-border rounded-lg text-sm text-text-primary hover:border-accent hover:text-accent transition-colors"
-              >
-                <SearchIcon className="w-3.5 h-3.5 text-text-muted shrink-0" />
-                <span className="font-medium">{s.jobTitle}</span>
-                {s.location && (
-                  <>
-                    <span className="text-text-muted">·</span>
-                    <span className="text-text-muted">{s.location}</span>
-                  </>
-                )}
-              </button>
-            ))}
+      {tab === "url" ? (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-end gap-4">
+            <div className="flex-1 flex flex-col gap-1.5">
+              <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+                Job Posting URL
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                  <LinkIcon className="w-4 h-4 text-text-muted" />
+                </div>
+                <input
+                  type="url"
+                  placeholder="https://jobs.company.com/..."
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleImport()}
+                  className="w-full pl-9 pr-3 py-2.5 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
+                />
+              </div>
+            </div>
+            <button
+              onClick={handleImport}
+              disabled={importing || !importUrl.trim()}
+              className="flex items-center gap-2 px-5 py-2.5 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent-dark transition-colors shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {importing ? (
+                <SpinnerIcon className="w-4 h-4 animate-spin" />
+              ) : (
+                <LinkIcon className="w-4 h-4" />
+              )}
+              {importing ? "Importing..." : "Import Job"}
+            </button>
           </div>
+          <p className="text-xs text-text-muted">
+            Works with most job boards and company career pages. LinkedIn requires login and cannot be imported automatically.
+          </p>
+          {importSuccess && (
+            <div className="flex items-center gap-3 rounded-xl bg-success-lightest px-4 py-3">
+              <SparkleIcon className="w-5 h-5 text-success shrink-0" />
+              <span className="text-sm font-medium text-success-foreground">
+                Job imported and scored. Check your job list below.
+              </span>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-end gap-4">
+            {/* Job Title */}
+            <div className="flex-1 flex flex-col gap-1.5">
+              <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+                Job Title
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                  <SearchIcon className="w-4 h-4 text-text-muted" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Frontend Engineer"
+                  value={jobTitle}
+                  onChange={(e) => setJobTitle(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  className="w-full pl-9 pr-3 py-2.5 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
+                />
+              </div>
+            </div>
+
+            {/* Location */}
+            <div className="flex-1 flex flex-col gap-1.5">
+              <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+                Location
+              </label>
+              <input
+                type="text"
+                placeholder="Remote, New York..."
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
+              />
+            </div>
+
+            {/* Min Match Score */}
+            <div className="flex flex-col gap-1.5 shrink-0">
+              <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+                Min Match
+              </label>
+              <select
+                value={minScore}
+                onChange={(e) => setMinScore(Number(e.target.value))}
+                className="px-3 py-2.5 border border-border rounded-lg text-sm text-text-primary bg-surface focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
+              >
+                {[50, 60, 70].map((v) => (
+                  <option key={v} value={v}>
+                    {v}%
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Find Jobs Button */}
+            <button
+              onClick={handleSearch}
+              disabled={loading || !jobTitle.trim()}
+              className="flex items-center gap-2 px-5 py-2.5 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent-dark transition-colors shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <SpinnerIcon className="w-4 h-4 animate-spin" />
+              ) : (
+                <SearchIcon className="w-4 h-4" />
+              )}
+              {loading ? "Searching..." : "Find Jobs"}
+            </button>
+          </div>
+
+          {result && (
+            <div className="flex items-center gap-3 rounded-xl bg-success-lightest px-4 py-3">
+              <SparkleIcon className="w-5 h-5 text-success shrink-0" />
+              <span className="text-sm font-medium text-success-foreground">
+                Found {result.jobsFound} jobs and saved {result.jobsSaved} strong matches.
+              </span>
+            </div>
+          )}
+
+          {recentSearches.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+                Recent Searches
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {recentSearches.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setJobTitle(s.jobTitle);
+                      setLocation(s.location);
+                    }}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-surface-secondary border border-border rounded-lg text-sm text-text-primary hover:border-accent hover:text-accent transition-colors"
+                  >
+                    <SearchIcon className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                    <span className="font-medium">{s.jobTitle}</span>
+                    {s.location && (
+                      <>
+                        <span className="text-text-muted">·</span>
+                        <span className="text-text-muted">{s.location}</span>
+                      </>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+function LinkIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M8.5 11.5a4.5 4.5 0 0 0 6.364 0l2-2a4.5 4.5 0 0 0-6.364-6.364l-1 1" />
+      <path d="M11.5 8.5a4.5 4.5 0 0 0-6.364 0l-2 2a4.5 4.5 0 0 0 6.364 6.364l1-1" />
+    </svg>
   );
 }
 
