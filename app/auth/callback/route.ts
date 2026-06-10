@@ -74,10 +74,16 @@ export async function GET(request: NextRequest) {
 
     response.cookies.delete("insforge_pkce_verifier");
 
-    setAuthCookies(response.cookies, {
-      accessToken: data.accessToken,
-      refreshToken: data.refreshToken,
-    });
+    setAuthCookies(
+      response.cookies,
+      { accessToken: data.accessToken, refreshToken: data.refreshToken },
+      {
+        options: {
+          accessToken: { maxAge: 60 * 60 * 24 * 7 },   // 7 days
+          refreshToken: { maxAge: 60 * 60 * 24 * 30 },  // 30 days
+        },
+      },
+    );
 
     return response;
   } catch {

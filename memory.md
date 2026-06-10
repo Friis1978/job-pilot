@@ -61,6 +61,9 @@ Run `/architect feature 14` before building. Phase 5 sequence:
 - 16 Recent Activity — Real Data
 - 17 Analytics Charts — PostHog Data
 
+**Session persistence fix:**
+- `app/auth/callback/route.ts` — `setAuthCookies` now passes `settings.options` with `accessToken: { maxAge: 7 days }` and `refreshToken: { maxAge: 30 days }`. Root cause: initial login was setting session cookies (no maxAge) that expired on browser close. Middleware `updateSession` had maxAge set but can't upgrade session cookies to persistent ones — the fix had to be at the source (login callback).
+
 ## Open questions
 
 - `JOOBLE_API_KEY` not yet registered — Jooble calls fail silently via `Promise.allSettled`.
