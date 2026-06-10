@@ -10,6 +10,9 @@ async function hogql(query: string): Promise<HogQLResponse> {
   if (!key) throw new Error("POSTHOG_PERSONAL_API_KEY is not set");
   if (!host || !projectId) throw new Error("PostHog host or project ID not configured");
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8_000);
+
   try {
     const res = await fetch(
       `${host}/api/projects/${projectId}/query/`,
@@ -21,6 +24,7 @@ async function hogql(query: string): Promise<HogQLResponse> {
         },
         body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
         cache: "no-store",
+        signal: controller.signal,
       },
     );
 
@@ -29,6 +33,8 @@ async function hogql(query: string): Promise<HogQLResponse> {
   } catch (err) {
     console.error("[posthog-query]", err);
     throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

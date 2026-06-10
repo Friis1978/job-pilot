@@ -78,7 +78,12 @@ async function scoreJob(
   job: NormalizedJob,
   profile: Profile,
   openai: OpenAI,
+  searchedLocation: string,
 ): Promise<ScoringResult | null> {
+  const locationRule = searchedLocation
+    ? `- Location rule: The candidate is searching for jobs in "${searchedLocation}". If the job location does not match — and the job does not explicitly allow remote work — set matchScore to 0.`
+    : "";
+
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -101,7 +106,7 @@ Scoring rules:
 - Be strict and realistic. A high score (80+) requires the job description to explicitly mention requirements that match the candidate's skills and experience level.
 - If the job description is a short snippet (under 100 words) without specific requirements, technologies, or experience criteria, set matchScore to 50 or below — there is not enough information to justify a high score.
 - Never infer requirements that are not stated. Missing information is a signal to score lower, not higher.
-- A mismatch in seniority, domain, or core technology stack should significantly reduce the score.`,
+- A mismatch in seniority, domain, or core technology stack should significantly reduce the score.${locationRule ? `\n${locationRule}` : ""}`,
         },
         {
           role: "user",
@@ -139,6 +144,7 @@ export async function findJobs(
   userId: string,
   jobTitle: string,
   location: string,
+  minScore: number = MATCH_THRESHOLD,
 ): Promise<FindJobsResult> {
   const insforge = await createInsforgeServer();
 
@@ -260,11 +266,11 @@ export async function findJobs(
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const scoringResults = await Promise.all(
-      newJobs.map((job) => scoreJob(job, profile, openai)),
+      newJobs.map((job) => scoreJob(job, profile, openai, location)),
     );
 
     const qualifyingJobs = scoringResults.filter(
-      (r): r is ScoringResult => r !== null && r.matchScore >= MATCH_THRESHOLD,
+      (r): r is ScoringResult => r !== null && r.matchScore >= minScore,
     );
 
     if (qualifyingJobs.length > 0) {

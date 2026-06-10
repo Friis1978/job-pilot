@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MATCH_THRESHOLD, formatDateAgo } from "@/lib/utils";
+import { toast } from "@/lib/toast";
 import type { JobRow } from "@/types";
 
 export type { JobRow };
@@ -41,6 +42,8 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
   const [page, setPage] = useState(1);
   const [clearing, setClearing] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
 
   function cycleFilter() {
     setFilter((f) => FILTER_CYCLE[(FILTER_CYCLE.indexOf(f) + 1) % FILTER_CYCLE.length]);
@@ -76,12 +79,55 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
     setConfirmClear(false);
   }
 
+  async function handleDeleteJob(e: React.MouseEvent, jobId: string) {
+    e.stopPropagation();
+    setDeletingId(jobId);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      router.refresh();
+    } catch {
+      toast("Failed to delete job. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  function toggleSkill(skill: string) {
+    setSelectedSkills((prev) => {
+      const next = new Set(prev);
+      next.has(skill) ? next.delete(skill) : next.add(skill);
+      return next;
+    });
+    setPage(1);
+  }
+
+  // Collect all unique skills across all jobs, sorted by frequency
+  const allSkills = (() => {
+    const freq = new Map<string, number>();
+    for (const job of jobs) {
+      for (const skill of job.matched_skills ?? []) {
+        freq.set(skill, (freq.get(skill) ?? 0) + 1);
+      }
+    }
+    return [...freq.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([skill]) => skill);
+  })();
+
   // Filter
   let filtered = jobs.filter((job) => {
     if (filter === "high") return job.match_score >= MATCH_THRESHOLD;
     if (filter === "low") return job.match_score < MATCH_THRESHOLD;
     return true;
   });
+
+  // Skill filter
+  if (selectedSkills.size > 0) {
+    filtered = filtered.filter((job) =>
+      (job.matched_skills ?? []).some((s) => selectedSkills.has(s)),
+    );
+  }
 
   // Search
   if (search.trim()) {
@@ -161,6 +207,36 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
         </div>
       </div>
 
+      {/* Skill Filter Chips */}
+      {allSkills.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {selectedSkills.size > 0 && (
+            <button
+              onClick={() => { setSelectedSkills(new Set()); setPage(1); }}
+              className="text-xs text-text-muted hover:text-error transition-colors"
+            >
+              Clear
+            </button>
+          )}
+          {allSkills.map((skill) => {
+            const active = selectedSkills.has(skill);
+            return (
+              <button
+                key={skill}
+                onClick={() => toggleSkill(skill)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
+                  active
+                    ? "bg-accent text-accent-foreground border-accent"
+                    : "bg-surface border-border text-text-secondary hover:border-accent hover:text-accent"
+                }`}
+              >
+                {skill}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Jobs Table Card */}
       <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-sm">
         {jobs.length === 0 ? (
@@ -189,18 +265,19 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                   <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[22%]">
                     Company
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[28%]">
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[26%]">
                     Role
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[24%]">
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[22%]">
                     Match Score
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[16%]">
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[14%]">
                     Salary Est.
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[10%]">
                     Date Found
                   </th>
+                  <th className="px-4 py-4 w-[6%]" />
                 </tr>
               </thead>
               <tbody>
@@ -208,7 +285,7 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                   <tr
                     key={job.id}
                     onClick={() => router.push(`/find-jobs/${job.id}`)}
-                    className={`hover:bg-surface-secondary transition-colors cursor-pointer${index < paginated.length - 1 ? " border-b border-border" : ""}`}
+                    className={`group hover:bg-surface-secondary transition-colors cursor-pointer${index < paginated.length - 1 ? " border-b border-border" : ""}`}
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -247,6 +324,16 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                       <span className="text-sm text-text-muted">
                         {formatDateAgo(job.found_at)}
                       </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <button
+                        onClick={(e) => handleDeleteJob(e, job.id)}
+                        disabled={deletingId === job.id}
+                        className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-7 h-7 rounded-lg text-text-muted hover:text-error hover:bg-surface-secondary transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="Delete job"
+                      >
+                        <TrashIcon className="w-3.5 h-3.5" />
+                      </button>
                     </td>
                   </tr>
                 ))}

@@ -2,24 +2,31 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "@/lib/toast";
 
-export function SearchCard() {
+type RecentSearch = { jobTitle: string; location: string; searchedAt: string };
+
+type Props = { recentSearches?: RecentSearch[] };
+
+export function SearchCard({ recentSearches = [] }: Props) {
   const router = useRouter();
   const [jobTitle, setJobTitle] = useState("");
   const [location, setLocation] = useState("");
+  const [minScore, setMinScore] = useState(50);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
     jobsFound: number;
     jobsSaved: number;
   } | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   async function handleSearch() {
     if (!jobTitle.trim() || loading) return;
 
     setLoading(true);
-    setError(null);
     setResult(null);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
 
     try {
       const res = await fetch("/api/agent/find", {
@@ -28,20 +35,28 @@ export function SearchCard() {
         body: JSON.stringify({
           jobTitle: jobTitle.trim(),
           location: location.trim(),
+          minScore,
         }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
       const json = await res.json();
 
       if (!res.ok || json.error) {
-        setError(json.error ?? "Something went wrong. Please try again.");
+        toast(json.error ?? "Something went wrong. Please try again.");
         return;
       }
 
       setResult(json.data);
       router.refresh();
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === "AbortError") {
+        toast("Search timed out after 30 seconds. Please try again.");
+      } else {
+        toast("Something went wrong. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -85,18 +100,38 @@ export function SearchCard() {
           />
         </div>
 
+        {/* Min Match Score */}
+        <div className="flex flex-col gap-1.5 shrink-0">
+          <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+            Min Match
+          </label>
+          <select
+            value={minScore}
+            onChange={(e) => setMinScore(Number(e.target.value))}
+            className="px-3 py-2.5 border border-border rounded-lg text-sm text-text-primary bg-surface focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
+          >
+            {[50, 60, 70].map((v) => (
+              <option key={v} value={v}>
+                {v}%
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Find Jobs Button */}
         <button
           onClick={handleSearch}
           disabled={loading || !jobTitle.trim()}
           className="flex items-center gap-2 px-5 py-2.5 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent-dark transition-colors shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          <SearchIcon className="w-4 h-4" />
+          {loading ? (
+            <SpinnerIcon className="w-4 h-4 animate-spin" />
+          ) : (
+            <SearchIcon className="w-4 h-4" />
+          )}
           {loading ? "Searching..." : "Find Jobs"}
         </button>
       </div>
-
-      {error && <p className="mt-3 text-sm text-error">{error}</p>}
 
       {result && (
         <div className="mt-4 flex items-center gap-3 rounded-xl bg-success-lightest px-4 py-3">
@@ -107,7 +142,57 @@ export function SearchCard() {
           </span>
         </div>
       )}
+
+      {recentSearches.length > 0 && (
+        <div className="mt-5 flex flex-col gap-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+            Recent Searches
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {recentSearches.map((s, i) => (
+              <button
+                key={i}
+                onClick={() => {
+                  setJobTitle(s.jobTitle);
+                  setLocation(s.location);
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 bg-surface-secondary border border-border rounded-lg text-sm text-text-primary hover:border-accent hover:text-accent transition-colors"
+              >
+                <SearchIcon className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                <span className="font-medium">{s.jobTitle}</span>
+                {s.location && (
+                  <>
+                    <span className="text-text-muted">·</span>
+                    <span className="text-text-muted">{s.location}</span>
+                  </>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function SpinnerIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none">
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeOpacity="0.25"
+      />
+      <path
+        d="M12 2a10 10 0 0 1 10 10"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 

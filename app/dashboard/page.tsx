@@ -38,7 +38,7 @@ export default async function DashboardPage() {
   const {
     data: { user },
   } = await insforge.auth.getCurrentUser();
-  if (!user) redirect("/auth/login");
+  if (!user) redirect("/");
 
   // ── Recent Activity + Charts ───────────────────────────────────────────────
 
@@ -126,7 +126,7 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <Navbar />
+      <Navbar user={{ name: user.user_metadata?.full_name ?? user.user_metadata?.name, email: user.email, avatarUrl: user.user_metadata?.avatar_url }} />
       <main className="min-h-screen bg-background">
         <div className="w-full max-w-360 mx-auto px-4 sm:px-6 py-8 flex flex-col gap-5">
           <StatsBar {...statsData} />

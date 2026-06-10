@@ -14,9 +14,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const userId = authData.user.id;
 
     const body = await req.json();
-    const { jobTitle, location } = body as {
+    const { jobTitle, location, minScore } = body as {
       jobTitle: unknown;
       location: unknown;
+      minScore: unknown;
     };
 
     if (!jobTitle || typeof jobTitle !== "string" || !jobTitle.trim()) {
@@ -26,10 +27,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
+    const parsedMinScore =
+      typeof minScore === "number" && minScore >= 50 && minScore <= 100
+        ? minScore
+        : undefined;
+
     const result = await findJobs(
       userId,
       jobTitle.trim(),
       typeof location === "string" ? location.trim() : "",
+      parsedMinScore,
     );
 
     if (!result.success) {
@@ -39,7 +46,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
+    await insforge.database.from("job_searches").insert([
+      { user_id: userId, job_title: jobTitle.trim(), location: typeof location === "string" ? location.trim() : "" },
+    ]);
+
     revalidatePath("/dashboard");
+    revalidatePath("/find-jobs");
     return NextResponse.json({
       data: { jobsFound: result.jobsFound, jobsSaved: result.jobsSaved },
     });

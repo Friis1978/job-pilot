@@ -11,22 +11,50 @@ export default async function FindJobsPage() {
     data: { user },
   } = await insforge.auth.getCurrentUser();
 
-  if (!user) redirect("/login");
+  if (!user) redirect("/");
 
-  const { data } = await insforge.database
-    .from("jobs")
-    .select("id, company, title, match_score, salary, found_at")
-    .eq("user_id", user.id)
-    .order("found_at", { ascending: false });
+  const [jobsResult, searchesResult] = await Promise.allSettled([
+    insforge.database
+      .from("jobs")
+      .select("id, company, title, match_score, salary, found_at, matched_skills")
+      .eq("user_id", user.id)
+      .order("found_at", { ascending: false }),
+    insforge.database
+      .from("job_searches")
+      .select("job_title, location, searched_at")
+      .eq("user_id", user.id)
+      .order("searched_at", { ascending: false })
+      .limit(50),
+  ]);
 
-  const jobs = (data as JobRow[] | null) ?? [];
+  const jobs =
+    jobsResult.status === "fulfilled"
+      ? ((jobsResult.value.data as JobRow[] | null) ?? [])
+      : [];
+
+  // Deduplicate by job_title+location, keep most recent of each
+  type SearchRow = { job_title: string; location: string; searched_at: string };
+  const rawSearches =
+    searchesResult.status === "fulfilled"
+      ? ((searchesResult.value.data as SearchRow[] | null) ?? [])
+      : [];
+  const seen = new Set<string>();
+  const recentSearches = rawSearches
+    .filter((s) => {
+      const key = `${s.job_title.toLowerCase()}|${s.location.toLowerCase()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 5)
+    .map((s) => ({ jobTitle: s.job_title, location: s.location, searchedAt: s.searched_at }));
 
   return (
     <>
-      <Navbar />
+      <Navbar user={{ name: user.user_metadata?.full_name ?? user.user_metadata?.name, email: user.email, avatarUrl: user.user_metadata?.avatar_url }} />
       <main className="min-h-screen bg-background py-8">
         <div className="w-full max-w-360 mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-6 pb-12">
-          <SearchCard />
+          <SearchCard recentSearches={recentSearches} />
           <JobsTable jobs={jobs} />
         </div>
       </main>

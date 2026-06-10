@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { CompletionIndicator } from "@/components/profile/CompletionIndicator";
 import { ProfilePageShell } from "@/components/profile/ProfilePageShell";
@@ -70,6 +71,7 @@ export default async function ProfilePage() {
   const insforge = await createInsforgeServer();
   const { data: authData } = await insforge.auth.getCurrentUser();
   const userId = authData?.user?.id;
+  if (!userId) redirect("/");
 
   let profile: Profile | null = null;
   if (userId) {
@@ -85,7 +87,7 @@ export default async function ProfilePage() {
 
   return (
     <>
-      <Navbar />
+      <Navbar user={{ name: authData.user?.user_metadata?.full_name ?? authData.user?.user_metadata?.name, email: authData.user?.email, avatarUrl: authData.user?.user_metadata?.avatar_url }} />
       <main className="min-h-screen bg-background py-8">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 flex flex-col gap-6 pb-12">
           <CompletionIndicator percentage={percentage} missingFields={missingFields} />
