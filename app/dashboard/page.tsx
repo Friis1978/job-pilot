@@ -18,8 +18,10 @@ type JobStatsRow = {
 type AgentRunRow = {
   job_title_searched: string | null;
   jobs_found: number | null;
-  started_at: string;
+  started_at: string | null;
 };
+
+type Timestamped = ActivityItem & { ts: number };
 
 type ResearchedJobRow = {
   company: string;
@@ -74,7 +76,7 @@ export default async function DashboardPage() {
 
   // ── Recent Activity ────────────────────────────────────────────────────────
 
-  const [{ data: rawRuns }, { data: rawResearched }] = await Promise.all([
+  const [runsResult, researchedResult] = await Promise.allSettled([
     insforge.database
       .from("agent_runs")
       .select("job_title_searched, jobs_found, started_at")
@@ -90,17 +92,19 @@ export default async function DashboardPage() {
       .order("found_at", { ascending: false })
       .limit(10),
   ]);
+  const rawRuns =
+    runsResult.status === "fulfilled" ? runsResult.value.data : null;
+  const rawResearched =
+    researchedResult.status === "fulfilled" ? researchedResult.value.data : null;
 
-  type Timestamped = ActivityItem & { ts: number };
-
-  const runActivities: Timestamped[] = ((rawRuns ?? []) as AgentRunRow[]).map(
-    (run) => ({
+  const runActivities: Timestamped[] = ((rawRuns ?? []) as AgentRunRow[])
+    .filter((run) => (run.jobs_found ?? 0) > 0)
+    .map((run) => ({
       type: "job_found" as const,
-      text: `Found ${run.jobs_found ?? 0} job${run.jobs_found === 1 ? "" : "s"} for ${run.job_title_searched ?? "unknown role"}`,
-      time: formatDateAgo(run.started_at),
-      ts: new Date(run.started_at).getTime(),
-    }),
-  );
+      text: `Found ${run.jobs_found} job${run.jobs_found === 1 ? "" : "s"} for ${run.job_title_searched ?? "unknown role"}`,
+      time: formatDateAgo(run.started_at ?? new Date().toISOString()),
+      ts: new Date(run.started_at ?? new Date().toISOString()).getTime(),
+    }));
 
   const researchActivities: Timestamped[] = (
     (rawResearched ?? []) as ResearchedJobRow[]

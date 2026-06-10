@@ -12,7 +12,13 @@ function TrendBadge({ value }: { value: number }) {
   const label = `${isPositive ? "+" : ""}${value}%`;
   return (
     <div className="flex items-center gap-2">
-      <span className="px-2 py-0.5 rounded-sm text-xs font-medium bg-success-lightest text-success-darker">
+      <span
+        className={`px-2 py-0.5 rounded-sm text-xs font-medium ${
+          isPositive
+            ? "bg-success-lightest text-success-darker"
+            : "bg-surface-secondary text-text-secondary"
+        }`}
+      >
         {label}
       </span>
       <span className="text-xs text-text-muted">vs last week</span>

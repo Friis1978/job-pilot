@@ -1,51 +1,39 @@
-# Memory — Dashboard Phase 5 (Features 14–16 complete)
+# Memory — Dashboard Phase 5 (Features 14–16 reviewed + fixed)
 
 Last updated: 2026-06-10
 
 ## What was built
 
-**Feature 13 review + fixes (session start):**
-- `agent/research-company.ts` — `resolveCompanyUrl` now checks an `ATS_AND_JOB_BOARD_DOMAINS` list (greenhouse.io, lever.co, workday.com, etc.) before extracting root domain; falls back to `https://www.${cleanName}.com` for ATS/job-board redirects
-- `app/find-jobs/[id]/page.tsx` — removed dead `SearchIcon` function (was defined but never called after ResearchButton moved to its own file)
-- `context/library-docs.md` — Stagehand section corrected to v3.5 API: `modelName: "gpt-4o"` (no `"openai/"` prefix), `extract(instruction, schema)` positional args (not object form)
+**This session — review + fixes for Features 15 and 16:**
 
-**Feature 14 — Dashboard Page Full UI:**
-- `components/dashboard/StatsBar.tsx` — 4 stat cards (Total Jobs Found, Avg Match Rate, Companies Researched, Jobs This Week)
-- `components/dashboard/RecentActivity.tsx` — timeline list with colored dots and connector lines
-- `components/dashboard/CompanyResearchChart.tsx` — blue SVG bar chart, 7-day week, Y-axis 0–12
-- `components/dashboard/JobsOverTimeChart.tsx` — purple SVG area/line chart, Catmull-Rom smooth curve, gradient fill
-- `components/dashboard/MatchScoreChart.tsx` — green SVG bar chart, 5 score buckets (50-60% through 90-100%)
-- `app/dashboard/page.tsx` — replaced `"use client"` stub with Server Component; auth redirect + 3-row responsive grid layout
+`components/dashboard/StatsBar.tsx`:
+- `TrendBadge` now conditionally applies `bg-success-lightest text-success-darker` for positive trends and `bg-surface-secondary text-text-secondary` for negative/zero trends. Previously always rendered green.
 
-**Feature 15 — Stats Bar Real Data:**
-- `StatsBar.tsx` — now accepts `StatsData` props (totalJobs, avgMatchRate, companiesResearched, jobsThisWeek, totalJobsTrend, matchRateTrend). `TrendBadge` subcomponent renders +X%/-X% when prior-week data exists.
-- `app/dashboard/page.tsx` — single DB query on `jobs` table fetches `match_score, company_research, found_at`; computes all 4 stats + week-over-week trends in JS
-
-**Feature 16 — Recent Activity Real Data:**
-- `RecentActivity.tsx` — `ActivityItem` type exported, accepts `activities: ActivityItem[]` prop, has empty state ("No activity yet")
-- `app/dashboard/page.tsx` — two parallel DB queries via `Promise.all`:
-  - `agent_runs` filtered by `status = "complete"`, ordered by `started_at DESC`, limit 10 → "Found N jobs for [title]"
-  - `jobs` filtered by `company_research IS NOT NULL`, ordered by `found_at DESC`, limit 10 → "Researched [company]"
-  - Merged, sorted by timestamp DESC, trimmed to 8 entries
+`app/dashboard/page.tsx` — four fixes:
+- `AgentRunRow.started_at` type changed from `string` to `string | null` (matches DB schema: `isNullable: YES`)
+- `type Timestamped` moved to module scope (was incorrectly declared inside async `DashboardPage` function)
+- `Promise.all` for activity queries replaced with `Promise.allSettled` — a DB failure no longer crashes the entire dashboard page
+- Zero-jobs filter added: `.filter((run) => (run.jobs_found ?? 0) > 0)` prevents "Found 0 jobs for X" appearing in the activity feed
 
 ## Decisions made
 
+- **`Promise.allSettled` for activity queries** — fault isolation: if `agent_runs` or `jobs` query fails independently, the page still renders with whatever data is available. Stats query (single query, no allSettled) is accepted as-is — if it fails the page can't render meaningful stats anyway.
+- **Negative trend styling uses `bg-surface-secondary text-text-secondary`** — neutral look, not red/error, because a lower match rate week-over-week is informational, not an error state.
 - **Dashboard page is a pure Server Component** — auth check + all data fetching in `app/dashboard/page.tsx`. No client-side data fetching on the dashboard.
-- **Charts use inline SVG with CSS variable colors** — no chart library installed. `var(--color-info)` for blue bars, `var(--color-accent)` for line chart, `var(--color-success)` for green bars. Features 14–16 use static placeholder data; Feature 17 will replace charts with PostHog data.
-- **agent_runs.started_at confirmed default `now()`** — schema checked via MCP. No `created_at` column on agent_runs. Status value for completed runs is `"complete"` (not `"completed"`).
-- **No `researched_at` column on jobs** — company research timestamp approximated with `found_at`. Jobs table has no `updated_at` either. Accepted approximation for Feature 16.
-- **Trend badges fall back gracefully** — when no last-week data exists (`previous === 0`), `weekTrend()` returns `null` and the badge is replaced with static "vs last week" muted text.
-- **Logout removed from dashboard** — the placeholder `"use client"` dashboard had a logout button. Removed when converting to Server Component. No logout in design; can be added to Navbar later.
+- **Charts use inline SVG with CSS variable colors** — no chart library. Feature 17 will replace static data with PostHog queries.
+- **`agent_runs.started_at` confirmed nullable in DB** — `isNullable: YES`. Null guarded with `?? new Date().toISOString()` in formatDateAgo call.
+- **No `researched_at` column on jobs** — `found_at` used as proxy for research timestamp. Accepted approximation.
 
 ## Problems solved
 
-- **Stagehand v3.5 API mismatch** — `library-docs.md` showed old object-form `extract({ instruction, schema })` and `"openai/gpt-4o"` model prefix. Fixed to positional args and `"gpt-4o"`.
-- **ATS domain research** — `resolveCompanyUrl` was resolving `greenhouse.io`/`lever.co` as company homepages for non-Adzuna jobs. Fixed with ATS_AND_JOB_BOARD_DOMAINS blocklist.
+- **TrendBadge always green** — was `bg-success-lightest text-success-darker` hardcoded regardless of `isPositive`. Fixed with conditional className.
+- **Stagehand v3.5 API mismatch** — `library-docs.md` showed old object-form `extract({ instruction, schema })` and `"openai/gpt-4o"` model prefix. Fixed in earlier sessions.
+- **ATS domain research** — `resolveCompanyUrl` was resolving `greenhouse.io`/`lever.co` as company homepages. Fixed with ATS_AND_JOB_BOARD_DOMAINS blocklist.
 
 ## Current state
 
 - Phase 1–4 complete (Features 01–13)
-- Phase 5: Features 14, 15, 16 complete
+- Phase 5: Features 14, 15, 16 complete and reviewed — all issues resolved
 - Dashboard shows: real stat counts, real recent activity (job searches + company research)
 - Dashboard charts still use static placeholder data (Feature 17 pending)
 - TypeScript: clean (`tsc --noEmit` passes with 0 errors)
