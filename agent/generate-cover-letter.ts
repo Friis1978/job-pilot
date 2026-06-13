@@ -112,6 +112,7 @@ Rules:
 - Do NOT open with enthusiasm about the company — lead with substance, not flattery
 - Address it to the hiring team at the company (no "Dear Sir/Madam", no "To Whom It May Concern")
 - Every claim must be grounded in the candidate's actual experience — no vague assertions
+- Where the candidate has years of experience for a skill relevant to this role, include the specific number naturally in the letter (e.g. "5 years of React" or "3 years building with TypeScript") — use the skill experience data provided
 - Connect specific past work to what this role actually requires
 - If company research is provided, reference one concrete specific detail (not generic praise)
 - Acknowledge skill gaps honestly and briefly — one sentence max, frame as adjacent strength or quick ramp

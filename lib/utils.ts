@@ -23,7 +23,7 @@ export function computeSkillYears(
     }
   }
   return Object.fromEntries(
-    Object.entries(skillYears).map(([k, v]) => [k, Math.round(v * 10) / 10]),
+    Object.entries(skillYears).map(([k, v]) => [k, Math.floor(v)]),
   );
 }
 
