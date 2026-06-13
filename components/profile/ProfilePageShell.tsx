@@ -32,6 +32,7 @@ export function ProfilePageShell({ profile, initialResumeUrl, userId }: Props) {
         key={extractionCount > 0 ? `extracted-${extractionCount}` : (profile?.updated_at ?? "empty")}
         initialData={profile}
         extractedFormData={extractionCount > 0 ? extractedFormData : null}
+        userId={userId}
       />
     </>
   );

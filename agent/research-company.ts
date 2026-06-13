@@ -660,6 +660,7 @@ Return ONLY valid JSON matching this shape:
 {
   "companyOverview": string,
   "companyAddress": "<full postal address or null>",
+  "locationShort": "<Town/City and Country only e.g. 'Copenhagen, Denmark' or 'London, UK' — extracted from companyAddress, or null if no address>",
   "contactInfo": { "name": "<name or null>", "title": "<job title or null>", "email": "<email or null>", "phone": "<phone or null>" } | null,
   "recruiterContact": { "name": "<recruiter name or null>", "title": "<recruiter title or null>", "email": "<recruiter email or null>", "phone": "<recruiter phone or null>", "company": "<recruiting agency name or null>" } | null,
   "techStack": string[],
@@ -739,6 +740,16 @@ Work history: ${JSON.stringify((profile.work_experience ?? []).slice(0, 3))}`;
         success: false,
         error: "Research completed but could not be saved.",
       };
+    }
+
+    // Update job location with the town/country extracted from the company address
+    const locationShort = dossier.locationShort as string | null | undefined;
+    if (locationShort) {
+      await insforge.database
+        .from("jobs")
+        .update({ location: locationShort })
+        .eq("id", jobId)
+        .eq("user_id", userId);
     }
 
     posthog.capture({

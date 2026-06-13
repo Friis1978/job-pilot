@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { saveProfile } from "@/actions/profile";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { saveProfile, updateAvatarUrl } from "@/actions/profile";
+import { insforge } from "@/lib/insforge-client";
+import { AvatarCropModal } from "@/components/profile/AvatarCropModal";
 import type { Profile, ProfileFormInput } from "@/types";
 
 type WorkExperienceEntry = {
@@ -63,6 +65,7 @@ function SectionDivider({ title }: { title: string }) {
 type Props = {
   initialData?: Profile | null;
   extractedFormData?: Partial<ProfileFormInput> | null;
+  userId?: string | null;
 };
 
 function profileToFormData(p: Profile | null | undefined): FormData {
@@ -143,7 +146,7 @@ function mergeExtracted(
   };
 }
 
-export function ProfileForm({ initialData, extractedFormData }: Props) {
+export function ProfileForm({ initialData, extractedFormData, userId }: Props) {
   const [data, setData] = useState<FormData>(() => {
     const base = profileToFormData(initialData);
     return extractedFormData ? mergeExtracted(base, extractedFormData) : base;
@@ -154,6 +157,10 @@ export function ProfileForm({ initialData, extractedFormData }: Props) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(initialData?.avatar_url ?? null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!hasUnreviewedExtraction || saveSuccess) return;
@@ -267,6 +274,38 @@ export function ProfileForm({ initialData, extractedFormData }: Props) {
     );
   }
 
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    // Reset input so the same file can be re-selected after cancel
+    e.target.value = "";
+    if (!file || !userId) return;
+    if (!file.type.startsWith("image/")) return;
+    const objectUrl = URL.createObjectURL(file);
+    setCropImageSrc(objectUrl);
+  }
+
+  const handleCropConfirm = useCallback(async (blob: Blob) => {
+    if (!userId) return;
+    setCropImageSrc((src) => { if (src) URL.revokeObjectURL(src); return null; });
+    setAvatarUploading(true);
+    try {
+      const path = `${userId}/avatar.jpg`;
+      await insforge.storage.from("avatars").remove(path);
+      const { data: uploaded, error } = await insforge.storage.from("avatars").upload(path, blob, { contentType: "image/jpeg" });
+      if (error || !uploaded) return;
+      const result = await updateAvatarUrl(uploaded.url);
+      if (result.success) setAvatarUrl(uploaded.url);
+    } catch {
+      // silent — non-critical
+    } finally {
+      setAvatarUploading(false);
+    }
+  }, [userId]);
+
+  const handleCropCancel = useCallback(() => {
+    setCropImageSrc((src) => { if (src) URL.revokeObjectURL(src); return null; });
+  }, []);
+
   return (
     <div className="bg-surface border border-border rounded-2xl p-6 shadow-[0px_1px_3px_rgba(0,0,0,0.1),0px_1px_2px_-1px_rgba(0,0,0,0.1)]">
       <h2 className="text-base font-semibold text-text-primary">Profile Information</h2>
@@ -310,6 +349,60 @@ export function ProfileForm({ initialData, extractedFormData }: Props) {
         {/* Personal Info */}
         <div>
           <h3 className="text-sm font-semibold text-text-primary mb-4">Personal Info</h3>
+
+          {/* Avatar upload */}
+          <div className="flex items-center gap-4 mb-5">
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={avatarUploading}
+              className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-border bg-surface-secondary flex items-center justify-center shrink-0 hover:border-accent transition-colors disabled:opacity-60 group"
+              title="Change profile photo"
+            >
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatarUrl} alt="Profile photo" className="w-full h-full object-cover" />
+              ) : (
+                <svg className="w-7 h-7 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="8" r="4" />
+                  <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+                </svg>
+              )}
+              <div className="absolute inset-0 bg-overlay/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                {avatarUploading ? (
+                  <svg className="w-5 h-5 text-white animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                )}
+              </div>
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
+            <div>
+              <p className="text-sm font-medium text-text-primary">Profile Photo</p>
+              <p className="text-xs text-text-muted mt-0.5">Used in downloaded cover letters</p>
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={avatarUploading}
+                className="mt-1.5 text-xs text-accent hover:text-accent-dark transition-colors disabled:opacity-50"
+              >
+                {avatarUploading ? "Uploading…" : avatarUrl ? "Change photo" : "Upload photo"}
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelClass}>Full Name</label>
@@ -897,6 +990,14 @@ export function ProfileForm({ initialData, extractedFormData }: Props) {
           {saving ? "Saving…" : "Save Profile"}
         </button>
       </form>
+
+      {cropImageSrc && (
+        <AvatarCropModal
+          imageSrc={cropImageSrc}
+          onConfirm={handleCropConfirm}
+          onCancel={handleCropCancel}
+        />
+      )}
     </div>
   );
 }

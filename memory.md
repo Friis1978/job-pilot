@@ -1,98 +1,71 @@
-# Memory — Job Import, Research, Cover Letter, Spinners
+# Memory — Cover Letter PDF, Avatar Crop, Language Detection
 
 Last updated: 2026-06-13
 
 ## What was built
 
-### agent/research-company.ts — save fix + warning + contact page fix
-- **Save fix**: `insforge.database.rpc()` silently drops JSONB params. Replaced with `insforge.getHttpClient().post("/api/database/rpc/update_job_research", { p_job_id, p_user_id, p_research: JSON.stringify(dossier) })`.
-- **Warning return**: After save, checks `dossier.contactInfo` and `dossier.companyAddress`. If either is missing, returns `{ success: true, warning: "..." }`.
-- **Contact page scraping fix**: When `link.kind === "contact"`, uses a different Stagehand extract instruction specifically emphasising address extraction (not "Ignore footers/marketing" which caused AI to skip addresses).
-- **Extra HTTP fallback paths**: Added `/kontakt-os`, `/kontaktoplysninger`, `/vi-er-her`, `/company/contact`.
-- **`ResearchCompanyResult` type**: Extended with `warning?: string`.
+### components/profile/ProfileForm.tsx — AvatarCropModal wired in
+- `handleAvatarChange` now creates an object URL and sets `cropImageSrc` state instead of uploading directly
+- `handleCropConfirm(blob)`: uploads JPEG blob to `avatars/{userId}/avatar.jpg`, always `.jpg` extension
+- `handleCropCancel()`: revokes object URL, clears modal
+- Input value reset to `""` after file pick so the same file can be re-selected after cancel
+- Renders `<AvatarCropModal>` when `cropImageSrc` is set
 
-### agent/import-job-from-url.ts — major refactor
-- **LinkedIn SPA URL support**: `extractLinkedInJobId(url)` extracts job ID from `currentJobId` query param or `/jobs/view/{id}` path. Canonical URL always normalised to `https://www.linkedin.com/jobs/view/{id}/`.
-- **LinkedIn guest API**: `fetchLinkedInJob(jobId)` calls `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{jobId}`. Pre-strips `<style>` and `<script>` tags before `stripHtml` (important — stripHtml doesn't strip their content, only tags).
-- **Angular SSR / Next.js / Nuxt support**: `extractEmbeddedState(html)` extracts named framework state scripts (`ng-state`, `__NEXT_DATA__`, `__NUXT_DATA__`, `initial-state`). No catch-all — generic `application/json` scripts excluded (too likely to be analytics blobs).
-- **Stagehand browser fallback**: `fetchWithBrowser(url)` uses Browserbase + Stagehand for pure client-side SPAs. Stores `sessionId` separately before Stagehand constructor to handle init failures — `REQUEST_RELEASE` sent in `finally` if Stagehand never initialised.
-- **Three-stage pipeline**: static fetch → embedded state extraction → Stagehand render. Falls through to next stage only if `rawText.length < 200`.
-- **GPT-4o extraction prompt**: Updated to parse JSON input (framework state blobs), bumped context to 6000 chars, extended location extraction rules.
+### app/api/jobs/[id]/cover-letter/route.ts — multiple fixes
+- **Avatar in PDF**: passes `avatarUrl` (raw URL string) directly to `CoverLetterPDF` — react-pdf fetches the public image itself during `renderToBuffer`. No base64 conversion needed.
+- **Photo toggle**: reads `?photo=0` query param. If present, `avatarUrl` is null → image excluded from PDF.
+- **Auth email fallback**: `email = profile.email || authData.user.email || null` — covers users who haven't filled profile email.
+- **Language detection**: concatenates `title + about_role + responsibilities + requirements` before calling `detectLanguage`. Also selects those fields in the DB query.
 
-### agent/generate-cover-letter.ts
-- **OPENING_STRATEGIES**: Module-level array of 5 distinct opening strategies. One selected randomly per call via `Math.floor(Math.random() * OPENING_STRATEGIES.length)`.
-- **Temperature**: 0.7 → 0.9 for more variety.
-- **Banned phrases** in system prompt: "excited", "thrilled", "passion", "couldn't help", "perfect opportunity", "dream role", "long-time admirer", "ideal candidate". Never start with "I". No flattery openers. Confident CTA close.
+### app/api/jobs/[id]/cover-letter/CoverLetterPDF.tsx
+- Prop renamed `avatarBase64 → avatarUrl: string | null`
+- `<Image src={avatarUrl}>` — react-pdf fetches URL directly
 
-### lib/toast.ts
-- Added `"warning"` to type union: `type: "error" | "success" | "warning" = "error"`.
+### components/find-jobs/CoverLetterSection.tsx — photo toggle
+- `includePhoto` state (default `true`)
+- Photo toggle button shown only when `hasAvatar` — accent-colored with checkmark when active, muted when inactive
+- Download appends `?photo=0` when `!includePhoto`
 
-### components/ui/Toaster.tsx
-- `ToastItem` type includes `"warning"`.
-- Added `WarningIcon` SVG (filled triangle with exclamation).
-- Warning toast: `bg-surface border-warning text-warning`.
+### lib/detect-language.ts — expanded markers
+- Danish markers greatly expanded: added stop words (vi, du, din, vores, hos, vil, kan) and job-posting words (stilling, ansøgning, søger, udvikler, udvikling, virksomhed, erfaring, hjemmeside, forsikring, pension, arbejde)
+- All other languages similarly expanded with job-posting vocabulary
+- Now detects Danish from sparse text like "Senior frontendudvikler (Nuxt)" — "udvikler" is in markers
 
-### components/find-jobs/ResearchButton.tsx
-- **Primary** (`hasResearch=false`): accent button, SearchIcon → SpinnerIcon while loading.
-- **Re-run** (`hasResearch=true`): compact border button, RefreshIcon with `animate-spin` while loading.
-- **Warning persistence**: `useEffect` on mount reads `sessionStorage.getItem(RESEARCH_WARNING_KEY)` and fires `toast(pending, "warning")`. Before `window.location.reload()` stores `sessionStorage.setItem(RESEARCH_WARNING_KEY, json.warning)`.
-
-### components/find-jobs/TailoredResumeButton.tsx
-- Added SpinnerIcon replacing DocumentIcon when `loading`.
-
-### components/profile/ProfileForm.tsx
-- Save button: `flex items-center justify-center gap-2` + inline SpinnerIcon while `saving`.
-
-### app/api/agent/research/route.ts
-- Returns `{ success: true, warning: result.warning ?? null }`.
-
-### context/ui-registry.md — fully updated
-- ResearchButton entry updated (two-state design, spinner pattern, sessionStorage warning).
-- TailoredResumeButton entry added.
-- Toaster entry added (three types, token classes).
-- ProfileForm save button updated (inline spinner).
-- **Standard spinner documented**: 24×24 SVG, faded circle + arc, `w-4 h-4 animate-spin`.
+### agent/generate-cover-letter.ts — language-aware generation
+- Imports `detectLanguage` + `LANGUAGE_NAMES` map (8 languages)
+- Concatenates `title + about_role + responsibilities + requirements` for detection
+- Adds to system prompt: "Write the entire letter in {language} — the job description is in {language}, so the letter must be too"
+- Also selects `title, responsibilities, requirements` in the job DB query (previously only selected `about_role`)
 
 ## Decisions made
 
-- **InsForge SDK JSONB workaround**: `insforge.database.rpc()` and `.update()` both silently drop JSONB-typed parameters. Always use `insforge.getHttpClient().post("/api/database/rpc/{fn}", body)` for any RPC that takes JSONB. This is not a one-off — affects any future RPC with JSONB params.
-- **Warning toast via sessionStorage**: `window.location.reload()` destroys React state. Cannot show a toast after reload. Pattern: store warning in sessionStorage before reload, read and clear in `useEffect` on mount. Established pattern for any post-reload notification.
-- **SpinnerIcon is the standard loading indicator**: 24×24 SVG with faded circle + arc, `w-4 h-4 animate-spin`. Replace the action icon while loading, restore it when done. All buttons follow this pattern.
-- **LinkedIn import**: Always normalise SPA collection/search URLs to canonical `/jobs/view/{id}/` for dedup and storage. Guest API is public (no auth required).
-- **extractEmbeddedState catch-all removed**: Generic `type="application/json"` script extraction was dangerous (matches analytics blobs). Only named framework patterns retained.
+- **react-pdf Image + public storage**: Pass the storage URL directly to `<Image src>`. React-pdf fetches it in Node.js during `renderToBuffer`. No need to pre-fetch or convert to base64. The `avatars` bucket is public so no auth needed.
+- **Avatar always .jpg**: AvatarCropModal outputs JPEG via canvas `toBlob('image/jpeg', 0.92)`. Always stored as `{userId}/avatar.jpg`. No extension ambiguity.
+- **Language detection at generation time**: No `language` column in DB. Detection runs fresh from all job text fields each time. Consistent between cover letter generation and PDF download.
+- **Combined job text for detection**: `[title, about_role, ...responsibilities, ...requirements].join(" ")` — handles jobs where `about_role` is sparse (e.g. URL import only captured the title).
 
 ## Problems solved
 
-- **InsForge SDK silently drops JSONB**: Fixed by bypassing SDK entirely and using `getHttpClient().post()` to path `/api/database/rpc/{fn}`.
-- **Warning toast destroyed by page reload**: Fixed with sessionStorage persistence pattern.
-- **emagine Angular SSR**: `stripHtml` stripped `<script id="ng-state">` leaving only 117 chars. Fixed with `extractEmbeddedState()`.
-- **Contact page ignoring addresses**: Stagehand "Ignore footers/marketing" prompt caused AI to skip addresses. Fixed with contact-page-specific prompt.
-- **Browserbase session leak on Stagehand init failure**: Fixed by storing `sessionId` before Stagehand constructor, `REQUEST_RELEASE` in `finally`.
-- **LinkedIn SPA URLs**: Collection/search URLs not previously handled. Fixed with `extractLinkedInJobId()`.
-- **fetchLinkedInJob CSS pollution**: `stripHtml` doesn't strip `<style>/<script>` content. Fixed by pre-stripping those tags.
+- **Avatar URL has `?v=...` cache param**: SDK download approach used regex to extract storage key, but `?v=c2df9540...` got included in the key, breaking the download. Fixed by using plain URL — bucket is public, no auth needed.
+- **Avatar not appearing in PDF**: Previous base64 approach was fragile (fetch → buffer → base64 → data URL). Switched to passing URL directly to react-pdf `Image` — it handles fetching internally.
+- **F&P job not detected as Danish**: `about_role` was only "Senior frontendudvikler (Nuxt) - Forsikring & Pension hjemmeside". Stop words absent. Fixed by adding "udvikler" and other Danish words to markers, and using all job text fields for detection.
+- **Cover letter generated in English for Danish jobs**: `generate-cover-letter.ts` had no language instruction. Fixed by detecting language and injecting "Write in {language}" into system prompt.
 
 ## Current state
 
-All features from this session are complete, reviewed, and imprinted:
-- Job import from LinkedIn (SPA + canonical URL) ✓
-- Job import from Angular SSR portals (ng-state extraction) ✓
-- Browser render fallback for pure SPAs (Stagehand/Browserbase) ✓
-- Company research save (JSONB fix) ✓
-- Warning toast when contact info / address not found ✓
-- Warning persists across page reload via sessionStorage ✓
-- Cover letter variety (5 strategies, temperature 0.9, banned phrases) ✓
-- Spinner on every loading button ✓
-- /review issues all fixed ✓
-- /imprint complete ✓
+- Avatar crop modal: fully working. File pick → crop modal → JPEG upload → URL saved to DB.
+- Cover letter PDF photo: passes URL directly to react-pdf `Image`. Photo toggle working (default on).
+- Cover letter header: phone, email (with auth fallback), portfolio — all dynamic from profile.
+- Language detection: expanded markers + all job text fields. Should correctly detect Danish from job titles/descriptions.
+- Language-aware cover letter generation: GPT-4o instructed to write in the detected language.
 
 ## Next session starts with
 
-Check `context/build-plan.md` and `context/progress-tracker.md` to identify the next planned feature. Feature 21 (Scheduled Job Alert Emails) is next on the plan — uses Resend for email, cron endpoint at `/api/cron/job-alerts` protected by `CRON_SECRET`. Or continue with user-directed UX polish.
+Check `context/build-plan.md` and `context/progress-tracker.md` to identify the next planned feature. Feature 21 (Scheduled Job Alert Emails) is next on the plan — Resend for email, cron endpoint at `/api/cron/job-alerts` protected by `CRON_SECRET`. Or continue with user-directed fixes.
 
 ## Open questions
 
-- InsForge SDK JSONB bug affects any future RPC with JSONB params. Consider documenting in `context/library-docs.md`.
-- Research quality depends on Stagehand reaching contact pages. No Stagehand fallback for research (only for job import). If a contact page is JS-heavy and the HTTP attempt fails, research may miss contact info.
+- Cover letter PDF photo: unconfirmed whether react-pdf successfully fetches the public URL. User should test after this session.
+- `overflow: hidden` + `borderRadius` on react-pdf `View` may not clip the image into a circle — it might render as a square. This is a known react-pdf limitation. If needed, the workaround is to clip the image client-side (already done via AvatarCropModal canvas) and trust the square crop will still look fine in the PDF.
+- InsForge SDK JSONB bug: still affects any future RPC with JSONB params. Document in `context/library-docs.md`.
 - Feature 13 company research ~60-120s — will timeout on Vercel free tier. Address at deployment.
-- Dashboard CompanyResearchChart is single child in 2-col grid — renders half-width on desktop. Consider col-span-2 or pairing with another card.
-- next/image OAuth avatar URLs — may need remotePatterns in next.config.ts if broken images appear.

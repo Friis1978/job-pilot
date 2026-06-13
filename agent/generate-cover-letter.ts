@@ -2,7 +2,19 @@ import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { computeSkillYears } from "@/lib/utils";
+import { detectLanguage } from "@/lib/detect-language";
 import type { WorkExperience } from "@/types";
+
+const LANGUAGE_NAMES: Record<string, string> = {
+  da: "Danish",
+  sv: "Swedish",
+  no: "Norwegian",
+  de: "German",
+  nl: "Dutch",
+  fr: "French",
+  es: "Spanish",
+  en: "English",
+};
 
 type Result = { success: boolean; error?: string };
 
@@ -25,7 +37,7 @@ export async function generateCoverLetter(
     insforge.database
       .from("jobs")
       .select(
-        "title, company, about_role, match_reason, matched_skills, missing_skills, company_research",
+        "title, company, about_role, responsibilities, requirements, match_reason, matched_skills, missing_skills, company_research",
       )
       .eq("id", jobId)
       .eq("user_id", userId)
@@ -53,6 +65,14 @@ export async function generateCoverLetter(
   const profile = profileRes.data;
 
   const tone = (profile.cover_letter_tone as string | null) ?? "Professional";
+  const allJobText = [
+    job.title ?? "",
+    job.about_role ?? "",
+    ...(job.responsibilities as string[] | null ?? []),
+    ...(job.requirements as string[] | null ?? []),
+  ].join(" ");
+  const langCode = detectLanguage(allJobText);
+  const language = LANGUAGE_NAMES[langCode] ?? "English";
   const workExp = (profile.work_experience as WorkExperience[] | null) ?? [];
   const recentWork = workExp
     .slice(0, 2)
@@ -86,6 +106,7 @@ export async function generateCoverLetter(
 Opening strategy for THIS letter: ${openingStrategy}
 
 Rules:
+- Write the entire letter in ${language} — the job description is in ${language}, so the letter must be too
 - NEVER start with "I" as the first word
 - NEVER use: "excited", "thrilled", "passion", "couldn't help", "perfect opportunity", "dream role", "long-time admirer", "ideal candidate", or any variant of these
 - Do NOT open with enthusiasm about the company — lead with substance, not flattery

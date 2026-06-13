@@ -97,7 +97,7 @@ export default async function JobDetailsPage({
 
   const { data: profileData } = await insforge.database
     .from("profiles")
-    .select("work_experience")
+    .select("work_experience, avatar_url")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -329,7 +329,7 @@ export default async function JobDetailsPage({
           </div>
 
           {/* Cover Letter */}
-          <CoverLetterSection jobId={job.id} initialCoverLetter={job.cover_letter} />
+          <CoverLetterSection jobId={job.id} initialCoverLetter={job.cover_letter} hasAvatar={!!profileData?.avatar_url} />
 
           {/* Apply Now */}
           {job.external_apply_url && (

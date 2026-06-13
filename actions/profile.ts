@@ -135,6 +135,34 @@ export async function saveProfile(
   }
 }
 
+export async function updateAvatarUrl(
+  url: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const insforge = await createInsforgeServer();
+    const { data, error: authError } = await insforge.auth.getCurrentUser();
+    if (authError || !data?.user) {
+      return { success: false, error: "Not authenticated" };
+    }
+
+    const { error: dbError } = await insforge.database
+      .from("profiles")
+      .update({ avatar_url: url })
+      .eq("id", data.user.id);
+
+    if (dbError) {
+      console.error("[actions/profile] updateAvatarUrl db error", dbError);
+      return { success: false, error: "Failed to save avatar URL" };
+    }
+
+    revalidatePath("/profile");
+    return { success: true };
+  } catch (error) {
+    console.error("[actions/profile] updateAvatarUrl", error);
+    return { success: false, error: "Failed to save avatar URL" };
+  }
+}
+
 export async function updateResumeUrl(
   url: string,
 ): Promise<{ success: boolean; error?: string }> {

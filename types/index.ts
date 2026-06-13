@@ -37,6 +37,7 @@ export type Profile = {
   portfolio_url: string | null;
   work_authorization: string | null;
   resume_pdf_url: string | null;
+  avatar_url: string | null;
   is_complete: boolean;
   created_at: string;
   updated_at: string;
