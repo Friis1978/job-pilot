@@ -49,7 +49,7 @@ function getBarColor(score: number): string {
 export function JobsTable({ jobs }: { jobs: JobRow[] }) {
   const router = useRouter();
   const [filter, setFilter] = useState<FilterOption>("all");
-  const [sort, setSort] = useState<SortOption>("newest");
+  const [sort, setSort] = useState<SortOption>("match_score");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [clearing, setClearing] = useState(false);

@@ -161,6 +161,10 @@ export function ProfileForm({ initialData, extractedFormData, userId }: Props) {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const workExperienceEndRef = useRef<HTMLDivElement>(null);
+  const [shouldScrollToRole, setShouldScrollToRole] = useState(false);
+  const [roleErrors, setRoleErrors] = useState<Record<string, Set<string>>>({});
+  const firstErrorRoleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!hasUnreviewedExtraction || saveSuccess) return;
@@ -203,21 +207,32 @@ export function ProfileForm({ initialData, extractedFormData, userId }: Props) {
   }
 
   function addRole() {
-    setField("workExperience", [
-      ...data.workExperience,
-      {
-        id: crypto.randomUUID(),
-        company: "",
-        title: "",
-        startDate: "",
-        endDate: "",
-        currentlyWorking: false,
-        responsibilities: "",
-        skills: [],
-        skillInput: "",
-      },
-    ]);
+    setData((prev) => ({
+      ...prev,
+      workExperience: [
+        ...prev.workExperience,
+        {
+          id: crypto.randomUUID(),
+          company: "",
+          title: "",
+          startDate: "",
+          endDate: "",
+          currentlyWorking: false,
+          responsibilities: "",
+          skills: [],
+          skillInput: "",
+        },
+      ],
+    }));
+    setShouldScrollToRole(true);
   }
+
+  useEffect(() => {
+    if (shouldScrollToRole && workExperienceEndRef.current) {
+      workExperienceEndRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      setShouldScrollToRole(false);
+    }
+  }, [shouldScrollToRole, data.workExperience.length]);
 
   function addRoleSkill(roleId: string) {
     setField(
@@ -327,6 +342,28 @@ export function ProfileForm({ initialData, extractedFormData, userId }: Props) {
       <form
         onSubmit={async (e) => {
           e.preventDefault();
+
+          // Validate work experience required fields
+          const errors: Record<string, Set<string>> = {};
+          for (const role of data.workExperience) {
+            const missing = new Set<string>();
+            if (!role.company.trim()) missing.add("company");
+            if (!role.title.trim()) missing.add("title");
+            if (!role.startDate.trim()) missing.add("startDate");
+            if (!role.currentlyWorking && !role.endDate.trim()) missing.add("endDate");
+            if (missing.size > 0) errors[role.id] = missing;
+          }
+
+          if (Object.keys(errors).length > 0) {
+            setRoleErrors(errors);
+            // Scroll to first invalid role on next paint
+            requestAnimationFrame(() => {
+              firstErrorRoleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+            return;
+          }
+
+          setRoleErrors({});
           setSaving(true);
           setSaveError(null);
           setSaveSuccess(false);
@@ -664,10 +701,20 @@ export function ProfileForm({ initialData, extractedFormData, userId }: Props) {
           )}
 
           <div className="flex flex-col gap-4">
-            {data.workExperience.map((role, index) => (
+            {data.workExperience.map((role, index) => {
+              const errs = roleErrors[role.id];
+              const isFirstError = errs && Object.keys(roleErrors)[0] === role.id;
+              return (
               <div
                 key={role.id}
-                className="border border-border rounded-xl p-4 flex flex-col gap-4"
+                ref={
+                  index === data.workExperience.length - 1
+                    ? workExperienceEndRef
+                    : isFirstError
+                      ? firstErrorRoleRef
+                      : undefined
+                }
+                className={`border rounded-xl p-4 flex flex-col gap-4 ${errs ? "border-error" : "border-border"}`}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-text-muted uppercase tracking-wide">
@@ -684,52 +731,67 @@ export function ProfileForm({ initialData, extractedFormData, userId }: Props) {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className={labelClass}>Company Name</label>
+                    <label className={labelClass}>Company Name <span className="text-error">*</span></label>
                     <input
                       type="text"
                       value={role.company}
-                      onChange={(e) => updateRole(role.id, "company", e.target.value)}
+                      onChange={(e) => {
+                        updateRole(role.id, "company", e.target.value);
+                        if (e.target.value.trim()) setRoleErrors((prev) => { const n = { ...prev }; n[role.id]?.delete("company"); if (!n[role.id]?.size) delete n[role.id]; return n; });
+                      }}
                       placeholder="Acme Inc."
-                      className={inputClass}
+                      className={`${inputClass} ${errs?.has("company") ? "border-error focus:ring-error focus:border-error" : ""}`}
                     />
                   </div>
                   <div>
-                    <label className={labelClass}>Job Title</label>
+                    <label className={labelClass}>Job Title <span className="text-error">*</span></label>
                     <input
                       type="text"
                       value={role.title}
-                      onChange={(e) => updateRole(role.id, "title", e.target.value)}
+                      onChange={(e) => {
+                        updateRole(role.id, "title", e.target.value);
+                        if (e.target.value.trim()) setRoleErrors((prev) => { const n = { ...prev }; n[role.id]?.delete("title"); if (!n[role.id]?.size) delete n[role.id]; return n; });
+                      }}
                       placeholder="Frontend Engineer"
-                      className={inputClass}
+                      className={`${inputClass} ${errs?.has("title") ? "border-error focus:ring-error focus:border-error" : ""}`}
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className={labelClass}>Start Date</label>
+                    <label className={labelClass}>Start Date <span className="text-error">*</span></label>
                     <input
                       type="month"
                       value={role.startDate}
-                      onChange={(e) => updateRole(role.id, "startDate", e.target.value)}
-                      className={inputClass}
+                      onChange={(e) => {
+                        updateRole(role.id, "startDate", e.target.value);
+                        if (e.target.value.trim()) setRoleErrors((prev) => { const n = { ...prev }; n[role.id]?.delete("startDate"); if (!n[role.id]?.size) delete n[role.id]; return n; });
+                      }}
+                      className={`${inputClass} ${errs?.has("startDate") ? "border-error focus:ring-error focus:border-error" : ""}`}
                     />
                   </div>
                   <div>
-                    <label className={labelClass}>End Date</label>
+                    <label className={labelClass}>End Date {!role.currentlyWorking && <span className="text-error">*</span>}</label>
                     <div className="flex items-center gap-3">
                       <input
                         type="month"
                         value={role.endDate}
                         disabled={role.currentlyWorking}
-                        onChange={(e) => updateRole(role.id, "endDate", e.target.value)}
-                        className={`flex-1 px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors disabled:bg-surface-secondary disabled:text-text-muted`}
+                        onChange={(e) => {
+                          updateRole(role.id, "endDate", e.target.value);
+                          if (e.target.value.trim()) setRoleErrors((prev) => { const n = { ...prev }; n[role.id]?.delete("endDate"); if (!n[role.id]?.size) delete n[role.id]; return n; });
+                        }}
+                        className={`flex-1 px-3 py-2 border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 bg-surface transition-colors disabled:bg-surface-secondary disabled:text-text-muted ${errs?.has("endDate") ? "border-error focus:ring-error focus:border-error" : "border-border focus:ring-accent focus:border-accent"}`}
                       />
                       <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0">
                         <input
                           type="checkbox"
                           checked={role.currentlyWorking}
-                          onChange={(e) => updateRole(role.id, "currentlyWorking", e.target.checked)}
+                          onChange={(e) => {
+                            updateRole(role.id, "currentlyWorking", e.target.checked);
+                            if (e.target.checked) setRoleErrors((prev) => { const n = { ...prev }; n[role.id]?.delete("endDate"); if (!n[role.id]?.size) delete n[role.id]; return n; });
+                          }}
                           className="w-4 h-4 rounded border-border accent-accent"
                         />
                         <span className="text-xs text-text-secondary">Currently working here</span>
@@ -816,7 +878,8 @@ export function ProfileForm({ initialData, extractedFormData, userId }: Props) {
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -968,6 +1031,37 @@ export function ProfileForm({ initialData, extractedFormData, userId }: Props) {
             </div>
           </div>
         </div>
+
+        {Object.keys(roleErrors).length > 0 && (() => {
+          const FIELD_LABELS: Record<string, string> = {
+            company: "Company Name",
+            title: "Job Title",
+            startDate: "Start Date",
+            endDate: "End Date",
+          };
+          const items: { roleIndex: number; field: string }[] = [];
+          data.workExperience.forEach((role, idx) => {
+            roleErrors[role.id]?.forEach((field) => {
+              items.push({ roleIndex: idx + 1, field });
+            });
+          });
+          return (
+            <div className="mt-6 rounded-xl border border-error/30 bg-error/5 px-4 py-3 flex flex-col gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-error">Missing required fields</p>
+              <ul className="flex flex-col gap-1">
+                {items.map(({ roleIndex, field }, i) => (
+                  <li key={i} className="flex items-center gap-2 text-sm text-error">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0">
+                      <circle cx="6" cy="6" r="5.5" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M6 3.5v3M6 8h.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                    </svg>
+                    Role {roleIndex} — {FIELD_LABELS[field] ?? field}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })()}
 
         {saveError && (
           <p className="mt-4 text-sm text-error text-center">{saveError}</p>

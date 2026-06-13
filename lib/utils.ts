@@ -1,6 +1,6 @@
 import type { WorkExperience } from "@/types";
 
-export const MATCH_THRESHOLD = 50;
+export const MATCH_THRESHOLD = 70;
 
 export function computeSkillYears(
   workExperience: WorkExperience[] | null | undefined,

@@ -15,7 +15,7 @@ export function SearchCard({ recentSearches = [] }: Props) {
   // Search tab state
   const [jobTitle, setJobTitle] = useState("");
   const [location, setLocation] = useState("");
-  const [minScore, setMinScore] = useState(50);
+  const [minScore, setMinScore] = useState(70);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
     jobsFound: number;

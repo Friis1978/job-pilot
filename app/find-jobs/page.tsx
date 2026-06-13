@@ -10,7 +10,7 @@ export default async function FindJobsPage() {
     data: { user },
   } = await insforge.auth.getCurrentUser();
 
-  const [jobsResult, searchesResult] = await Promise.allSettled([
+  const [jobsResult, searchesResult, profileResult] = await Promise.allSettled([
     insforge.database
       .from("jobs")
       .select("id, company, title, location, match_score, salary, found_at, matched_skills, status, source")
@@ -22,6 +22,11 @@ export default async function FindJobsPage() {
       .eq("user_id", user.id)
       .order("searched_at", { ascending: false })
       .limit(50),
+    insforge.database
+      .from("profiles")
+      .select("avatar_url")
+      .eq("id", user.id)
+      .maybeSingle(),
   ]);
 
   const jobs =
@@ -48,7 +53,7 @@ export default async function FindJobsPage() {
 
   return (
     <>
-      <Navbar user={{ name: user.user_metadata?.full_name ?? user.user_metadata?.name, email: user.email, avatarUrl: user.user_metadata?.avatar_url }} />
+      <Navbar user={{ name: user.user_metadata?.full_name ?? user.user_metadata?.name, email: user.email, avatarUrl: (profileResult.status === "fulfilled" ? (profileResult.value.data as { avatar_url?: string | null } | null)?.avatar_url : null) ?? user.user_metadata?.avatar_url }} />
       <main className="min-h-screen bg-background py-8">
         <div className="w-full max-w-360 mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-6 pb-12">
           <SearchCard recentSearches={recentSearches} />

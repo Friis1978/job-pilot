@@ -339,6 +339,11 @@ If title or company cannot be determined, return them as empty strings.`,
     event: "job_imported_from_url",
     properties: { userId, company: job.company, matchScore: scored.matchScore },
   });
+  posthog.capture({
+    distinctId: userId,
+    event: "job_found",
+    properties: { userId, source: "url_import", matchScore: scored.matchScore },
+  });
   await posthog.shutdown();
 
   return { success: true };

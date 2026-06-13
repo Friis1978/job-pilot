@@ -111,29 +111,9 @@ export async function getDashboardStats(userId: string): Promise<DashboardStats>
   };
 }
 
-// ── Jobs Found Over Time (last 30 days, daily) ───────────────────────────────
+// ── Jobs Found Over Time — type only (data built from DB in dashboard/page.tsx) ──
 
-export async function getJobsOverTime(userId: string): Promise<ChartPoint[]> {
-  const { results } = await hogql(
-    `SELECT toDate(timestamp) AS day, count() AS cnt
-     FROM events
-     WHERE event = 'job_found'
-       AND distinct_id = '${userId}'
-       AND timestamp >= now() - INTERVAL 30 DAY
-     GROUP BY day
-     ORDER BY day`,
-  );
-
-  const countByDay = new Map<string, number>(
-    results.map(([day, cnt]) => [String(day), Number(cnt)]),
-  );
-
-  const now = Date.now();
-  return Array.from({ length: 30 }, (_, i) => {
-    const d = new Date(now - (29 - i) * 24 * 60 * 60 * 1000);
-    return { label: utcDateLabel(d), value: countByDay.get(utcDateKey(d)) ?? 0 };
-  });
-}
+export type JobsOverTimePoint = { label: string; search: number; imported: number };
 
 // ── Match Score Distribution (all time, 5 buckets) ──────────────────────────
 

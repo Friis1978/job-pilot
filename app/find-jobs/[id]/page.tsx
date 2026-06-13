@@ -107,7 +107,7 @@ export default async function JobDetailsPage({
 
   return (
     <>
-      <Navbar user={{ name: user.user_metadata?.full_name ?? user.user_metadata?.name, email: user.email, avatarUrl: user.user_metadata?.avatar_url }} />
+      <Navbar user={{ name: user.user_metadata?.full_name ?? user.user_metadata?.name, email: user.email, avatarUrl: (profileData as { avatar_url?: string | null } | null)?.avatar_url ?? user.user_metadata?.avatar_url }} />
       <main className="min-h-screen bg-background py-8">
         <div className="w-full max-w-360 mx-auto px-4 sm:px-6 flex flex-col gap-5 pb-12">
 

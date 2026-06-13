@@ -1,6 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**.insforge.app",
+      },
+    ],
+  },
   serverExternalPackages: ["pdf-parse", "@react-pdf/renderer", "@browserbasehq/stagehand"],
   async rewrites() {
     return [
