@@ -5,8 +5,8 @@ import { searchJobs } from "@/lib/adzuna";
 import { searchJobsSweden } from "@/lib/jobtech";
 import { searchJobsJooble } from "@/lib/jooble";
 import { searchJobsCareerjet } from "@/lib/careerjet";
-import { searchJobsLinkedIn } from "@/lib/linkedin-jobs";
-import { MATCH_THRESHOLD, stripHtml } from "@/lib/utils";
+import { searchJobsGlassdoor } from "@/lib/glassdoor";
+import { MATCH_THRESHOLD, stripHtml, computeSkillYears } from "@/lib/utils";
 import type { Profile, AdzunaJob, NormalizedJob, ScoredJob } from "@/types";
 
 type ScoringResult = ScoredJob & { job: NormalizedJob };
@@ -18,7 +18,7 @@ type FindJobsResult = {
   error?: string;
 };
 
-type JobSource = "adzuna" | "jobtech" | "jooble" | "careerjet" | "linkedin";
+type JobSource = "adzuna" | "jobtech" | "jooble" | "careerjet" | "glassdoor";
 
 function detectSources(location: string): {
   sources: JobSource[];
@@ -30,14 +30,14 @@ function detectSources(location: string): {
       loc,
     )
   ) {
-    return { sources: ["jobtech", "jooble", "linkedin"], adzunaCountry: "se" };
+    return { sources: ["jobtech", "jooble", "glassdoor"], adzunaCountry: "se" };
   }
   if (
     /\bdk\b|denmark|danmark|copenhagen|k[øo]benhavn|aarhus|[åa]rhus|odense|aalborg/.test(
       loc,
     )
   ) {
-    return { sources: ["careerjet", "jooble", "linkedin"], adzunaCountry: "dk" };
+    return { sources: ["careerjet", "jooble", "glassdoor"], adzunaCountry: "dk" };
   }
   if (
     /\buk\b|united kingdom|england|scotland|wales|london|manchester|birmingham/.test(
@@ -80,8 +80,11 @@ export async function scoreJob(
   openai: OpenAI,
   searchedLocation: string,
 ): Promise<ScoringResult | null> {
+  const isRemoteSearch = /^remote$/i.test(searchedLocation.trim());
   const locationRule = searchedLocation
-    ? `- Location rule: The candidate is searching for jobs in "${searchedLocation}". If the job location does not match — and the job does not explicitly allow remote work — set matchScore to 0.`
+    ? isRemoteSearch
+      ? `- Location rule: The candidate is specifically looking for remote jobs. If the job does not explicitly offer remote work, set matchScore to 0.`
+      : `- Location rule: The candidate is searching for onsite jobs in "${searchedLocation}". If the job location does not match this location, set matchScore to 0 — this includes fully remote jobs, which do not satisfy an onsite location search.`
     : "";
 
   try {
@@ -119,7 +122,13 @@ Description: ${job.description}
 CANDIDATE:
 Current title: ${profile.current_title ?? "Not specified"}
 Experience: ${profile.years_experience ?? 0} years, ${profile.experience_level ?? "Not specified"}
-Skills: ${profile.skills?.join(", ") ?? "Not specified"}
+Skills: ${profile.skills?.join(", ") ?? "Not specified"}${(() => {
+              const sy = computeSkillYears(profile.work_experience);
+              const entries = Object.entries(sy).sort((a, b) => b[1] - a[1]);
+              return entries.length > 0
+                ? `\nSkill experience (years): ${entries.map(([s, y]) => `${s} ${y}yr`).join(", ")}`
+                : "";
+            })()}
 Recent work: ${JSON.stringify(
             profile.work_experience
               ?.slice(0, 2)
@@ -213,12 +222,11 @@ export async function findJobs(
     if (sources.includes("careerjet")) {
       fetches.push(searchJobsCareerjet(jobTitle, location));
     }
-    if (sources.includes("linkedin")) {
-      // LinkedIn location_filter uses full country name e.g. "Denmark" or "Sweden"
-      const linkedInLocation = /sweden|sverige|stockholm|g[öo]teborg|malm[öo]/i.test(location)
+    if (sources.includes("glassdoor")) {
+      const glassdoorLocation = /sweden|sverige|stockholm|g[öo]teborg|malm[öo]/i.test(location)
         ? "Sweden"
         : "Denmark";
-      fetches.push(searchJobsLinkedIn(jobTitle, linkedInLocation));
+      fetches.push(searchJobsGlassdoor(jobTitle, glassdoorLocation));
     }
 
     const settled = await Promise.allSettled(fetches);

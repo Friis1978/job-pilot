@@ -87,7 +87,7 @@ export default async function ProfilePage() {
     <>
       <Navbar user={{ name: authData.user?.user_metadata?.full_name ?? authData.user?.user_metadata?.name, email: authData.user?.email, avatarUrl: authData.user?.user_metadata?.avatar_url }} />
       <main className="min-h-screen bg-background py-8">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 flex flex-col gap-6 pb-12">
+        <div className="w-full max-w-360 mx-auto px-4 sm:px-6 flex flex-col gap-6 pb-12">
           <CompletionIndicator percentage={percentage} missingFields={missingFields} />
           <ProfilePageShell
             profile={profile}

@@ -12,6 +12,8 @@ type WorkExperienceEntry = {
   endDate: string;
   currentlyWorking: boolean;
   responsibilities: string;
+  skills: string[];
+  skillInput: string;
 };
 
 type FormData = {
@@ -100,6 +102,8 @@ function profileToFormData(p: Profile | null | undefined): FormData {
       endDate: r.endDate ?? "",
       currentlyWorking: r.currentlyWorking ?? false,
       responsibilities: r.responsibilities ?? "",
+      skills: r.skills ?? [],
+      skillInput: "",
     })),
     highestDegree: edu?.degree ?? "",
     fieldOfStudy: edu?.field ?? "",
@@ -130,7 +134,7 @@ function mergeExtracted(
     skills: extracted.skills?.length ? extracted.skills : base.skills,
     industries: extracted.industries?.length ? extracted.industries : base.industries,
     workExperience: extracted.workExperience?.length
-      ? extracted.workExperience.map((r) => ({ ...r, id: crypto.randomUUID() }))
+      ? extracted.workExperience.map((r) => ({ ...r, id: crypto.randomUUID(), skills: r.skills ?? [], skillInput: "" }))
       : base.workExperience,
     highestDegree: extracted.highestDegree || base.highestDegree,
     fieldOfStudy: extracted.fieldOfStudy || base.fieldOfStudy,
@@ -202,8 +206,51 @@ export function ProfileForm({ initialData, extractedFormData }: Props) {
         endDate: "",
         currentlyWorking: false,
         responsibilities: "",
+        skills: [],
+        skillInput: "",
       },
     ]);
+  }
+
+  function addRoleSkill(roleId: string) {
+    setField(
+      "workExperience",
+      data.workExperience.map((r) => {
+        if (r.id !== roleId) return r;
+        const trimmed = r.skillInput.trim();
+        if (!trimmed || r.skills.includes(trimmed)) return { ...r, skillInput: "" };
+        return { ...r, skills: [...r.skills, trimmed], skillInput: "" };
+      }),
+    );
+  }
+
+  function removeRoleSkill(roleId: string, skill: string) {
+    setField(
+      "workExperience",
+      data.workExperience.map((r) =>
+        r.id === roleId ? { ...r, skills: r.skills.filter((s) => s !== skill) } : r,
+      ),
+    );
+  }
+
+  function updateRoleSkillInput(roleId: string, value: string) {
+    setField(
+      "workExperience",
+      data.workExperience.map((r) =>
+        r.id === roleId ? { ...r, skillInput: value } : r,
+      ),
+    );
+  }
+
+  function addRoleSkillDirect(roleId: string, skill: string) {
+    setField(
+      "workExperience",
+      data.workExperience.map((r) =>
+        r.id === roleId && !r.skills.includes(skill)
+          ? { ...r, skills: [...r.skills, skill] }
+          : r,
+      ),
+    );
   }
 
   function removeRole(id: string) {
@@ -244,7 +291,12 @@ export function ProfileForm({ initialData, extractedFormData }: Props) {
           setSaving(true);
           setSaveError(null);
           setSaveSuccess(false);
-          const result = await saveProfile(data);
+          const result = await saveProfile({
+            ...data,
+            workExperience: data.workExperience.map(
+              ({ skillInput: _si, ...r }) => r,
+            ),
+          });
           setSaving(false);
           if (result.success) {
             setSaveSuccess(true);
@@ -603,6 +655,73 @@ export function ProfileForm({ initialData, extractedFormData }: Props) {
                     className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-none"
                   />
                 </div>
+
+                <div>
+                  <label className={labelClass}>Skills Used</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={role.skillInput}
+                      onChange={(e) => updateRoleSkillInput(role.id, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addRoleSkill(role.id);
+                        }
+                      }}
+                      placeholder="Add a skill used in this role"
+                      className={inputClass}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => addRoleSkill(role.id)}
+                      className="shrink-0 px-4 py-2 border border-border rounded-lg text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  {role.skills.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {role.skills.map((skill) => (
+                        <span
+                          key={skill}
+                          className="flex items-center gap-1.5 px-3 py-1 bg-surface-secondary border border-border rounded-full text-xs font-medium text-text-primary"
+                        >
+                          {skill}
+                          <button
+                            type="button"
+                            onClick={() => removeRoleSkill(role.id, skill)}
+                            className="text-text-muted hover:text-text-primary transition-colors"
+                            aria-label={`Remove ${skill}`}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                              <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                            </svg>
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {data.skills.filter((s) => !role.skills.includes(s)).length > 0 && (
+                    <div className="mt-2.5">
+                      <p className="text-xs text-text-muted mb-1.5">From your profile:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {data.skills
+                          .filter((s) => !role.skills.includes(s))
+                          .map((skill) => (
+                            <button
+                              key={skill}
+                              type="button"
+                              onClick={() => addRoleSkillDirect(role.id, skill)}
+                              className="px-2.5 py-0.5 border border-dashed border-border rounded-full text-xs text-text-secondary hover:border-accent hover:text-accent transition-colors"
+                            >
+                              + {skill}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -767,8 +886,14 @@ export function ProfileForm({ initialData, extractedFormData }: Props) {
         <button
           type="submit"
           disabled={saving}
-          className="mt-4 w-full py-3 bg-accent text-accent-foreground text-sm font-medium rounded-lg hover:bg-accent-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          className="mt-4 w-full py-3 flex items-center justify-center gap-2 bg-accent text-accent-foreground text-sm font-medium rounded-lg hover:bg-accent-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         >
+          {saving && (
+            <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          )}
           {saving ? "Saving…" : "Save Profile"}
         </button>
       </form>

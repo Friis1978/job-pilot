@@ -1,8 +1,18 @@
 import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
+import { computeSkillYears } from "@/lib/utils";
+import type { WorkExperience } from "@/types";
 
 type Result = { success: boolean; error?: string };
+
+const OPENING_STRATEGIES = [
+  "Lead with a specific result or achievement from the candidate's past that directly maps to what this role needs. Make the first sentence about impact, not excitement.",
+  "Open with a concrete observation about the company — something specific from the research (a product, a market position, a challenge they face) — then connect it to why the candidate's background is relevant.",
+  "Start by naming the exact problem or challenge this role is meant to solve, then immediately show how the candidate has already solved something similar.",
+  "Begin in the middle of a story: a specific project, moment, or technical decision the candidate made that is directly relevant to this company's work. No preamble.",
+  "Open with a direct statement of fit: what the candidate brings + what the role needs, stated plainly and confidently. No flattery, no 'thrilled to apply'.",
+];
 
 export async function generateCoverLetter(
   userId: string,
@@ -43,10 +53,17 @@ export async function generateCoverLetter(
   const profile = profileRes.data;
 
   const tone = (profile.cover_letter_tone as string | null) ?? "Professional";
-  const recentWork = ((profile.work_experience as { title: string; company: string; responsibilities?: string }[] | null) ?? [])
+  const workExp = (profile.work_experience as WorkExperience[] | null) ?? [];
+  const recentWork = workExp
     .slice(0, 2)
     .map((w) => `${w.title} at ${w.company}${w.responsibilities ? ": " + w.responsibilities : ""}`)
     .join("\n");
+
+  const skillYears = computeSkillYears(workExp);
+  const skillYearsStr = Object.entries(skillYears)
+    .sort((a, b) => b[1] - a[1])
+    .map(([s, y]) => `${s} ${y}yr`)
+    .join(", ");
 
   const companyContext = job.company_research
     ? `COMPANY RESEARCH:\n${JSON.stringify(job.company_research, null, 2)}`
@@ -55,24 +72,31 @@ export async function generateCoverLetter(
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+    const openingStrategy = OPENING_STRATEGIES[Math.floor(Math.random() * OPENING_STRATEGIES.length)];
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
-      temperature: 0.7,
+      temperature: 0.9,
       max_tokens: 800,
       messages: [
         {
           role: "system",
           content: `You are an expert cover letter writer. Write a compelling, personalised cover letter in a ${tone} tone.
 
+Opening strategy for THIS letter: ${openingStrategy}
+
 Rules:
-- Address it to the hiring team at the company (no "Dear Sir/Madam")
-- Open with a strong hook specific to this role and company — not a generic opener
-- Connect the candidate's actual experience and skills directly to what the role requires
-- Acknowledge gap skills honestly but frame them as a growth opportunity
-- Reference specific things about the company if research is provided
-- Close with a clear call to action
-- Keep it to 3–4 paragraphs — no longer
-- Do NOT include a subject line, date, address block, or signature — just the letter body
+- NEVER start with "I" as the first word
+- NEVER use: "excited", "thrilled", "passion", "couldn't help", "perfect opportunity", "dream role", "long-time admirer", "ideal candidate", or any variant of these
+- Do NOT open with enthusiasm about the company — lead with substance, not flattery
+- Address it to the hiring team at the company (no "Dear Sir/Madam", no "To Whom It May Concern")
+- Every claim must be grounded in the candidate's actual experience — no vague assertions
+- Connect specific past work to what this role actually requires
+- If company research is provided, reference one concrete specific detail (not generic praise)
+- Acknowledge skill gaps honestly and briefly — one sentence max, frame as adjacent strength or quick ramp
+- Close with a direct, confident call to action — not "I hope to hear from you"
+- 3–4 paragraphs, no longer
+- Do NOT include subject line, date, address block, or signature — just the letter body
 - Write in first person as the candidate`,
         },
         {
@@ -89,7 +113,7 @@ CANDIDATE:
 Name: ${profile.full_name ?? "Not provided"}
 Current title: ${profile.current_title ?? "Not provided"}
 Experience: ${profile.years_experience ?? 0} years
-Skills: ${(profile.skills as string[] | null)?.join(", ") ?? "Not provided"}
+Skills: ${(profile.skills as string[] | null)?.join(", ") ?? "Not provided"}${skillYearsStr ? `\nSkill experience (years): ${skillYearsStr}` : ""}
 Recent work:
 ${recentWork || "Not provided"}`,
         },

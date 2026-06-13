@@ -5,6 +5,7 @@ export type WorkExperience = {
   endDate: string;
   currentlyWorking: boolean;
   responsibilities: string;
+  skills?: string[];
 };
 
 export type Education = {
@@ -45,6 +46,7 @@ export type JobRow = {
   id: string;
   company: string;
   title: string;
+  location: string | null;
   match_score: number;
   salary: string | null;
   found_at: string;
@@ -79,12 +81,12 @@ export type NormalizedJob = {
   id: string;
   title: string;
   company: string;
-  location: string;
+  location: string | null;
   description: string;
   url: string;
   salary?: string | null;
   job_type?: string | null;
-  source: "adzuna" | "jobtech" | "jooble" | "careerjet" | "linkedin" | "url";
+  source: "adzuna" | "jobtech" | "jooble" | "careerjet" | "glassdoor" | "url";
 };
 
 export type ProfileFormInput = {
@@ -108,6 +110,7 @@ export type ProfileFormInput = {
     endDate: string;
     currentlyWorking: boolean;
     responsibilities: string;
+    skills?: string[];
   }[];
   highestDegree: string;
   fieldOfStudy: string;

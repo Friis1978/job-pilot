@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createInsforgeServer } from "@/lib/insforge-server";
-import { formatDateAgo } from "@/lib/utils";
+import { formatDateAgo, computeSkillYears } from "@/lib/utils";
+import type { Profile } from "@/types";
 import { Navbar } from "@/components/layout/Navbar";
 import { ResearchButton } from "@/components/find-jobs/ResearchButton";
 import { CoverLetterSection } from "@/components/find-jobs/CoverLetterSection";
@@ -9,8 +10,19 @@ import { TailoredResumeButton } from "@/components/find-jobs/TailoredResumeButto
 import { StatusBadge } from "@/components/find-jobs/StatusBadge";
 import type { JobStatus } from "@/components/find-jobs/StatusBadge";
 
+type ContactInfo = {
+  name: string | null;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  company?: string | null;
+};
+
 type CompanyDossier = {
   companyOverview: string;
+  companyAddress: string | null;
+  contactInfo: ContactInfo | null;
+  recruiterContact: ContactInfo | null;
   techStack: string[];
   culture: string[];
   whyThisRole: string;
@@ -82,11 +94,21 @@ export default async function JobDetailsPage({
   if (error || !data) notFound();
   const job = data as Job;
 
+  const { data: profileData } = await insforge.database
+    .from("profiles")
+    .select("work_experience")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const skillYears = computeSkillYears(
+    (profileData as Pick<Profile, "work_experience"> | null)?.work_experience,
+  );
+
   return (
     <>
       <Navbar user={{ name: user.user_metadata?.full_name ?? user.user_metadata?.name, email: user.email, avatarUrl: user.user_metadata?.avatar_url }} />
       <main className="min-h-screen bg-background py-8">
-        <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 flex flex-col gap-5 pb-12">
+        <div className="w-full max-w-360 mx-auto px-4 sm:px-6 flex flex-col gap-5 pb-12">
 
           {/* Back to Jobs */}
           <Link
@@ -179,15 +201,28 @@ export default async function JobDetailsPage({
                 <div className="mb-4">
                   <p className="text-sm text-text-secondary mb-2">You have</p>
                   <div className="flex flex-wrap gap-2">
-                    {job.matched_skills!.map((skill) => (
-                      <span
-                        key={skill}
-                        className="flex items-center gap-1 px-3 py-1 bg-success-lightest text-success-foreground rounded-full text-sm font-medium"
-                      >
-                        <CheckIcon className="w-3.5 h-3.5 shrink-0" />
-                        {skill}
-                      </span>
-                    ))}
+                    {job.matched_skills!.map((skill) => {
+                      const yrs =
+                        skillYears[skill] ??
+                        skillYears[
+                          Object.keys(skillYears).find(
+                            (k) => k.toLowerCase() === skill.toLowerCase(),
+                          ) ?? ""
+                        ] ??
+                        null;
+                      return (
+                        <span
+                          key={skill}
+                          className="flex items-center gap-1 px-3 py-1 bg-success-lightest text-success-foreground rounded-full text-sm font-medium"
+                        >
+                          <CheckIcon className="w-3.5 h-3.5 shrink-0" />
+                          {skill}
+                          {yrs != null && (
+                            <span className="opacity-70 font-normal">· {yrs}yr</span>
+                          )}
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -321,6 +356,48 @@ function CompanyDossierDisplay({ dossier }: { dossier: CompanyDossier }) {
             <p className="text-sm font-semibold text-text-primary">Company Overview</p>
           </div>
           <p className="text-sm text-text-secondary leading-relaxed">{dossier.companyOverview}</p>
+        </div>
+      )}
+
+      {/* Address & Contact Info */}
+      {(dossier.companyAddress || dossier.contactInfo || dossier.recruiterContact) && (
+        <div className="bg-surface border border-border rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <PinIcon className="w-4 h-4 text-accent shrink-0" />
+            <p className="text-sm font-semibold text-text-primary">Address &amp; Contact</p>
+          </div>
+          <div className="flex flex-col gap-3">
+            {dossier.companyAddress && (
+              <div className="flex items-start gap-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-text-muted w-20 shrink-0 mt-0.5">Address</span>
+                <span className="text-sm text-text-primary">{dossier.companyAddress}</span>
+              </div>
+            )}
+            {dossier.contactInfo && (dossier.contactInfo.name || dossier.contactInfo.email || dossier.contactInfo.phone) && (
+              <>
+                {(dossier.companyAddress || dossier.recruiterContact) && (
+                  <div className="border-t border-border pt-3 mt-0">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-text-muted mb-2">Hiring Contact</p>
+                  </div>
+                )}
+                <ContactRow label="Name" value={dossier.contactInfo.name} suffix={dossier.contactInfo.title} />
+                <ContactRow label="Email" value={dossier.contactInfo.email} href={`mailto:${dossier.contactInfo.email}`} />
+                <ContactRow label="Phone" value={dossier.contactInfo.phone} href={`tel:${dossier.contactInfo.phone}`} />
+              </>
+            )}
+            {dossier.recruiterContact && (dossier.recruiterContact.name || dossier.recruiterContact.email || dossier.recruiterContact.phone) && (
+              <>
+                <div className="border-t border-border pt-3 mt-0">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted mb-2">
+                    Recruiter{dossier.recruiterContact.company ? ` · ${dossier.recruiterContact.company}` : ""}
+                  </p>
+                </div>
+                <ContactRow label="Name" value={dossier.recruiterContact.name} suffix={dossier.recruiterContact.title} />
+                <ContactRow label="Email" value={dossier.recruiterContact.email} href={`mailto:${dossier.recruiterContact.email}`} />
+                <ContactRow label="Phone" value={dossier.recruiterContact.phone} href={`tel:${dossier.recruiterContact.phone}`} />
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -492,6 +569,24 @@ function InfoCard({
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ContactRow({ label, value, suffix, href }: { label: string; value: string | null | undefined; suffix?: string | null; href?: string }) {
+  if (!value) return null;
+  return (
+    <div className="flex items-start gap-3">
+      <span className="text-xs font-semibold uppercase tracking-wide text-text-muted w-20 shrink-0 mt-0.5">{label}</span>
+      {href ? (
+        <a href={href} className="text-sm text-accent hover:text-accent-dark transition-colors">
+          {value}{suffix && <span className="text-text-muted"> · {suffix}</span>}
+        </a>
+      ) : (
+        <span className="text-sm text-text-primary">
+          {value}{suffix && <span className="text-text-muted"> · {suffix}</span>}
+        </span>
+      )}
     </div>
   );
 }

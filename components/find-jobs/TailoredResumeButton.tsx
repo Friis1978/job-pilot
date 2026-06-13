@@ -44,7 +44,11 @@ export function TailoredResumeButton({ jobId, companyName, hasResearch }: Props)
         disabled={loading}
         className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium transition-colors hover:bg-accent-dark disabled:opacity-60 disabled:cursor-not-allowed"
       >
-        <DocumentIcon className="w-4 h-4 shrink-0" />
+        {loading ? (
+          <SpinnerIcon className="w-4 h-4 shrink-0 animate-spin" />
+        ) : (
+          <DocumentIcon className="w-4 h-4 shrink-0" />
+        )}
         {loading ? "Generating..." : "Download Tailored Resume"}
       </button>
       {!hasResearch && (
@@ -53,6 +57,15 @@ export function TailoredResumeButton({ jobId, companyName, hasResearch }: Props)
         </p>
       )}
     </div>
+  );
+}
+
+function SpinnerIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
   );
 }
 

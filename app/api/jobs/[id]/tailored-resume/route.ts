@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import { createElement, type ReactElement } from "react";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
+import { computeSkillYears } from "@/lib/utils";
 import { ResumePDF } from "@/app/api/resume/ResumePDF";
 import type { Profile } from "@/types";
 import type { DocumentProps } from "@react-pdf/renderer";
@@ -44,6 +45,7 @@ type GeneratedContent = {
     endDate: string;
     currentlyWorking: boolean;
     bullets: string[];
+    skills?: string[];
   }[];
 };
 
@@ -95,6 +97,12 @@ export async function POST(
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+    const skillYears = computeSkillYears(profile.work_experience);
+    const skillYearsStr = Object.entries(skillYears)
+      .sort((a, b) => b[1] - a[1])
+      .map(([s, y]) => `${s} ${y}yr`)
+      .join(", ");
+
     const profileInput = {
       fullName: profile.full_name,
       currentTitle: profile.current_title,
@@ -116,7 +124,7 @@ export async function POST(
           content: `TARGET ROLE: ${job.title} at ${job.company}
 Job description: ${job.about_role ?? "Not provided"}
 Skills this role requires that the candidate has: ${(job.matched_skills as string[] | null)?.join(", ") ?? "None"}
-Skills the candidate is missing: ${(job.missing_skills as string[] | null)?.join(", ") ?? "None"}
+Skills the candidate is missing: ${(job.missing_skills as string[] | null)?.join(", ") ?? "None"}${skillYearsStr ? `\nCandidate's skill experience (years per skill): ${skillYearsStr}` : ""}
 ${companyContext}
 
 CANDIDATE PROFILE:
@@ -136,6 +144,21 @@ ${JSON.stringify(profileInput, null, 2)}`,
     } catch {
       return NextResponse.json({ error: "Generation failed. Please try again." }, { status: 500 });
     }
+
+    // Merge per-role skills from profile, prioritising job-relevant skills first
+    const jobSkillsLower = new Set(
+      (job.matched_skills as string[] | null ?? []).map((s) => s.toLowerCase()),
+    );
+    generated.workExperience = generated.workExperience.map((role, i) => {
+      const roleSkills = profile.work_experience?.[i]?.skills;
+      if (!roleSkills?.length) return role;
+      const sorted = [...roleSkills].sort((a, b) => {
+        const aMatch = jobSkillsLower.has(a.toLowerCase()) ? 0 : 1;
+        const bMatch = jobSkillsLower.has(b.toLowerCase()) ? 0 : 1;
+        return aMatch - bMatch;
+      });
+      return { ...role, skills: sorted };
+    });
 
     const element = createElement(
       ResumePDF,

@@ -1,4 +1,31 @@
+import type { WorkExperience } from "@/types";
+
 export const MATCH_THRESHOLD = 50;
+
+export function computeSkillYears(
+  workExperience: WorkExperience[] | null | undefined,
+): Record<string, number> {
+  const skillYears: Record<string, number> = {};
+  for (const role of workExperience ?? []) {
+    if (!role.skills?.length) continue;
+    const start = role.startDate ? new Date(role.startDate + "-01") : null;
+    if (!start || isNaN(start.getTime())) continue;
+    const end = role.currentlyWorking
+      ? new Date()
+      : role.endDate
+        ? new Date(role.endDate + "-01")
+        : null;
+    if (!end || isNaN(end.getTime())) continue;
+    const years =
+      Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+    for (const skill of role.skills) {
+      skillYears[skill] = (skillYears[skill] ?? 0) + years;
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(skillYears).map(([k, v]) => [k, Math.round(v * 10) / 10]),
+  );
+}
 
 export function stripHtml(html: string): string {
   return html

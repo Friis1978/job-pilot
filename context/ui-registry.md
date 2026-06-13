@@ -56,7 +56,7 @@ After building any component — update this file with the component name, file 
 
 ### ProfileForm
 **File:** `components/profile/ProfileForm.tsx`
-**Pattern:** Client component (`"use client"`). Single card with 5 subsections separated by `border-t border-border` + `SectionDivider` helper. Labels: `text-xs font-medium uppercase tracking-wide text-text-secondary`. Inputs: `border border-border rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-accent`. Selects: same + `appearance-none` + custom chevron SVG overlay. Tag inputs: text input + Add button row, tags as `bg-surface-secondary border border-border rounded-full px-3 py-1` pills with × SVG remove button. Work experience: array of role cards (`border border-border rounded-xl p-4`) with add/remove. Save Profile: `w-full py-3 bg-accent text-accent-foreground rounded-lg` at bottom.
+**Pattern:** Client component (`"use client"`). Single card with 5 subsections separated by `border-t border-border` + `SectionDivider` helper. Labels: `text-xs font-medium uppercase tracking-wide text-text-secondary`. Inputs: `border border-border rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-accent`. Selects: same + `appearance-none` + custom chevron SVG overlay. Tag inputs: text input + Add button row, tags as `bg-surface-secondary border border-border rounded-full px-3 py-1` pills with × SVG remove button. Work experience: array of role cards (`border border-border rounded-xl p-4`) with add/remove. Save Profile: `w-full py-3 bg-accent text-accent-foreground rounded-lg flex items-center justify-center gap-2` at bottom — shows inline SpinnerIcon (`w-4 h-4 animate-spin shrink-0`) while saving, with `disabled` + `opacity-60 cursor-not-allowed`. Text: "Save Profile" → "Saving...".
 
 ### SearchCard (Find Jobs)
 **File:** `components/find-jobs/SearchCard.tsx`
@@ -97,4 +97,31 @@ After building any component — update this file with the component name, file 
 
 ### ResearchButton (Find Jobs / Job Details)
 **File:** `components/find-jobs/ResearchButton.tsx`
-**Pattern:** Client component (`"use client"`). Props: `{ jobId: string }`. Wrapper: `flex flex-col items-end gap-2`. Button: `flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium transition-colors`. Loading/done state appends `opacity-60 cursor-not-allowed`. Hover (when enabled): `hover:bg-accent-dark`. Text: "Research Company" → "Researching..." → "Research Complete". SearchIcon SVG defined inline (same path as in page.tsx). Error: `text-sm text-error` below the button. On success: `setDone(true)` then `router.refresh()` — server component re-fetches, company_research now non-null, conditional flips to show dossier, button disappears.
+**Last updated:** 2026-06-13
+**Pattern:** Client component (`"use client"`). Props: `{ jobId: string; hasResearch?: boolean }`. Two distinct button states:
+
+**Primary state** (`hasResearch=false`): `flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium transition-colors`. Loading: appends `opacity-60 cursor-not-allowed`; enabled: `hover:bg-accent-dark`. Icon swaps: `SearchIcon` → `SpinnerIcon` while loading. Text: "Research Company" → "Researching...".
+
+**Re-run state** (`hasResearch=true`): `flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed`. Uses `RefreshIcon` which adds `animate-spin` while loading. Text: "Re-run" → "Re-researching...".
+
+**Warning persistence pattern**: `sessionStorage.getItem(RESEARCH_WARNING_KEY)` in `useEffect` on mount — reads and clears warning stored before `window.location.reload()`. Enables toast to survive page navigation. On success with warning: `sessionStorage.setItem(RESEARCH_WARNING_KEY, json.warning)` before `window.location.reload()`.
+
+**Spinner pattern** (SpinnerIcon): 24×24 viewBox, `fill="none"`. Two elements: `<circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />` + `<path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />`. Applied with `className="w-4 h-4 animate-spin"`. This is the **standard loading spinner** — use across all buttons where the icon swaps while loading.
+
+### TailoredResumeButton (Find Jobs / Job Details)
+**File:** `components/find-jobs/TailoredResumeButton.tsx`
+**Last updated:** 2026-06-13
+**Pattern:** Client component (`"use client"`). Props: `{ jobId: string; companyName: string; hasResearch: boolean }`. Button: `flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium transition-colors hover:bg-accent-dark disabled:opacity-60 disabled:cursor-not-allowed`. Icon swaps: `DocumentIcon` → `SpinnerIcon` (`w-4 h-4 animate-spin`) while loading. Text: "Download Tailored Resume" → "Generating...". On success: triggers file download via `URL.createObjectURL(blob)` + temporary `<a>` element. Filename pattern: `resume-{company-slug}.pdf`. Optional tip text below: `text-xs text-text-muted` when `!hasResearch`.
+
+### Toaster (UI Infrastructure)
+**File:** `components/ui/Toaster.tsx`
+**Last updated:** 2026-06-13
+**Pattern:** Client component (`"use client"`). Fixed position: `fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none`. Each toast: `flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium max-w-sm pointer-events-auto`. Auto-dismisses after 5000ms. Three types:
+
+| Type | Classes |
+| ---- | ------- |
+| error | `bg-surface border-error text-error` + ErrorIcon (circle with !) |
+| warning | `bg-surface border-warning text-warning` + WarningIcon (triangle with !) |
+| success | `bg-surface border-success text-success-foreground` + CheckIcon |
+
+Icons: 20×20 viewBox, `fill="currentColor"`, `w-4 h-4 shrink-0 mt-0.5`. Triggered via `window.dispatchEvent(new CustomEvent("app:toast", { detail: { message, type } }))` from `lib/toast.ts`. Default type is `"error"` when no type given.

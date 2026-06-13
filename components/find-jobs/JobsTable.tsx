@@ -264,22 +264,25 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[20%]">
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[18%]">
                     Company
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[22%]">
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[20%]">
                     Role
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[18%]">
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[12%]">
+                    Location
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[16%]">
                     Match Score
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[12%]">
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[10%]">
                     Salary Est.
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[12%]">
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[10%]">
                     Status
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[10%]">
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[8%]">
                     Date Found
                   </th>
                   <th className="px-4 py-4 w-[6%]" />
@@ -301,17 +304,18 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                           <span className="text-sm font-semibold text-text-primary">
                             {job.company}
                           </span>
-                          {job.source === "url" && (
-                            <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-info-lightest text-info-foreground border border-info-light w-fit">
-                              Imported
-                            </span>
-                          )}
+                          <SourceBadge source={job.source} />
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm text-text-primary">
                         {job.title}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-text-muted">
+                        {job.location ?? "—"}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -410,6 +414,24 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
         )}
       </div>
     </div>
+  );
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  jobtech: "Jobtech",
+  jooble: "Jooble",
+  careerjet: "Careerjet",
+  adzuna: "Adzuna",
+  glassdoor: "Glassdoor",
+  url: "Imported",
+};
+
+function SourceBadge({ source }: { source: string }) {
+  const label = SOURCE_LABELS[source] ?? source;
+  return (
+    <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-surface-secondary text-text-muted border border-border w-fit">
+      {label}
+    </span>
   );
 }
 

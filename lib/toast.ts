@@ -1,4 +1,4 @@
-export function toast(message: string, type: "error" | "success" = "error") {
+export function toast(message: string, type: "error" | "success" | "warning" = "error") {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent("app:toast", { detail: { message, type } }),

@@ -9,18 +9,31 @@ import type { Profile } from "@/types";
 type ResearchCompanyResult = {
   success: boolean;
   error?: string;
+  warning?: string;
+};
+
+type ContactInfo = {
+  name: string | null;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  company?: string | null;
 };
 
 type CompanyResearchRaw = {
   oneLiner: string;
   productSummary: string;
   signals: string[];
+  address: string | null;
   subPages: Array<{
     keyPoints: string[];
     technologies: string[];
     valuesOrCulture: string[];
     notable: string[];
+    address: string | null;
   }>;
+  contactFromJobPosting: ContactInfo | null;
+  recruiterContact: ContactInfo | null;
   sourceUrls: string[];
 };
 
@@ -40,6 +53,7 @@ const homepageSchema = z.object({
         url: z.string(),
         kind: z.enum([
           "about",
+          "contact",
           "careers",
           "blog",
           "engineering",
@@ -50,6 +64,19 @@ const homepageSchema = z.object({
       }),
     )
     .describe("Internal links worth visiting"),
+});
+
+const jobPostingContactSchema = z.object({
+  contactName: z.string().nullable().describe("Internal hiring manager or HR contact full name (works at the hiring company)"),
+  contactTitle: z.string().nullable().describe("Their job title e.g. 'IT-udviklingschef', 'HR Manager'"),
+  contactEmail: z.string().nullable().describe("Internal contact email address"),
+  contactPhone: z.string().nullable().describe("Internal contact phone number"),
+  companyAddress: z.string().nullable().describe("Full postal address of the hiring company if shown on this page"),
+  recruiterName: z.string().nullable().describe("External recruiter full name (works at a recruiting/staffing agency, NOT the hiring company)"),
+  recruiterTitle: z.string().nullable().describe("Recruiter's job title"),
+  recruiterEmail: z.string().nullable().describe("Recruiter's email address"),
+  recruiterPhone: z.string().nullable().describe("Recruiter's phone number"),
+  recruiterCompany: z.string().nullable().describe("Name of the recruiting/staffing agency"),
 });
 
 const subPageSchema = z.object({
@@ -65,9 +92,30 @@ const subPageSchema = z.object({
   notable: z
     .array(z.string())
     .describe("Customers, funding, scale, projects, awards"),
+  address: z
+    .string()
+    .nullable()
+    .describe("Full physical/postal address of the company if found on this page, otherwise null"),
+  contactName: z
+    .string()
+    .nullable()
+    .describe("Full name of a contact person (HR manager, hiring contact, or general enquiry contact) found on this page, otherwise null"),
+  contactTitle: z
+    .string()
+    .nullable()
+    .describe("Job title of the contact person, otherwise null"),
+  contactEmail: z
+    .string()
+    .nullable()
+    .describe("Email address of the contact person or general enquiry email, otherwise null"),
+  contactPhone: z
+    .string()
+    .nullable()
+    .describe("Phone number of the contact person or general enquiry phone, otherwise null"),
 });
 
 const PREFERRED_PAGE_KINDS = [
+  "contact",
   "about",
   "blog",
   "engineering",
@@ -247,7 +295,7 @@ export async function researchCompany(
             },
             {
               role: "user",
-              content: `Company: ${job.company}`,
+              content: `Company: ${job.company}\nJob title: ${job.title}\nJob description excerpt: ${(job.about_role ?? "").slice(0, 600)}`,
             },
           ],
         });
@@ -267,7 +315,10 @@ export async function researchCompany(
       oneLiner: "",
       productSummary: "",
       signals: [],
+      address: null,
       subPages: [],
+      contactFromJobPosting: null,
+      recruiterContact: null,
       sourceUrls: [homepageUrl],
     };
 
@@ -289,6 +340,72 @@ export async function researchCompany(
 
       await stagehand.init();
       const page = stagehand.context.activePage()!;
+
+      // Job posting contact extraction — runs first, uses real browser to handle JS-rendered ATS pages
+      if (job.source_url) {
+        try {
+          await page.goto(job.source_url, { waitUntil: "networkidle" });
+
+          // Extract mailto: links directly from the DOM — catches emails that job boards
+          // visually obfuscate but leave in the HTML (e.g. Careerjet, some ATS platforms)
+          const GENERIC_EMAIL_DOMAINS = new Set([
+            "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "live.com", "icloud.com",
+          ]);
+          let applyEmail: string | null = null;
+          try {
+            const mailtoLinks = await page.evaluate(() =>
+              Array.from(document.querySelectorAll('a[href^="mailto:"]'))
+                .map((a) => a.getAttribute("href")?.replace(/^mailto:/i, "").split("?")[0].trim() ?? "")
+                .filter((e) => e.includes("@"))
+            ) as string[];
+            applyEmail = mailtoLinks.find(
+              (e) => !GENERIC_EMAIL_DOMAINS.has(e.split("@")[1]?.toLowerCase() ?? ""),
+            ) ?? null;
+          } catch {
+            // page.evaluate unavailable — continue without
+          }
+
+          // If the email domain differs from our GPT-4o homepage guess, it's more reliable
+          // (e.g. source_url → careerjet → GPT-4o guessed wrong brand domain)
+          if (applyEmail) {
+            const emailDomain = applyEmail.split("@")[1]?.toLowerCase();
+            if (emailDomain && !homepageUrl.toLowerCase().includes(emailDomain)) {
+              homepageUrl = `https://www.${emailDomain}`;
+              companyResearchRaw.sourceUrls = [homepageUrl];
+            }
+            companyResearchRaw.contactFromJobPosting = {
+              name: null, title: null, email: applyEmail, phone: null,
+            };
+          }
+
+          const postingData = await stagehand.extract(
+            "This is a job posting. Extract the contact person (recruiter or hiring manager) including their name, title, email and phone. Also extract the company's full postal address if shown.",
+            jobPostingContactSchema,
+          );
+          if (postingData.contactName || postingData.contactEmail || postingData.contactPhone) {
+            companyResearchRaw.contactFromJobPosting = {
+              name: postingData.contactName ?? null,
+              title: postingData.contactTitle ?? null,
+              email: postingData.contactEmail ?? companyResearchRaw.contactFromJobPosting?.email ?? null,
+              phone: postingData.contactPhone ?? null,
+            };
+          }
+          if (postingData.recruiterName || postingData.recruiterEmail || postingData.recruiterPhone) {
+            companyResearchRaw.recruiterContact = {
+              name: postingData.recruiterName ?? null,
+              title: postingData.recruiterTitle ?? null,
+              email: postingData.recruiterEmail ?? null,
+              phone: postingData.recruiterPhone ?? null,
+              company: postingData.recruiterCompany ?? null,
+            };
+          }
+          if (postingData.companyAddress) {
+            companyResearchRaw.address = postingData.companyAddress;
+          }
+        } catch (postingErr) {
+          console.error("[agent/research-company] job posting contact extraction failed", postingErr);
+        }
+      }
 
       // Homepage extraction
       try {
@@ -323,15 +440,33 @@ export async function researchCompany(
           for (const link of subPageLinks) {
             try {
               await page.goto(link.url, { waitUntil: "networkidle" });
-              const subData = await stagehand.extract(
-                "Extract substance that helps a candidate understand this company before applying: what they do, their values and how they work, the specific technologies and tools they use, notable projects or customers, and how the team operates. Ignore nav, footers, cookie banners, and generic marketing copy.",
-                subPageSchema,
-              );
+              // Contact pages need a different prompt — the generic "ignore footers/marketing" instruction
+              // causes the AI to skip addresses and phone numbers which look like footer/marketing content.
+              const extractInstruction = link.kind === "contact"
+                ? "This is a company contact page. Extract the full postal address (street, city, zip, country), any email addresses, phone numbers, and names/titles of contact persons. These details are the primary content of this page — do not skip them."
+                : "Extract substance that helps a candidate understand this company before applying: what they do, their values and how they work, the specific technologies and tools they use, notable projects or customers, and how the team operates. Ignore nav, footers, cookie banners, and generic marketing copy.";
+              const subData = await stagehand.extract(extractInstruction, subPageSchema);
+              const subAddress = subData.address ?? null;
+              if (subAddress && !companyResearchRaw.address) {
+                companyResearchRaw.address = subAddress;
+              }
+              if (
+                !companyResearchRaw.contactFromJobPosting &&
+                (subData.contactName || subData.contactEmail || subData.contactPhone)
+              ) {
+                companyResearchRaw.contactFromJobPosting = {
+                  name: subData.contactName ?? null,
+                  title: subData.contactTitle ?? null,
+                  email: subData.contactEmail ?? null,
+                  phone: subData.contactPhone ?? null,
+                };
+              }
               companyResearchRaw.subPages.push({
                 keyPoints: subData.keyPoints ?? [],
                 technologies: subData.technologies ?? [],
                 valuesOrCulture: subData.valuesOrCulture ?? [],
                 notable: subData.notable ?? [],
+                address: subAddress,
               });
               companyResearchRaw.sourceUrls.push(link.url);
             } catch (subErr) {
@@ -362,6 +497,80 @@ export async function researchCompany(
       }
     }
 
+    // Fallback: if no address or contact info found, try common contact/about page paths directly
+    if (!companyResearchRaw.address || !companyResearchRaw.contactFromJobPosting) {
+      const contactPaths = [
+        "/kontakt", "/contact", "/contact-us", "/contactus",
+        "/om-os", "/about", "/about-us", "/about-us/contact",
+        "/find-os", "/find-us",
+        "/kontakt-os", "/kontaktoplysninger",
+        "/vi-er-her", "/company/contact",
+      ];
+      for (const path of contactPaths) {
+        if (companyResearchRaw.address && companyResearchRaw.contactFromJobPosting) break;
+        try {
+          const contactUrl = new URL(path, homepageUrl).href;
+          const res = await fetch(contactUrl, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            },
+          });
+          if (!res.ok) continue;
+          const html = await res.text();
+          const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 3000);
+
+          const response = await openai.chat.completions.create({
+            model: "gpt-4o",
+            response_format: { type: "json_object" },
+            temperature: 0,
+            max_tokens: 250,
+            messages: [
+              {
+                role: "system",
+                content: `Extract from this company page. The page may be in any language.
+Return ONLY valid JSON:
+{
+  "address": "<full postal address including street, city, zip, country — or null if not found>",
+  "contactName": "<full name of a contact person (HR, hiring manager, or general contact) — or null>",
+  "contactTitle": "<their job title — or null>",
+  "contactEmail": "<their email address or a general contact email — or null>",
+  "contactPhone": "<their phone number or a general contact phone — or null>"
+}`,
+              },
+              { role: "user", content: text },
+            ],
+          });
+
+          const raw = response.choices[0]?.message?.content;
+          if (raw) {
+            const parsed = JSON.parse(raw) as {
+              address?: string | null;
+              contactName?: string | null;
+              contactTitle?: string | null;
+              contactEmail?: string | null;
+              contactPhone?: string | null;
+            };
+            if (parsed.address && !companyResearchRaw.address) {
+              companyResearchRaw.address = parsed.address;
+            }
+            if (
+              !companyResearchRaw.contactFromJobPosting &&
+              (parsed.contactName || parsed.contactEmail || parsed.contactPhone)
+            ) {
+              companyResearchRaw.contactFromJobPosting = {
+                name: parsed.contactName ?? null,
+                title: parsed.contactTitle ?? null,
+                email: parsed.contactEmail ?? null,
+                phone: parsed.contactPhone ?? null,
+              };
+            }
+          }
+        } catch {
+          // try next path
+        }
+      }
+    }
+
     // If browser research found nothing, ask GPT-4o to use its own knowledge about the company
     const browserResearchEmpty =
       !companyResearchRaw.oneLiner && !companyResearchRaw.productSummary;
@@ -379,13 +588,15 @@ export async function researchCompany(
           messages: [
             {
               role: "system",
-              content: `You are a company research assistant. Using only your training knowledge, provide factual information about the given company. Be conservative — only state facts you are confident about. If you have no reliable knowledge about this company, return empty strings and arrays rather than inventing details.
+              content: `You are a company research assistant. Using only your training knowledge, provide factual information about the given company. Be conservative — only state facts you are confident about. If you have no reliable knowledge about a field, return empty strings/arrays/null rather than inventing details.
 
 Return ONLY valid JSON:
 {
   "oneLiner": "<what the company does in one sentence, or empty string if unknown>",
   "productSummary": "<what they build/sell and who it's for, or empty string if unknown>",
-  "signals": ["<notable fact: funding, customers, size, mission, known products>"]
+  "signals": ["<notable fact: funding, customers, size, mission, known products>"],
+  "address": "<full postal address if known, otherwise null>",
+  "contactInfo": { "name": "<HR/recruiter name if known, otherwise null>", "title": "<their title, otherwise null>", "email": "<contact email if known, otherwise null>", "phone": "<phone if known, otherwise null>" }
 }`,
             },
             {
@@ -401,10 +612,18 @@ Return ONLY valid JSON:
             oneLiner?: string;
             productSummary?: string;
             signals?: string[];
+            address?: string | null;
+            contactInfo?: ContactInfo | null;
           };
           companyResearchRaw.oneLiner = knowledge.oneLiner ?? "";
           companyResearchRaw.productSummary = knowledge.productSummary ?? "";
           companyResearchRaw.signals = knowledge.signals ?? [];
+          if (!companyResearchRaw.address && knowledge.address) {
+            companyResearchRaw.address = knowledge.address;
+          }
+          if (!companyResearchRaw.contactFromJobPosting && knowledge.contactInfo?.email) {
+            companyResearchRaw.contactFromJobPosting = knowledge.contactInfo;
+          }
           // Clear the ATS URL from sources so it doesn't appear in the dossier
           companyResearchRaw.sourceUrls = [];
         }
@@ -440,6 +659,9 @@ Rules:
 Return ONLY valid JSON matching this shape:
 {
   "companyOverview": string,
+  "companyAddress": "<full postal address or null>",
+  "contactInfo": { "name": "<name or null>", "title": "<job title or null>", "email": "<email or null>", "phone": "<phone or null>" } | null,
+  "recruiterContact": { "name": "<recruiter name or null>", "title": "<recruiter title or null>", "email": "<recruiter email or null>", "phone": "<recruiter phone or null>", "company": "<recruiting agency name or null>" } | null,
   "techStack": string[],
   "culture": string[],
   "whyThisRole": string,
@@ -451,7 +673,11 @@ Return ONLY valid JSON matching this shape:
 }`;
 
     const userPrompt = `COMPANY RESEARCH (from their website):
-${JSON.stringify(companyResearchRaw)}
+${JSON.stringify({ ...companyResearchRaw, subPages: undefined })}
+
+COMPANY ADDRESS (extracted from website): ${companyResearchRaw.address ?? "Not found"}
+CONTACT INFO FROM JOB POSTING: ${companyResearchRaw.contactFromJobPosting ? JSON.stringify(companyResearchRaw.contactFromJobPosting) : "Not found"}
+RECRUITER CONTACT: ${companyResearchRaw.recruiterContact ? JSON.stringify(companyResearchRaw.recruiterContact) : "Not found"}
 
 JOB POSTING:
 Title: ${job.title}
@@ -495,18 +721,19 @@ Work history: ${JSON.stringify((profile.work_experience ?? []).slice(0, 3))}`;
       };
     }
 
-    // Save dossier to DB — always scope to user_id
-    const { error: updateError } = await insforge.database
-      .from("jobs")
-      .update({ company_research: dossier })
-      .eq("id", jobId)
-      .eq("user_id", userId);
-
-    if (updateError) {
-      console.error(
-        "[agent/research-company] failed to save dossier",
-        updateError,
-      );
+    // Save via direct HttpClient.post() — database.rpc() has a serialization layer that
+    // silently swallows parameters; calling the underlying HTTP client bypasses it entirely.
+    console.log("[agent/research-company] saving dossier to DB…");
+    const httpClient = insforge.getHttpClient();
+    try {
+      await httpClient.post("/api/database/rpc/update_job_research", {
+        p_job_id: jobId,
+        p_user_id: userId,
+        p_research: JSON.stringify(dossier),
+      });
+      console.log("[agent/research-company] dossier saved successfully");
+    } catch (saveErr) {
+      console.error("[agent/research-company] failed to save dossier", saveErr);
       await posthog.shutdown();
       return {
         success: false,
@@ -521,7 +748,18 @@ Work history: ${JSON.stringify((profile.work_experience ?? []).slice(0, 3))}`;
     });
     await posthog.shutdown();
 
-    return { success: true };
+    // Warn if contact info or address could not be found
+    const contact = dossier.contactInfo as { email?: string | null; phone?: string | null } | null;
+    const hasContact = !!(contact?.email || contact?.phone);
+    const hasAddress = !!(dossier.companyAddress as string | null);
+    const missing: string[] = [];
+    if (!hasContact) missing.push("contact info");
+    if (!hasAddress) missing.push("address");
+    const warning = missing.length > 0
+      ? `Research complete, but ${missing.join(" and ")} could not be found.`
+      : undefined;
+
+    return { success: true, warning };
   } catch (err) {
     console.error("[agent/research-company]", err);
     await posthog.shutdown();

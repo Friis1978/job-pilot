@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, warning: result.warning ?? null });
   } catch (err) {
     console.error("[api/agent/research]", err);
     return NextResponse.json(

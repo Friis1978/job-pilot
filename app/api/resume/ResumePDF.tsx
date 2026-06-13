@@ -17,6 +17,7 @@ type GeneratedContent = {
     endDate: string;
     currentlyWorking: boolean;
     bullets: string[];
+    skills?: string[];
   }[];
 };
 
@@ -109,6 +110,11 @@ const styles = StyleSheet.create({
   },
   roleTitle: {
     fontSize: 10,
+    color: MUTED,
+    marginBottom: 2,
+  },
+  roleSkills: {
+    fontSize: 8,
     color: MUTED,
     marginBottom: 3,
   },
@@ -222,6 +228,9 @@ export function ResumePDF({ profile, generated }: Props) {
                   </Text>
                 </View>
                 <Text style={styles.roleTitle}>{role.title}</Text>
+                {role.skills && role.skills.length > 0 ? (
+                  <Text style={styles.roleSkills}>{role.skills.join("  ·  ")}</Text>
+                ) : null}
                 {role.bullets.map((bullet, j) => (
                   <View key={j} style={styles.bulletRow}>
                     <Text style={styles.bulletDot}>•</Text>
