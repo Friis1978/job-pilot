@@ -1,63 +1,47 @@
-# Memory — Avatar in Navbar, Role Validation, Add Role UX
+# Memory — Job Import Skill Matching & Cover Letter Fixes
 
 Last updated: 2026-06-13
 
 ## What was built
 
-### Navbar avatar — profile photo preferred over OAuth avatar (all pages)
-- `app/profile/page.tsx`: `avatarUrl: profile?.avatar_url ?? authData.user?.user_metadata?.avatar_url`
-- `app/find-jobs/[id]/page.tsx`: already had `profileData?.avatar_url` from DB query — Navbar updated to use it with OAuth fallback
-- `app/dashboard/page.tsx`: added 8th query to `Promise.allSettled` — `profiles.select("avatar_url").eq("id", user.id).maybeSingle()` — used in Navbar
-- `app/find-jobs/page.tsx`: added 3rd query to `Promise.allSettled` — same pattern — used in Navbar
+### agent/import-job-from-url.ts — Better skill detection on import
+- `max_tokens` for extraction: 600 → 1500
+- Description limit in extraction prompt: "up to 1000 chars" → "up to 3000 chars, including all requirements and skills"
+- Scoring now uses full raw text (`rawText.slice(0, 5000)`) via a separate `jobForScoring` object instead of the truncated extracted description
+- `job` (used for DB storage) still uses the clean extracted description; only scoring uses raw text
+- Root cause: React and other skills mentioned later in long job postings were cut off before the scorer ever saw them
 
-### next.config.ts — InsForge image hostname
-- Added `images.remotePatterns` with `{ protocol: "https", hostname: "**.insforge.app" }` to allow `next/image` to load profile avatars from InsForge storage
-- Required restart of dev server to take effect
-
-### components/profile/ProfileForm.tsx — Add Role scroll-to-view
-- Added `workExperienceEndRef` and `shouldScrollToRole` state
-- `addRole` now uses functional state update (`setData(prev => ...)` instead of `setField(...)`) to avoid stale closure
-- After adding a role, `setShouldScrollToRole(true)` triggers a `useEffect` that calls `scrollIntoView({ behavior: "smooth", block: "start" })` on the last role card
-- Prevents user from clicking "Add role" multiple times because the new card is off-screen
-
-### components/profile/ProfileForm.tsx — Work experience validation
-- Added `roleErrors: Record<string, Set<string>>` state — maps role id → set of invalid field names
-- Added `firstErrorRoleRef` to scroll to first invalid role on failed save
-- Required fields: `company`, `title`, `startDate`, `endDate` (unless `currentlyWorking`)
-- On save attempt: validates all roles, blocks save, scrolls to first error role
-- Role card border turns `border-error` (red) when that role has errors
-- Individual inputs get `border-error focus:ring-error focus:border-error` when their field is invalid
-- Labels show `*` asterisk on required fields; End Date asterisk hidden when `currentlyWorking` is checked
-- Errors clear field-by-field as user fills them in (inline `setRoleErrors` in each onChange)
-- Checking "Currently working here" clears the `endDate` error for that role
-- **Missing fields panel** above Save button: appears after failed save, lists "Role N — Field Name" for every missing field, disappears as user fixes things
+### agent/generate-cover-letter.ts — All skills and work history used
+- Work history: was `workExp.slice(0, 2)`, now passes ALL roles with title, company, date range, and responsibilities
+- Job requirements: `job.requirements` and `job.responsibilities` arrays (fetched from DB but previously only used for language detection) now included in the cover letter prompt
+- System prompt updated: "Draw on ALL skills listed under 'All skills' and 'Full work history' — the 'Matched skills' list is a hint, not a limit"
+- Label changed from "Skills" → "All skills" and "Recent work" → "Full work history" in user prompt
 
 ## Decisions made
 
-- **Functional state update in addRole**: `setData(prev => ...)` instead of spreading current `data` — avoids potential stale closure if React batches updates
-- **Validation at save time only**: no live validation on blur — errors only appear after user attempts to save. Fields clear errors as they are filled.
-- **Missing fields panel replaces toast**: cleaner than a toast for multiple missing fields. Panel persists until all errors are fixed.
+- **Separate scoring job vs display job**: `jobForScoring` has `description: rawText.slice(0, 5000)` for comprehensive skill detection; `job.description` (stored as `about_role`) stays as the clean extracted text. This avoids polluting the DB with raw scraped text.
+- **All work history in cover letter**: Intentional — the AI needs older roles to reference skills that predate the 2 most recent jobs. GPT-4o context window is large enough.
 
 ## Problems solved
 
-- **next/image blocked InsForge storage URLs**: Next.js requires explicit hostname config for `next/image`. Fixed with wildcard `**.insforge.app` pattern.
-- **"Add role" appeared broken**: Button was working but new role appeared at the bottom of a long list, off-screen. User kept clicking, creating multiple empty roles. Fixed with scroll-to-new-role behavior.
-- **Multiple empty roles accumulating**: Consequence of the above. Now visually resolved.
+- **LinkedIn job import missed React**: The extraction step capped description at 1000 chars. If React appeared later in the posting, scoring never saw it. Fixed by passing full raw text (5000 chars) to scoring.
+- **Dedup block on re-import**: Had to delete the specific job from the DB (`f08bafc3-e438-4b7b-96fa-8782461432e2`, CapaSystems Denmark, job ID 4399846855) via InsForge SQL to allow fresh import.
+- **Cover letter ignored older experience**: `slice(0, 2)` meant skills from 3rd+ job were invisible to the AI.
 
 ## Current state
 
-- All four pages use `profile.avatar_url` (preferred) with OAuth avatar as fallback in the Navbar
-- InsForge storage images load correctly via `next/image`
-- Work experience "Add role" scrolls the new card into view
-- Save validation: highlights missing required fields, shows panel listing what's missing, blocks save until complete
+- Import flow: extraction is clean (3000 char description for storage), scoring is comprehensive (5000 char raw text)
+- Cover letter generation: uses full work history, full job requirements, all profile skills
+- Both fixes are code-only — no DB schema changes needed
 
 ## Next session starts with
 
-Check `context/build-plan.md` and `context/progress-tracker.md` to identify the next planned feature. Feature 21 (Scheduled Job Alert Emails) is next — Resend for email, cron endpoint at `/api/cron/job-alerts` protected by `CRON_SECRET`. Or continue with user-directed fixes.
+Check `context/build-plan.md` and `context/progress-tracker.md` for the next planned feature. Feature 21 (Scheduled Job Alert Emails) is next — Resend for email, cron endpoint at `/api/cron/job-alerts` protected by `CRON_SECRET`. Or continue with user-directed fixes.
 
 ## Open questions
 
-- Cover letter PDF photo: unconfirmed whether react-pdf successfully fetches the public InsForge URL during `renderToBuffer` in production (was fixed this way but not verified in prod).
-- `overflow: hidden` + `borderRadius` on react-pdf `View` may not clip avatar into a circle — known react-pdf limitation. If it appears square in the PDF, that is expected.
+- Cover letter PDF photo: unconfirmed whether react-pdf successfully fetches the public InsForge URL during `renderToBuffer` in production.
+- `overflow: hidden` + `borderRadius` on react-pdf `View` may not clip avatar into a circle — known react-pdf limitation.
 - InsForge SDK JSONB bug still affects any future RPC with JSONB params — document in `context/library-docs.md`.
 - Feature 13 company research ~60-120s — will timeout on Vercel free tier. Address at deployment.
+- Cover letter `max_tokens: 800` — with longer work history now in the prompt, verify the letter isn't being cut off mid-sentence.

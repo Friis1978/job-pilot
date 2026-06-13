@@ -244,7 +244,7 @@ export async function importJobFromUrl(userId: string, url: string): Promise<Res
       model: "gpt-4o",
       response_format: { type: "json_object" },
       temperature: 0.1,
-      max_tokens: 600,
+      max_tokens: 1500,
       messages: [
         {
           role: "system",
@@ -255,7 +255,7 @@ Return ONLY valid JSON with this exact shape:
   "title": "<job title>",
   "company": "<company name>",
   "location": "<city and/or country, or 'Remote', or null if not found>",
-  "description": "<full job description, up to 1000 chars, stripped of HTML tags>",
+  "description": "<full job description including all requirements and skills, up to 3000 chars, stripped of HTML tags>",
   "salary": "<salary range or null>",
   "job_type": "<fulltime|parttime|contract|temporary or null>"
 }
@@ -286,7 +286,7 @@ If title or company cannot be determined, return them as empty strings.`,
     return { success: false, error: "Could not identify the job title or company from this page." };
   }
 
-  // Build NormalizedJob for scoring
+  // Build NormalizedJob — use extracted description for display/storage
   const job: NormalizedJob = {
     id: crypto.randomUUID(),
     title: extracted.title.trim(),
@@ -299,8 +299,13 @@ If title or company cannot be determined, return them as empty strings.`,
     source: "url",
   };
 
-  // Score against profile — no location constraint for manual imports
-  const scored = await scoreJob(job, profile, openai, "");
+  // Score against profile using the full raw text so no skills are missed due to
+  // the description truncation in the extraction step
+  const jobForScoring: NormalizedJob = {
+    ...job,
+    description: rawText.slice(0, 5000),
+  };
+  const scored = await scoreJob(jobForScoring, profile, openai, "");
   if (!scored) {
     await posthog.shutdown();
     return { success: false, error: "Scoring failed. Please try again." };

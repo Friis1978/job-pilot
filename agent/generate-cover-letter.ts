@@ -74,10 +74,14 @@ export async function generateCoverLetter(
   const langCode = detectLanguage(allJobText);
   const language = LANGUAGE_NAMES[langCode] ?? "English";
   const workExp = (profile.work_experience as WorkExperience[] | null) ?? [];
+  // Include all work experiences — the AI needs the full history to reference relevant skills
   const recentWork = workExp
-    .slice(0, 2)
-    .map((w) => `${w.title} at ${w.company}${w.responsibilities ? ": " + w.responsibilities : ""}`)
-    .join("\n");
+    .map((w) => {
+      const base = `${w.title} at ${w.company} (${w.startDate ?? "?"} – ${w.currentlyWorking ? "present" : (w.endDate ?? "?")})`;
+      // Include full responsibilities for all roles so no relevant experience is lost
+      return w.responsibilities ? `${base}: ${w.responsibilities}` : base;
+    })
+    .join("\n\n");
 
   const skillYears = computeSkillYears(workExp);
   const skillYearsStr = Object.entries(skillYears)
@@ -112,8 +116,9 @@ Rules:
 - Do NOT open with enthusiasm about the company — lead with substance, not flattery
 - Address it to the hiring team at the company (no "Dear Sir/Madam", no "To Whom It May Concern")
 - Every claim must be grounded in the candidate's actual experience — no vague assertions
+- Draw on ALL skills listed under "All skills" and "Full work history" — the "Matched skills" list is a hint, not a limit
 - Where the candidate has years of experience for a skill relevant to this role, include the specific number naturally in the letter (e.g. "5 years of React" or "3 years building with TypeScript") — use the skill experience data provided
-- Connect specific past work to what this role actually requires
+- Connect specific past work to what this role actually requires, drawing from the full work history including older roles
 - If company research is provided, reference one concrete specific detail (not generic praise)
 - Acknowledge skill gaps honestly and briefly — one sentence max, frame as adjacent strength or quick ramp
 - Close with a direct, confident call to action — not "I hope to hear from you"
@@ -126,7 +131,7 @@ Rules:
           content: `JOB:
 Title: ${job.title}
 Company: ${job.company}
-Description: ${job.about_role ?? "Not provided"}
+Description: ${job.about_role ?? "Not provided"}${(job.requirements as string[] | null)?.length ? `\nRequirements:\n${(job.requirements as string[]).map((r) => `- ${r}`).join("\n")}` : ""}${(job.responsibilities as string[] | null)?.length ? `\nResponsibilities:\n${(job.responsibilities as string[]).map((r) => `- ${r}`).join("\n")}` : ""}
 Matched skills: ${(job.matched_skills as string[] | null)?.join(", ") ?? "None"}
 Gap skills: ${(job.missing_skills as string[] | null)?.join(", ") ?? "None"}
 ${companyContext}
@@ -135,8 +140,8 @@ CANDIDATE:
 Name: ${profile.full_name ?? "Not provided"}
 Current title: ${profile.current_title ?? "Not provided"}
 Experience: ${profile.years_experience ?? 0} years
-Skills: ${(profile.skills as string[] | null)?.join(", ") ?? "Not provided"}${skillYearsStr ? `\nSkill experience (years): ${skillYearsStr}` : ""}
-Recent work:
+All skills: ${(profile.skills as string[] | null)?.join(", ") ?? "Not provided"}${skillYearsStr ? `\nSkill experience (years): ${skillYearsStr}` : ""}
+Full work history:
 ${recentWork || "Not provided"}`,
         },
       ],
