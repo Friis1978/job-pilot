@@ -8,6 +8,7 @@ import { ResearchButton } from "@/components/find-jobs/ResearchButton";
 import { CoverLetterSection } from "@/components/find-jobs/CoverLetterSection";
 import { TailoredResumeButton } from "@/components/find-jobs/TailoredResumeButton";
 import { StatusBadge } from "@/components/find-jobs/StatusBadge";
+import { ApplicationPipeline } from "@/components/find-jobs/ApplicationPipeline";
 import type { JobStatus } from "@/components/find-jobs/StatusBadge";
 
 type ContactInfo = {
@@ -173,6 +174,9 @@ export default async function JobDetailsPage({
               label="Date Found"
             />
           </div>
+
+          {/* Application Pipeline */}
+          <ApplicationPipeline jobId={job.id} status={(job.status as JobStatus) ?? "saved"} />
 
           {/* AI Match Reasoning */}
           {job.match_reason && (

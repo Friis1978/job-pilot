@@ -12,6 +12,7 @@ export type { JobRow };
 
 type FilterOption = "all" | "high" | "low";
 type SortOption = "newest" | "oldest" | "match_score";
+type StatusFilter = "all" | JobStatus;
 
 const PAGE_SIZE = 20;
 
@@ -30,6 +31,15 @@ const SORT_LABELS: Record<SortOption, string> = {
 const FILTER_CYCLE: FilterOption[] = ["all", "high", "low"];
 const SORT_CYCLE: SortOption[] = ["newest", "match_score", "oldest"];
 
+const STATUS_FILTERS: Array<{ key: StatusFilter; label: string; dot: string }> = [
+  { key: "all",          label: "All",          dot: "" },
+  { key: "saved",        label: "Saved",        dot: "bg-border" },
+  { key: "applied",      label: "Applied",      dot: "bg-info" },
+  { key: "interviewing", label: "Interviewing", dot: "bg-accent" },
+  { key: "offer",        label: "Offer",        dot: "bg-success" },
+  { key: "rejected",     label: "Rejected",     dot: "bg-error" },
+];
+
 function getBarColor(score: number): string {
   if (score >= 90) return "bg-success";
   if (score >= 80) return "bg-info";
@@ -46,6 +56,7 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
   const [confirmClear, setConfirmClear] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   function cycleFilter() {
     setFilter((f) => FILTER_CYCLE[(FILTER_CYCLE.indexOf(f) + 1) % FILTER_CYCLE.length]);
@@ -59,6 +70,11 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
 
   function handleSearch(value: string) {
     setSearch(value);
+    setPage(1);
+  }
+
+  function handleStatusFilter(s: StatusFilter) {
+    setStatusFilter(s);
     setPage(1);
   }
 
@@ -123,6 +139,11 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
     if (filter === "low") return job.match_score < MATCH_THRESHOLD;
     return true;
   });
+
+  // Status filter
+  if (statusFilter !== "all") {
+    filtered = filtered.filter((job) => (job.status ?? "saved") === statusFilter);
+  }
 
   // Skill filter
   if (selectedSkills.size > 0) {
@@ -207,6 +228,36 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Status Filter Pills */}
+      <div className="flex flex-wrap items-center gap-2">
+        {STATUS_FILTERS.map(({ key, label, dot }) => {
+          const active = statusFilter === key;
+          const count = key === "all"
+            ? jobs.length
+            : jobs.filter((j) => (j.status ?? "saved") === key).length;
+          if (key !== "all" && count === 0) return null;
+          return (
+            <button
+              key={key}
+              onClick={() => handleStatusFilter(key)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                active
+                  ? "bg-accent text-accent-foreground border-accent"
+                  : "bg-surface border-border text-text-secondary hover:border-accent hover:text-accent"
+              }`}
+            >
+              {dot && (
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${active ? "bg-accent-foreground" : dot}`} />
+              )}
+              {label}
+              <span className={`${active ? "text-accent-foreground/70" : "text-text-muted"}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Skill Filter Chips */}
