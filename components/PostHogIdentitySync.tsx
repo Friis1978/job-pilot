@@ -2,22 +2,17 @@
 
 import { useEffect } from "react";
 import posthog from "posthog-js";
-import { insforge } from "@/lib/insforge-client";
 
-// Runs once on app startup. If a session cookie is present, identifies the
-// current user in PostHog so all client-side events are linked to the user.
-export function PostHogIdentitySync() {
+type Props = {
+  userId: string;
+  email: string | null;
+};
+
+// Receives user identity from the server — no client-side auth calls needed.
+export function PostHogIdentitySync({ userId, email }: Props) {
   useEffect(() => {
-    async function syncIdentity() {
-      const { data } = await insforge.auth.getCurrentUser();
-      if (data?.user) {
-        posthog.identify(data.user.id, {
-          email: data.user.email,
-        });
-      }
-    }
-    syncIdentity();
-  }, []);
+    posthog.identify(userId, email ? { email } : undefined);
+  }, [userId, email]);
 
   return null;
 }

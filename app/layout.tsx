@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { PostHogIdentitySync } from "@/components/PostHogIdentitySync";
 import { Toaster } from "@/components/ui/Toaster";
+import { createInsforgeServer } from "@/lib/insforge-server";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -12,15 +13,18 @@ export const metadata: Metadata = {
     "JobPilot finds the jobs, researches the companies, and gives you everything you need to stand out.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const insforge = await createInsforgeServer();
+  const { data: { user } } = await insforge.auth.getCurrentUser();
+
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        <PostHogIdentitySync />
+        {user && <PostHogIdentitySync userId={user.id} email={user.email ?? null} />}
         <Toaster />
         {children}
       </body>
