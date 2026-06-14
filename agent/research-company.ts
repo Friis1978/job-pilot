@@ -651,13 +651,86 @@ Return ONLY valid JSON:
       }
     }
 
-    // If browser research found nothing, ask GPT-4o to use its own knowledge about the company
+    // If browser research found nothing, try a plain HTTP fetch of the homepage
     const browserResearchEmpty =
       !companyResearchRaw.oneLiner && !companyResearchRaw.productSummary;
 
-    if (browserResearchEmpty) {
+    if (browserResearchEmpty && homepageUrl) {
       console.log(
-        "[agent/research-company] browser research empty — falling back to GPT-4o training knowledge",
+        "[agent/research-company] browser research empty — trying plain HTTP fetch of homepage",
+      );
+      try {
+        const homepageRes = await fetch(homepageUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+          },
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (homepageRes.ok) {
+          const html = await homepageRes.text();
+          const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 5000);
+
+          if (text.length > 100) {
+            const httpResponse = await openai.chat.completions.create({
+              model: "gpt-4o",
+              response_format: { type: "json_object" },
+              temperature: 0,
+              max_tokens: 400,
+              messages: [
+                {
+                  role: "system",
+                  content: `You are extracting company information from a homepage. The page may be in any language.
+Return ONLY valid JSON:
+{
+  "oneLiner": "<what the company does in one sentence — or empty string if unclear>",
+  "productSummary": "<what they build/sell and who it's for — or empty string if unclear>",
+  "signals": ["<notable fact about the company: size, mission, customers, products, technologies>"]
+}`,
+                },
+                {
+                  role: "user",
+                  content: `Company name: ${job.company}\nURL: ${homepageUrl}\n\nPage text:\n${text}`,
+                },
+              ],
+            });
+
+            const raw = httpResponse.choices[0]?.message?.content;
+            if (raw) {
+              const parsed = JSON.parse(raw) as {
+                oneLiner?: string;
+                productSummary?: string;
+                signals?: string[];
+              };
+              if (parsed.oneLiner) companyResearchRaw.oneLiner = parsed.oneLiner;
+              if (parsed.productSummary) companyResearchRaw.productSummary = parsed.productSummary;
+              if (parsed.signals?.length) companyResearchRaw.signals = parsed.signals;
+              if (parsed.oneLiner || parsed.productSummary) {
+                companyResearchRaw.sourceUrls.push(homepageUrl);
+                console.log("[agent/research-company] plain HTTP fetch succeeded");
+              }
+            }
+          }
+        }
+      } catch (httpErr) {
+        console.error("[agent/research-company] plain HTTP fetch failed", httpErr);
+        // Continue — fall through to GPT-4o training knowledge
+      }
+    }
+
+    // If still nothing after HTTP fetch, ask GPT-4o to use its own knowledge about the company
+    const stillEmpty =
+      !companyResearchRaw.oneLiner && !companyResearchRaw.productSummary;
+
+    if (stillEmpty) {
+      console.log(
+        "[agent/research-company] HTTP fetch also empty — falling back to GPT-4o training knowledge",
       );
       try {
         const knowledgeResponse = await openai.chat.completions.create({
@@ -716,7 +789,7 @@ Return ONLY valid JSON:
       }
     }
 
-    // If still empty after GPT-4o fallback, nothing is known about this company
+    // If still empty after all fallbacks, nothing is known about this company
     if (!companyResearchRaw.oneLiner && !companyResearchRaw.productSummary) {
       await posthog.shutdown();
       return {
@@ -727,7 +800,13 @@ Return ONLY valid JSON:
 
     // GPT-4o synthesis — always runs, even if browser research was empty
 
-    const systemPrompt = `You are a sharp career strategist preparing a candidate to apply for a specific role. You are given (a) research about the company${browserResearchEmpty ? " (from AI training knowledge — treat as approximate)" : " (scraped from their website)"}, (b) the job posting, and (c) the candidate's profile. Produce a concise, concrete briefing that gives this specific candidate an edge for this specific role.
+    const researchSourceLabel = stillEmpty
+      ? " (from AI training knowledge — treat as approximate)"
+      : browserResearchEmpty
+        ? " (fetched directly from company website)"
+        : " (scraped from their website)";
+
+    const systemPrompt = `You are a sharp career strategist preparing a candidate to apply for a specific role. You are given (a) research about the company${researchSourceLabel}, (b) the job posting, and (c) the candidate's profile. Produce a concise, concrete briefing that gives this specific candidate an edge for this specific role.
 
 Rules:
 - Ground every company claim in the provided research or job posting. Never invent funding, customers, headcount, or facts. If research was thin, infer carefully from the job posting and say what's inferred.
