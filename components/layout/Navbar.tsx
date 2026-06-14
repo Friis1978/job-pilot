@@ -56,7 +56,7 @@ export function Navbar({ user, hasAccount }: Props) {
     <header className="w-full bg-surface border-b border-border py-3 sm:h-16 sm:py-0 flex items-center">
       <div className="w-full max-w-360 mx-auto px-4 sm:px-6 flex flex-wrap items-center justify-between gap-y-3">
         <Link href="/" className="flex items-center">
-          <Image src="/logo.png" alt="JobPilot" width={64} height={64} className="h-8 w-auto" />
+          <Image src="/jobpilot-logo-horizontal.svg" alt="JobPilot" width={160} height={40} className="h-8 w-auto" />
         </Link>
 
         {user && (

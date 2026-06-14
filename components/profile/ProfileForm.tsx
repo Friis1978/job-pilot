@@ -1222,7 +1222,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
 
         {/* Sticky save footer */}
         {(hasUnsavedChanges || saving || Object.keys(roleErrors).length > 0 || !!saveError) && (
-        <div className="sticky bottom-0 bg-surface border-t border-border px-6 py-4 -mx-6 mt-6 flex flex-col gap-3">
+        <div className="sticky bottom-0 bg-surface border-t border-border px-6 py-4 -mx-6 mt-6 flex flex-col gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
           {hasUnsavedChanges && !saveSuccess && (() => {
             const fields = computeChangedFields(data, savedSnapshot);
             return (

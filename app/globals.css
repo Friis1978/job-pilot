@@ -27,11 +27,11 @@
   --color-text-slate: #272835;
   --color-text-slate-medium: #666d80;
 
-  /* Primary accent — purple */
-  --color-accent: #7c5cfc;
-  --color-accent-dark: #5e4cff;
-  --color-accent-light: #f3e8ff;
-  --color-accent-muted: #faf5ff;
+  /* Primary accent — blue */
+  --color-accent: #2563EB;
+  --color-accent-dark: #1E3A8A;
+  --color-accent-light: #dbeafe;
+  --color-accent-muted: #eff6ff;
   --color-accent-foreground: #ffffff;
 
   /* Success — green */
@@ -86,8 +86,8 @@ body {
 
 @utility hero-gradient {
   background:
-    radial-gradient(ellipse 55% 100% at 0% 30%, rgba(255, 170, 200, 0.62) 0%, transparent 60%),
-    radial-gradient(ellipse 55% 100% at 100% 30%, rgba(150, 185, 255, 0.58) 0%, transparent 60%),
-    radial-gradient(ellipse 85% 55% at 50% 0%, rgba(210, 205, 255, 0.35) 0%, transparent 55%),
-    #fdfcff;
+    radial-gradient(ellipse 55% 100% at 0% 30%, rgba(147, 197, 253, 0.55) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 100% at 100% 30%, rgba(147, 197, 253, 0.45) 0%, transparent 60%),
+    radial-gradient(ellipse 85% 55% at 50% 0%, rgba(191, 219, 254, 0.35) 0%, transparent 55%),
+    #fafcff;
 }
