@@ -14,10 +14,14 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Restore InsForge credentials
+      - name: Get InsForge access token
+        id: auth
         run: |
-          mkdir -p ~/.insforge
-          echo '{"refresh_token":"${{ secrets.INSFORGE_REFRESH_TOKEN }}"}' > ~/.insforge/credentials.json
+          TOKEN=$(curl -sf -X POST https://api.insforge.dev/api/oauth/v1/token \
+            -H "Content-Type: application/json" \
+            -d '{"grant_type":"refresh_token","refresh_token":"${{ secrets.INSFORGE_REFRESH_TOKEN }}","client_id":"clf_NK8cMUs41gm8ZcfdtSguVw"}' \
+            | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+          echo "INSFORGE_ACCESS_TOKEN=$TOKEN" >> $GITHUB_ENV
 
       - name: Link project
         run: npx @insforge/cli@latest link --project-id cc5c166d-a938-43d9-b453-e5fc17a9fd7b --org-id b1a60c39-2c6f-4dd3-aa3f-1896ee8bf988 -y
