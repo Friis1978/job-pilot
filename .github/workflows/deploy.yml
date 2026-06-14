@@ -14,8 +14,10 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Login to InsForge
-        run: npx @insforge/cli@latest login --user-api-key ${{ secrets.INSFORGE_USER_API_KEY }}
+      - name: Restore InsForge credentials
+        run: |
+          mkdir -p ~/.insforge
+          echo '{"refresh_token":"${{ secrets.INSFORGE_REFRESH_TOKEN }}"}' > ~/.insforge/credentials.json
 
       - name: Link project
         run: npx @insforge/cli@latest link --project-id cc5c166d-a938-43d9-b453-e5fc17a9fd7b --org-id b1a60c39-2c6f-4dd3-aa3f-1896ee8bf988 -y
