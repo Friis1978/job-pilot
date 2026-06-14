@@ -188,6 +188,27 @@ function countryTldsFromLocation(location: string | null): string[] {
   return [];
 }
 
+// Strip common legal suffixes so "STELLA CARE ApS" → "stella care", then slug it
+const LEGAL_SUFFIXES = /\b(aps|a\/s|as|ab|oy|gmbh|ag|bv|nv|sa|srl|spa|ltd|limited|inc|corp|llc|co|group|holding|holdings|international|solutions|services|consulting)\b/gi;
+
+function companySlug(name: string): string {
+  return name
+    .replace(LEGAL_SUFFIXES, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+    .replace(/\s+/g, "");
+}
+
+function companySlugHyphen(name: string): string {
+  return name
+    .replace(LEGAL_SUFFIXES, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
 // Try a list of candidate URLs and return the first that responds successfully
 async function probeUrls(candidates: string[]): Promise<string | null> {
   for (const url of candidates) {
@@ -345,17 +366,20 @@ export async function researchCompany(
       // back to the generic .com guess. Especially important for smaller companies
       // in non-English markets that use country TLDs (.dk, .se, .no, etc.).
       if (!gptFoundUrl) {
-        const slug = job.company.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const slug = companySlug(job.company);
+        const slugH = companySlugHyphen(job.company);
         const countryTlds = countryTldsFromLocation(job.location);
         const candidates: string[] = [
           // Country TLD variants first (more likely for non-English companies)
           ...countryTlds.flatMap((tld) => [
             `https://${slug}.${tld}`,
             `https://www.${slug}.${tld}`,
+            ...(slugH !== slug ? [`https://${slugH}.${tld}`, `https://www.${slugH}.${tld}`] : []),
           ]),
           // .com fallback
           `https://www.${slug}.com`,
           `https://${slug}.com`,
+          ...(slugH !== slug ? [`https://www.${slugH}.com`, `https://${slugH}.com`] : []),
         ];
         const probed = await probeUrls(candidates);
         if (probed) {
