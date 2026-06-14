@@ -9,6 +9,7 @@ import { CoverLetterSection } from "@/components/find-jobs/CoverLetterSection";
 import { TailoredResumeButton } from "@/components/find-jobs/TailoredResumeButton";
 import { StatusBadge } from "@/components/find-jobs/StatusBadge";
 import { ApplicationPipeline } from "@/components/find-jobs/ApplicationPipeline";
+import { RescoreButton } from "@/components/find-jobs/RescoreButton";
 import type { JobStatus } from "@/components/find-jobs/StatusBadge";
 
 type ContactInfo = {
@@ -200,9 +201,12 @@ export default async function JobDetailsPage({
           {((job.matched_skills?.length ?? 0) > 0 ||
             (job.missing_skills?.length ?? 0) > 0) && (
             <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary mb-4">
-                Required Skills vs Your Profile
-              </p>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                  Required Skills vs Your Profile
+                </p>
+                <RescoreButton jobId={job.id} />
+              </div>
 
               {(job.matched_skills?.length ?? 0) > 0 && (
                 <div className="mb-4">
