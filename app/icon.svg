@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <style>
+    /* To change the favicon color, update --accent here and in globals.css */
+    :root { --accent: #7c5cfc; }
+  </style>
+
+  <!-- Background rounded square -->
+  <rect width="64" height="64" rx="14" fill="var(--accent)"/>
+
+  <!-- Dashboard / grid icon (white) -->
+  <!-- Top-left large square -->
+  <rect x="12" y="12" width="22" height="22" rx="4" fill="white"/>
+  <!-- Top-right small square -->
+  <rect x="38" y="12" width="14" height="14" rx="3" fill="white"/>
+  <!-- Bottom-right small square -->
+  <rect x="38" y="30" width="14" height="14" rx="3" fill="white"/>
+  <!-- Bottom-left wide rectangle -->
+  <rect x="12" y="38" width="22" height="14" rx="4" fill="white"/>
+</svg>

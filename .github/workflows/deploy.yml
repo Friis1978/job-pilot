@@ -1,0 +1,24 @@
+name: Deploy to InsForge
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Login to InsForge
+        run: npx @insforge/cli@latest login --user-api-key ${{ secrets.INSFORGE_USER_API_KEY }}
+
+      - name: Link project
+        run: npx @insforge/cli@latest link --project-id cc5c166d-a938-43d9-b453-e5fc17a9fd7b --org-id b1a60c39-2c6f-4dd3-aa3f-1896ee8bf988 -y
+
+      - name: Deploy
+        run: npx @insforge/cli@latest deployments deploy .
