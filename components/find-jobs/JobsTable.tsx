@@ -55,6 +55,8 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
   const [clearing, setClearing] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [rescoring, setRescoring] = useState(false);
+  const [researching, setResearching] = useState(false);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
@@ -95,6 +97,44 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
 
   function handleClearBlur() {
     setConfirmClear(false);
+  }
+
+  async function handleRescoreAll() {
+    if (rescoring) return;
+    setRescoring(true);
+    try {
+      const res = await fetch("/api/jobs/rescore-all", { method: "POST" });
+      const json = await res.json() as { updated?: number; failed?: number; error?: string };
+      if (!res.ok || json.error) {
+        toast(json.error ?? "Re-scoring failed.", "error");
+        return;
+      }
+      toast(`Re-scored ${json.updated} job${json.updated === 1 ? "" : "s"}${json.failed ? ` (${json.failed} failed)` : ""}.`, "success");
+      router.refresh();
+    } catch {
+      toast("Could not reach the server.", "error");
+    } finally {
+      setRescoring(false);
+    }
+  }
+
+  async function handleResearchAll() {
+    if (researching) return;
+    setResearching(true);
+    try {
+      const res = await fetch("/api/jobs/research-all", { method: "POST" });
+      const json = await res.json() as { researched?: number; failed?: number; skipped?: number; error?: string };
+      if (!res.ok || json.error) {
+        toast(json.error ?? "Research failed.", "error");
+        return;
+      }
+      toast(`Researched ${json.researched} job${json.researched === 1 ? "" : "s"}${json.skipped ? `, skipped ${json.skipped} already done` : ""}${json.failed ? `, ${json.failed} failed` : ""}.`, "success");
+      router.refresh();
+    } catch {
+      toast("Could not reach the server.", "error");
+    } finally {
+      setResearching(false);
+    }
   }
 
   async function handleDeleteJob(e: React.MouseEvent, jobId: string) {
@@ -213,19 +253,39 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
             <ChevronDownIcon className="w-3.5 h-3.5 text-text-muted" />
           </button>
           {jobs.length > 0 && (
-            <button
-              onClick={handleClearJobs}
-              onBlur={handleClearBlur}
-              disabled={clearing}
-              className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                confirmClear
-                  ? "border-error text-error bg-surface-secondary"
-                  : "border-border text-text-secondary hover:bg-surface-secondary"
-              }`}
-            >
-              <TrashIcon className="w-3.5 h-3.5" />
-              {clearing ? "Clearing..." : confirmClear ? "Confirm clear" : "Clear all"}
-            </button>
+            <>
+              <button
+                onClick={handleRescoreAll}
+                disabled={rescoring}
+                title="Re-run skill matching on all saved jobs using your current profile"
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-sm font-medium text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshIcon className={`w-3.5 h-3.5 ${rescoring ? "animate-spin" : ""}`} />
+                {rescoring ? "Re-scoring..." : "Re-score all"}
+              </button>
+              <button
+                onClick={handleResearchAll}
+                disabled={researching}
+                title="Research all companies that haven't been researched yet"
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-sm font-medium text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <SearchIcon className={`w-3.5 h-3.5 ${researching ? "animate-spin" : ""}`} />
+                {researching ? "Researching..." : "Research all"}
+              </button>
+              <button
+                onClick={handleClearJobs}
+                onBlur={handleClearBlur}
+                disabled={clearing}
+                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  confirmClear
+                    ? "border-error text-error bg-surface-secondary"
+                    : "border-border text-text-secondary hover:bg-surface-secondary"
+                }`}
+              >
+                <TrashIcon className="w-3.5 h-3.5" />
+                {clearing ? "Clearing..." : confirmClear ? "Confirm clear" : "Clear all"}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -568,6 +628,39 @@ function TrashIcon({ className }: { className?: string }) {
       strokeLinejoin="round"
     >
       <path d="M3 5h14M8 5V3h4v2M6 5l1 12h6l1-12" />
+    </svg>
+  );
+}
+
+function RefreshIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 4a8 8 0 0 1 12 0M4 16a8 8 0 0 0 12 0" />
+      <path d="M2 6l2-2 2 2M14 14l2 2 2-2" />
+    </svg>
+  );
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+    >
+      <circle cx="8.5" cy="8.5" r="5.5" />
+      <path d="M13.5 13.5L17 17" />
     </svg>
   );
 }
