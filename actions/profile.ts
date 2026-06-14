@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createInsforgeServer } from "@/lib/insforge-server";
+import { computeTotalYearsExperience } from "@/lib/utils";
 import type { ProfileFormInput } from "@/types";
 
 const REQUIRED_FIELDS = [
@@ -10,7 +11,6 @@ const REQUIRED_FIELDS = [
   "location",
   "current_title",
   "experience_level",
-  "years_experience",
   "skills",
   "work_experience",
   "education_degree",
@@ -24,7 +24,6 @@ const MISSING_FIELD_LABELS: Record<(typeof REQUIRED_FIELDS)[number], string> = {
   location: "LOCATION",
   current_title: "JOB TITLE",
   experience_level: "EXPERIENCE",
-  years_experience: "YEARS EXP",
   skills: "SKILLS",
   work_experience: "WORK EXP",
   education_degree: "EDUCATION",
@@ -63,7 +62,7 @@ export async function saveProfile(
 
     const jobTitlesSeeking = splitToArray(input.jobTitlesSeeking);
     const preferredLocations = splitToArray(input.preferredLocations);
-    const yearsExperience = parseInt(input.yearsExperience, 10) || 0;
+    const yearsExperience = computeTotalYearsExperience(workExperience);
 
     const mapped = {
       full_name: input.fullName || null,
@@ -84,7 +83,6 @@ export async function saveProfile(
       cover_letter_tone: input.coverLetterTone || null,
       linkedin_url: input.linkedinUrl || null,
       portfolio_url: input.portfolioUrl || null,
-      work_authorization: input.workAuthorization || null,
     };
 
     const checks = {
@@ -93,7 +91,6 @@ export async function saveProfile(
       location: !!mapped.location,
       current_title: !!mapped.current_title,
       experience_level: !!mapped.experience_level,
-      years_experience: !!mapped.years_experience,
       skills: !!mapped.skills,
       work_experience: !!mapped.work_experience,
       education_degree: !!mapped.education,

@@ -10,7 +10,6 @@ type RequiredKey =
   | "location"
   | "current_title"
   | "experience_level"
-  | "years_experience"
   | "skills"
   | "work_experience"
   | "education_degree"
@@ -23,7 +22,6 @@ const MISSING_LABELS: Record<RequiredKey, string> = {
   location: "LOCATION",
   current_title: "JOB TITLE",
   experience_level: "EXPERIENCE",
-  years_experience: "YEARS EXP",
   skills: "SKILLS",
   work_experience: "WORK EXP",
   education_degree: "EDUCATION",
@@ -48,7 +46,6 @@ function computeCompletion(profile: Profile | null): {
     location: !!profile.location,
     current_title: !!profile.current_title,
     experience_level: !!profile.experience_level,
-    years_experience: !!profile.years_experience,
     skills: (profile.skills?.length ?? 0) > 0,
     work_experience: (profile.work_experience?.length ?? 0) > 0,
     education_degree: !!(profile.education as { degree?: string } | null)?.degree,

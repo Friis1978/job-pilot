@@ -4,6 +4,7 @@ type Props = {
 };
 
 export function CompletionIndicator({ percentage, missingFields }: Props) {
+  if (percentage === 100) return null;
   const radius = 45;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference * (1 - percentage / 100);

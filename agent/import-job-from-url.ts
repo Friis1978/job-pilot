@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { Stagehand } from "@browserbasehq/stagehand";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
-import { stripHtml } from "@/lib/utils";
+import { stripHtml, MATCH_THRESHOLD } from "@/lib/utils";
 import { browserbase } from "@/lib/browserbase";
 import { scoreJob } from "@/agent/find-jobs";
 import type { Profile, NormalizedJob } from "@/types";
@@ -309,6 +309,11 @@ If title or company cannot be determined, return them as empty strings.`,
   if (!scored) {
     await posthog.shutdown();
     return { success: false, error: "Scoring failed. Please try again." };
+  }
+
+  if (scored.matchScore < MATCH_THRESHOLD) {
+    await posthog.shutdown();
+    return { success: false, error: `This job scored ${scored.matchScore}% — below the 70% minimum match rate. Import skipped.` };
   }
 
   // Save to DB

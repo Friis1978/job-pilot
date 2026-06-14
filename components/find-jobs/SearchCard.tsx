@@ -6,15 +6,15 @@ import { toast } from "@/lib/toast";
 
 type RecentSearch = { jobTitle: string; location: string; searchedAt: string };
 
-type Props = { recentSearches?: RecentSearch[] };
+type Props = { recentSearches?: RecentSearch[]; defaultLocation?: string };
 
-export function SearchCard({ recentSearches = [] }: Props) {
+export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<"search" | "url">("search");
 
   // Search tab state
   const [jobTitle, setJobTitle] = useState("");
-  const [location, setLocation] = useState("");
+  const [location, setLocation] = useState(defaultLocation);
   const [minScore, setMinScore] = useState(70);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{

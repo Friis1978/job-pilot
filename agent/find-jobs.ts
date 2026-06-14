@@ -6,7 +6,7 @@ import { searchJobsSweden } from "@/lib/jobtech";
 import { searchJobsJooble } from "@/lib/jooble";
 import { searchJobsCareerjet } from "@/lib/careerjet";
 import { searchJobsGlassdoor } from "@/lib/glassdoor";
-import { MATCH_THRESHOLD, stripHtml, computeSkillYears } from "@/lib/utils";
+import { MATCH_THRESHOLD, stripHtml, computeSkillYears, getLocationAliases } from "@/lib/utils";
 import type { Profile, AdzunaJob, NormalizedJob, ScoredJob } from "@/types";
 
 type ScoringResult = ScoredJob & { job: NormalizedJob };
@@ -217,10 +217,22 @@ export async function findJobs(
       fetches.push(searchJobsSweden(jobTitle));
     }
     if (sources.includes("jooble")) {
-      fetches.push(searchJobsJooble(jobTitle, location));
+      const aliases = getLocationAliases(location);
+      fetches.push(
+        Promise.all(aliases.map((loc) => searchJobsJooble(jobTitle, loc))).then((results) => {
+          const seen = new Set<string>();
+          return results.flat().filter((j) => { if (seen.has(j.url)) return false; seen.add(j.url); return true; });
+        }),
+      );
     }
     if (sources.includes("careerjet")) {
-      fetches.push(searchJobsCareerjet(jobTitle, location));
+      const aliases = getLocationAliases(location);
+      fetches.push(
+        Promise.all(aliases.map((loc) => searchJobsCareerjet(jobTitle, loc))).then((results) => {
+          const seen = new Set<string>();
+          return results.flat().filter((j) => { if (seen.has(j.url)) return false; seen.add(j.url); return true; });
+        }),
+      );
     }
     if (sources.includes("glassdoor")) {
       const glassdoorLocation = /sweden|sverige|stockholm|g[öo]teborg|malm[öo]/i.test(location)

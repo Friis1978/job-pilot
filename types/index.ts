@@ -35,7 +35,6 @@ export type Profile = {
   cover_letter_tone: string | null;
   linkedin_url: string | null;
   portfolio_url: string | null;
-  work_authorization: string | null;
   resume_pdf_url: string | null;
   avatar_url: string | null;
   is_complete: boolean;
@@ -97,10 +96,8 @@ export type ProfileFormInput = {
   location: string;
   linkedinUrl: string;
   portfolioUrl: string;
-  workAuthorization: string;
   currentTitle: string;
   experienceLevel: string;
-  yearsExperience: string;
   skills: string[];
   industries: string[];
   workExperience: {

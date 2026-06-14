@@ -4,7 +4,8 @@ import { NextResponse, type NextRequest } from "next/server";
 const PROTECTED_PATHS = ["/dashboard", "/profile", "/find-jobs"];
 
 export async function middleware(request: NextRequest) {
-  const response = NextResponse.next({
+  // Use a temporary response so updateSession can write refreshed cookies onto it.
+  const tempResponse = NextResponse.next({
     request: { headers: request.headers },
   });
 
@@ -16,7 +17,7 @@ export async function middleware(request: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     requestCookies: request.cookies as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    responseCookies: response.cookies as any,
+    responseCookies: tempResponse.cookies as any,
     options: {
       accessToken: { maxAge: 60 * 60 * 24 * 7 },   // 7 days
       refreshToken: { maxAge: 60 * 60 * 24 * 30 },  // 30 days
@@ -37,6 +38,23 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
+  // Forward the valid access token to API route handlers via a custom header.
+  // Route handlers cannot reliably read cookies that middleware refreshed on the
+  // response (Next.js gives them the original request cookies), so we pass the
+  // token explicitly and read it in createInsforgeServer.
+  const requestHeaders = new Headers(request.headers);
+  if (accessToken) {
+    requestHeaders.set("x-insforge-access-token", accessToken);
+  }
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+
+  // Copy any refreshed cookies onto the final response so the browser receives them.
+  tempResponse.cookies.getAll().forEach((c) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    response.cookies.set(c as any);
+  });
+
   return response;
 }
 
@@ -46,5 +64,6 @@ export const config = {
     "/profile/:path*",
     "/find-jobs/:path*",
     "/auth/login",
+    "/api/:path*",
   ],
 };

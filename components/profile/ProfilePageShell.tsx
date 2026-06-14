@@ -21,19 +21,36 @@ export function ProfilePageShell({ profile, initialResumeUrl, userId }: Props) {
     setExtractionCount((n) => n + 1);
   }
 
+  const resumeUpload = (
+    <ResumeUpload
+      initialResumeUrl={initialResumeUrl}
+      userId={userId}
+      onExtract={handleExtract}
+      embedded={!!profile}
+    />
+  );
+
+  if (!profile) {
+    return (
+      <>
+        {resumeUpload}
+        <ProfileForm
+          key={extractionCount > 0 ? `extracted-${extractionCount}` : "empty"}
+          initialData={null}
+          extractedFormData={extractionCount > 0 ? extractedFormData : null}
+          userId={userId}
+        />
+      </>
+    );
+  }
+
   return (
-    <>
-      <ResumeUpload
-        initialResumeUrl={initialResumeUrl}
-        userId={userId}
-        onExtract={handleExtract}
-      />
-      <ProfileForm
-        key={extractionCount > 0 ? `extracted-${extractionCount}` : (profile?.updated_at ?? "empty")}
-        initialData={profile}
-        extractedFormData={extractionCount > 0 ? extractedFormData : null}
-        userId={userId}
-      />
-    </>
+    <ProfileForm
+      key={extractionCount > 0 ? `extracted-${extractionCount}` : (profile.updated_at ?? "profile")}
+      initialData={profile}
+      extractedFormData={extractionCount > 0 ? extractedFormData : null}
+      userId={userId}
+      resumeSection={resumeUpload}
+    />
   );
 }

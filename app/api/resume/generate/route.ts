@@ -3,6 +3,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import OpenAI from "openai";
 import { createElement, type ReactElement } from "react";
 import { createInsforgeServer } from "@/lib/insforge-server";
+import { computeSkillYears, computeTotalYearsExperience } from "@/lib/utils";
 import { ResumePDF } from "../ResumePDF";
 import type { Profile } from "@/types";
 import type { DocumentProps } from "@react-pdf/renderer";
@@ -11,6 +12,9 @@ const SYSTEM_PROMPT = `You are a professional resume writer. Given a candidate's
 
 {
   "summary": "<2-3 sentence professional summary>",
+  "skillGroups": [
+    { "label": string, "skills": string[] }
+  ],
   "workExperience": [
     {
       "company": string,
@@ -25,13 +29,24 @@ const SYSTEM_PROMPT = `You are a professional resume writer. Given a candidate's
 
 Rules:
 - summary: 2-3 sentences, third-person present tense, no first-person "I"
+- skillGroups: categorize ALL skills from the input into labelled groups. Use exactly these short labels. Order groups as follows:
+  1. "Frameworks" — UI frameworks, backend frameworks, ORMs, component libraries (e.g. React, Next.js, Express, Django, Prisma)
+  2. "Languages" — programming and markup languages (e.g. TypeScript, Python, SQL, HTML, CSS)
+  3. "Frontend" — browser-side tools, styling, build tools (e.g. Tailwind CSS, Vite, Webpack)
+  4. "Backend" — server concepts, API patterns, runtime environments (e.g. Node.js, REST, GraphQL, WebSockets)
+  5. "Databases" — databases and object stores (e.g. PostgreSQL, MongoDB, Redis, S3)
+  6. "Tools" — CI/CD, cloud, containers, monitoring, version control (e.g. Docker, AWS, GitHub Actions, Datadog)
+  Only include a group if it has at least one skill. Every skill from the input must appear in exactly one group. Do not invent skills.
 - bullets: 3-5 per role, start with a past-tense action verb (Led, Built, Reduced, Designed, etc.)
 - For currentlyWorking roles, use present-tense action verbs (Leads, Builds, etc.)
 - Preserve ALL roles from the input — do not add or remove any
 - startDate / endDate / currentlyWorking: copy exactly from input, do not change`;
 
+type SkillGroup = { label: string; skills: string[] };
+
 type GeneratedContent = {
   summary: string;
+  skillGroups?: SkillGroup[];
   workExperience: {
     company: string;
     title: string;
@@ -39,8 +54,18 @@ type GeneratedContent = {
     endDate: string;
     currentlyWorking: boolean;
     bullets: string[];
+    skills?: string[];
   }[];
 };
+
+function pdfResponse(buffer: ArrayBuffer): NextResponse {
+  return new NextResponse(buffer, {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": 'attachment; filename="resume.pdf"',
+    },
+  });
+}
 
 export async function POST(): Promise<NextResponse> {
   try {
@@ -65,7 +90,23 @@ export async function POST(): Promise<NextResponse> {
       );
     }
 
-    const profile = profileData as Profile;
+    const profile = profileData as Profile & { resume_generated_at?: string | null };
+    const storagePath = `${userId}/generated-resume.pdf`;
+
+    // Serve cached resume if profile hasn't changed since last generation.
+    // Download server-side (bucket is private) and stream the bytes directly —
+    // the browser cannot hit the storage URL directly without an auth token.
+    const generatedAt = profile.resume_generated_at ? new Date(profile.resume_generated_at) : null;
+    const updatedAt = profile.updated_at ? new Date(profile.updated_at) : null;
+    if (generatedAt && updatedAt && generatedAt >= updatedAt && profile.resume_pdf_url) {
+      const { data: cachedBlob, error: downloadError } = await insforge.storage
+        .from("resumes")
+        .download(storagePath);
+      if (!downloadError && cachedBlob) {
+        return pdfResponse(await cachedBlob.arrayBuffer());
+      }
+      // Download failed — fall through to regenerate
+    }
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -79,7 +120,7 @@ export async function POST(): Promise<NextResponse> {
     const profileInput = {
       fullName: profile.full_name,
       currentTitle: profile.current_title,
-      yearsExperience: profile.years_experience,
+      yearsExperience: computeTotalYearsExperience(profile.work_experience),
       skills: profile.skills,
       workExperience: profile.work_experience,
       education: profile.education,
@@ -117,46 +158,77 @@ export async function POST(): Promise<NextResponse> {
       );
     }
 
+    // Normalise group labels to short canonical forms
+    const LABEL_MAP: Record<string, string> = {
+      "frameworks & libraries": "Frameworks",
+      "frameworks and libraries": "Frameworks",
+      "backend & apis": "Backend",
+      "backend and apis": "Backend",
+      "databases & storage": "Databases",
+      "databases and storage": "Databases",
+      "tools & infrastructure": "Tools",
+      "tools and infrastructure": "Tools",
+      "infrastructure": "Tools",
+    };
+    if (generated.skillGroups) {
+      generated.skillGroups = generated.skillGroups.map((g) => ({
+        ...g,
+        label: LABEL_MAP[g.label.toLowerCase()] ?? g.label,
+      }));
+    }
+
+    // Strip any hallucinated skills — only keep skills the user actually added
+    if (generated.skillGroups) {
+      const allowed = new Set((profile.skills ?? []).map((s) => s.toLowerCase()));
+      generated.skillGroups = generated.skillGroups
+        .map((group) => ({
+          ...group,
+          skills: group.skills.filter((s) => allowed.has(s.toLowerCase())),
+        }))
+        .filter((group) => group.skills.length > 0);
+    }
+
+    // Merge per-role skills from profile into generated roles (GPT preserves order)
+    generated.workExperience = generated.workExperience.map((genRole, i) => ({
+      ...genRole,
+      skills: (profile.work_experience ?? [])[i]?.skills ?? [],
+    }));
+
+    // Compute years of experience per skill from work history
+    const skillYears = computeSkillYears(profile.work_experience);
+
     // Render PDF buffer
     // Cast required: renderToBuffer expects ReactElement<DocumentProps>, but our wrapper
     // component has a different Props shape — the runtime type is correct.
     const element = createElement(
       ResumePDF,
-      { profile, generated },
+      { profile, generated, skillYears },
     ) as unknown as ReactElement<DocumentProps>;
     const buffer = await renderToBuffer(element);
 
-    // Upload to InsForge Storage — remove first so the same path can be reused
-    const storagePath = `${userId}/generated-resume.pdf`;
-    await insforge.storage.from("resumes").remove(storagePath);
-
+    // Upload to InsForge Storage for caching — remove first so the same path can be reused
     const pdfBlob = new Blob([new Uint8Array(buffer)], { type: "application/pdf" });
+    await insforge.storage.from("resumes").remove(storagePath);
     const { data: uploadData, error: uploadError } = await insforge.storage
       .from("resumes")
       .upload(storagePath, pdfBlob);
 
     if (uploadError || !uploadData) {
       console.error("[api/resume/generate] storage upload error", uploadError);
-      return NextResponse.json(
-        { error: "Failed to save resume. Please try again." },
-        { status: 500 },
-      );
+      // Still return the PDF — caching failed but generation succeeded
+    } else {
+      // Mark generation timestamp so next request can serve the cached copy
+      const { error: dbError } = await insforge.database
+        .from("profiles")
+        .update({ resume_pdf_url: uploadData.url, resume_generated_at: new Date().toISOString() })
+        .eq("id", userId);
+      if (dbError) {
+        console.error("[api/resume/generate] db update error", dbError);
+      }
     }
 
-    const url = insforge.storage.from("resumes").getPublicUrl(storagePath);
-
-    // Update profile with generated resume URL
-    const { error: dbError } = await insforge.database
-      .from("profiles")
-      .update({ resume_pdf_url: url })
-      .eq("id", userId);
-
-    if (dbError) {
-      // Log but don't fail — PDF is generated and URL is valid
-      console.error("[api/resume/generate] db update error", dbError);
-    }
-
-    return NextResponse.json({ data: { url } });
+    // Stream the PDF directly — client receives bytes, no auth-gated URL needed
+    return pdfResponse(buffer.buffer as ArrayBuffer);
   } catch (err) {
     console.error("[api/resume/generate]", err);
     return NextResponse.json(

@@ -7,8 +7,11 @@ import {
 } from "@react-pdf/renderer";
 import type { Profile } from "@/types";
 
+type SkillGroup = { label: string; skills: string[] };
+
 type GeneratedContent = {
   summary: string;
+  skillGroups?: SkillGroup[];
   skills?: string[];
   workExperience: {
     company: string;
@@ -24,6 +27,7 @@ type GeneratedContent = {
 type Props = {
   profile: Profile;
   generated: GeneratedContent;
+  skillYears?: Record<string, number>;
 };
 
 const TEXT = "#111827";
@@ -46,7 +50,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontFamily: "Helvetica-Bold",
     color: TEXT,
-    marginBottom: 3,
+    marginBottom: 8,
   },
   headerTitle: {
     fontSize: 12,
@@ -87,10 +91,26 @@ const styles = StyleSheet.create({
     lineHeight: 1.6,
   },
   // Skills
+  skillGroupRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 3,
+  },
+  skillGroupLabel: {
+    fontSize: 8,
+    fontFamily: "Helvetica-Bold",
+    color: MUTED,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    width: 110,
+    paddingTop: 1,
+    flexShrink: 0,
+  },
   skillsText: {
-    fontSize: 10,
+    fontSize: 9,
     color: TEXT,
     lineHeight: 1.5,
+    flex: 1,
   },
   // Work experience
   roleRow: {
@@ -169,7 +189,7 @@ function formatDateRange(
   return start && end ? `${start} – ${end}` : start || end;
 }
 
-export function ResumePDF({ profile, generated }: Props) {
+export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
   const contactParts: string[] = [];
   if (profile.email) contactParts.push(profile.email);
   if (profile.phone) contactParts.push(profile.phone);
@@ -206,11 +226,50 @@ export function ResumePDF({ profile, generated }: Props) {
         ) : null}
 
         {/* Skills */}
-        {((generated.skills ?? profile.skills) ?? []).length > 0 ? (
+        {(generated.skillGroups?.length ?? 0) > 0 ? (
           <View>
             <Text style={styles.sectionLabel}>Skills</Text>
             <View style={styles.divider} />
-            <Text style={styles.skillsText}>{(generated.skills ?? profile.skills ?? []).join("  ·  ")}</Text>
+            {generated.skillGroups!.map((group, gi) => {
+              const sorted = group.skills
+                .slice()
+                .sort((a, b) => {
+                  const yA = skillYears[a] ?? 0;
+                  const yB = skillYears[b] ?? 0;
+                  if (yB !== yA) return yB - yA;
+                  return a.localeCompare(b);
+                })
+                .map((skill) => {
+                  const yrs = skillYears[skill];
+                  return yrs && yrs > 0 ? `${skill} (${yrs} yr${yrs === 1 ? "" : "s"})` : skill;
+                });
+              return (
+                <View key={gi} style={styles.skillGroupRow}>
+                  <Text style={styles.skillGroupLabel}>{group.label}</Text>
+                  <Text style={styles.skillsText}>{sorted.join("  ·  ")}</Text>
+                </View>
+              );
+            })}
+          </View>
+        ) : (profile.skills ?? []).length > 0 ? (
+          <View>
+            <Text style={styles.sectionLabel}>Skills</Text>
+            <View style={styles.divider} />
+            <Text style={styles.skillsText}>
+              {(profile.skills ?? [])
+                .slice()
+                .sort((a, b) => {
+                  const yA = skillYears[a] ?? 0;
+                  const yB = skillYears[b] ?? 0;
+                  if (yB !== yA) return yB - yA;
+                  return a.localeCompare(b);
+                })
+                .map((skill) => {
+                  const yrs = skillYears[skill];
+                  return yrs && yrs > 0 ? `${skill} (${yrs} yr${yrs === 1 ? "" : "s"})` : skill;
+                })
+                .join("  ·  ")}
+            </Text>
           </View>
         ) : null}
 
@@ -220,7 +279,7 @@ export function ResumePDF({ profile, generated }: Props) {
             <Text style={styles.sectionLabel}>Work Experience</Text>
             <View style={styles.divider} />
             {generated.workExperience.map((role, i) => (
-              <View key={i} style={styles.roleBlock}>
+              <View key={i} style={styles.roleBlock} wrap={false}>
                 <View style={styles.roleRow}>
                   <Text style={styles.roleCompany}>{role.company}</Text>
                   <Text style={styles.roleDates}>

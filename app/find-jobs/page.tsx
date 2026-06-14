@@ -28,7 +28,7 @@ export default async function FindJobsPage() {
       .limit(50),
     insforge.database
       .from("profiles")
-      .select("avatar_url")
+      .select("avatar_url, location")
       .eq("id", user.id)
       .maybeSingle(),
   ]);
@@ -55,12 +55,16 @@ export default async function FindJobsPage() {
     .slice(0, 5)
     .map((s) => ({ jobTitle: s.job_title, location: s.location, searchedAt: s.searched_at }));
 
+  const profileRow = profileResult.status === "fulfilled"
+    ? (profileResult.value.data as { avatar_url?: string | null; location?: string | null } | null)
+    : null;
+
   return (
     <>
-      <Navbar user={{ name: userMeta?.full_name ?? userMeta?.name, email: user.email, avatarUrl: (profileResult.status === "fulfilled" ? (profileResult.value.data as { avatar_url?: string | null } | null)?.avatar_url : null) ?? userMeta?.avatar_url }} />
+      <Navbar user={{ name: userMeta?.full_name ?? userMeta?.name, email: user.email, avatarUrl: profileRow?.avatar_url ?? userMeta?.avatar_url }} />
       <main className="min-h-screen bg-background py-8">
         <div className="w-full max-w-360 mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-6 pb-12">
-          <SearchCard recentSearches={recentSearches} />
+          <SearchCard recentSearches={recentSearches} defaultLocation={profileRow?.location ?? ""} />
           <JobsTable jobs={jobs} />
         </div>
       </main>

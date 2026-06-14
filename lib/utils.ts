@@ -2,6 +2,64 @@ import type { WorkExperience } from "@/types";
 
 export const MATCH_THRESHOLD = 70;
 
+// Maps common city names to all recognised variants (English + local language).
+// Used to run parallel searches on APIs that only accept one form at a time.
+const LOCATION_ALIASES: Record<string, string[]> = {
+  copenhagen:    ["Copenhagen", "København"],
+  københavn:     ["Copenhagen", "København"],
+  aarhus:        ["Aarhus", "Århus"],
+  århus:         ["Aarhus", "Århus"],
+  odense:        ["Odense"],
+  aalborg:       ["Aalborg"],
+  "helsingør":   ["Helsingør", "Elsinore"],
+  elsinore:      ["Helsingør", "Elsinore"],
+  roskilde:      ["Roskilde"],
+  frederiksberg: ["Frederiksberg"],
+  kolding:       ["Kolding"],
+  esbjerg:       ["Esbjerg"],
+  denmark:       ["Denmark", "Danmark"],
+  danmark:       ["Denmark", "Danmark"],
+};
+
+/**
+ * Returns all known location variants for a given input (e.g. both the English
+ * and Danish name for the same city). Falls back to `[location]` if unknown.
+ */
+export function getLocationAliases(location: string): string[] {
+  return LOCATION_ALIASES[location.toLowerCase().trim()] ?? [location];
+}
+
+export function computeTotalYearsExperience(
+  workExperience: WorkExperience[] | null | undefined,
+): number {
+  const entries = workExperience ?? [];
+  if (!entries.length) return 0;
+
+  let earliest: Date | null = null;
+  let latest: Date | null = null;
+
+  for (const role of entries) {
+    const start = role.startDate ? new Date(role.startDate + "-01") : null;
+    if (start && !isNaN(start.getTime())) {
+      if (!earliest || start < earliest) earliest = start;
+    }
+    const end = role.currentlyWorking
+      ? new Date()
+      : role.endDate
+        ? new Date(role.endDate + "-01")
+        : null;
+    if (end && !isNaN(end.getTime())) {
+      if (!latest || end > latest) latest = end;
+    }
+  }
+
+  if (!earliest || !latest) return 0;
+  return Math.max(
+    0,
+    Math.floor((latest.getTime() - earliest.getTime()) / (1000 * 60 * 60 * 24 * 365.25)),
+  );
+}
+
 export function computeSkillYears(
   workExperience: WorkExperience[] | null | undefined,
 ): Record<string, number> {

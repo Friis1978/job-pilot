@@ -216,7 +216,6 @@ URL saved to profiles table
 | cover_letter_tone   | text        | formal / casual / enthusiastic               |
 | linkedin_url        | text        |                                              |
 | portfolio_url       | text        |                                              |
-| work_authorization  | text        | citizen / permanent_resident / visa_required |
 | resume_pdf_url      | text        | InsForge Storage URL of current resume       |
 | is_complete         | boolean     | True when all required fields filled         |
 | created_at          | timestamptz |                                              |

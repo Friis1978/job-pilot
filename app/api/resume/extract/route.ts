@@ -16,7 +16,6 @@ Return ONLY valid JSON with this exact shape — use empty string "" for missing
   "portfolioUrl": string,
   "currentTitle": string,
   "experienceLevel": string,
-  "yearsExperience": string,
   "skills": string[],
   "industries": string[],
   "workExperience": [
@@ -37,7 +36,6 @@ Return ONLY valid JSON with this exact shape — use empty string "" for missing
 
 Rules:
 - experienceLevel must be one of: "junior", "mid", "senior", "lead" — infer from years and seniority of roles
-- yearsExperience: total years as a number string (e.g. "7")
 - startDate / endDate: YYYY-MM format (e.g. "2021-03") — use YYYY-01 if only year is given
 - currentlyWorking: true if the role has no end date or says "present"
 - endDate: "" when currentlyWorking is true
