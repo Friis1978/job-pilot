@@ -123,12 +123,19 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
     setResearching(true);
     try {
       const res = await fetch("/api/jobs/research-all", { method: "POST" });
-      const json = await res.json() as { researched?: number; failed?: number; skipped?: number; error?: string };
+      const json = await res.json() as { researched?: number; failed?: number; skipped?: number; total?: number; error?: string };
       if (!res.ok || json.error) {
         toast(json.error ?? "Research failed.", "error");
         return;
       }
-      toast(`Researched ${json.researched} job${json.researched === 1 ? "" : "s"}${json.skipped ? `, skipped ${json.skipped} already done` : ""}${json.failed ? `, ${json.failed} failed` : ""}.`, "success");
+      if ((json.total ?? 0) === 0) {
+        toast("All jobs are already researched.", "success");
+      } else {
+        const parts = [`Researched ${json.researched} job${json.researched === 1 ? "" : "s"}`];
+        if (json.skipped) parts.push(`${json.skipped} skipped`);
+        if (json.failed) parts.push(`${json.failed} failed`);
+        toast(parts.join(", ") + ".", "success");
+      }
       router.refresh();
     } catch {
       toast("Could not reach the server.", "error");

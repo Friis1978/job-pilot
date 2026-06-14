@@ -24,7 +24,7 @@ export async function POST() {
   }
 
   if (!jobs?.length) {
-    return NextResponse.json({ researched: 0, skipped: 0, failed: 0 });
+    return NextResponse.json({ researched: 0, skipped: 0, failed: 0, total: 0 });
   }
 
   let researched = 0;
