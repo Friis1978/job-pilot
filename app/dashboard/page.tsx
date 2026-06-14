@@ -24,7 +24,7 @@ type Timestamped = ActivityItem & { ts: number };
 
 type ResearchedJobRow = {
   company: string;
-  found_at: string;
+  researched_at: string;
 };
 
 function weekTrend(current: number, previous: number): number | null {
@@ -64,10 +64,10 @@ export default async function DashboardPage() {
       .limit(20),
     insforge.database
       .from("jobs")
-      .select("company, found_at")
+      .select("company, researched_at")
       .eq("user_id", user.id)
-      .not("company_research", "is", null)
-      .order("found_at", { ascending: false })
+      .not("researched_at", "is", null)
+      .order("researched_at", { ascending: false })
       .limit(20),
     getDashboardStats(user.id),
     insforge.database
@@ -82,10 +82,10 @@ export default async function DashboardPage() {
       .not("match_score", "is", null),
     insforge.database
       .from("jobs")
-      .select("company, source, found_at")
+      .select("company, source, researched_at")
       .eq("user_id", user.id)
-      .not("company_research", "is", null)
-      .order("found_at", { ascending: true }),
+      .not("researched_at", "is", null)
+      .order("researched_at", { ascending: true }),
     insforge.database
       .from("jobs")
       .select("status")
@@ -143,9 +143,9 @@ export default async function DashboardPage() {
   })();
   const companyResearchData: CompanyResearchPoint[] = (() => {
     const rows = companyResearchResult.status === "fulfilled"
-      ? (companyResearchResult.value.data ?? []) as { company: string; source: string; found_at: string }[]
+      ? (companyResearchResult.value.data ?? []) as { company: string; source: string; researched_at: string }[]
       : [];
-    // Deduplicate by company name — keep the first (earliest) entry per company
+    // Deduplicate by company name — keep the most recent entry per company
     const seen = new Set<string>();
     const deduped = rows.filter((r) => {
       const key = r.company.toLowerCase().trim();
@@ -153,12 +153,12 @@ export default async function DashboardPage() {
       seen.add(key);
       return true;
     });
-    // Group deduplicated entries into 7-day buckets
+    // Group deduplicated entries into 7-day buckets by when research was done
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const byDay = new Map<string, { search: number; imported: number }>();
     for (const row of deduped) {
-      if (new Date(row.found_at).getTime() < sevenDaysAgo) continue;
-      const day = row.found_at.slice(0, 10);
+      if (new Date(row.researched_at).getTime() < sevenDaysAgo) continue;
+      const day = row.researched_at.slice(0, 10);
       const entry = byDay.get(day) ?? { search: 0, imported: 0 };
       if (row.source === "url") entry.imported++;
       else entry.search++;
@@ -211,8 +211,8 @@ export default async function DashboardPage() {
   ).map((job) => ({
     type: "researched" as const,
     text: `Researched ${job.company}`,
-    time: formatDateAgo(job.found_at),
-    ts: new Date(job.found_at).getTime(),
+    time: formatDateAgo(job.researched_at),
+    ts: new Date(job.researched_at).getTime(),
   }));
 
   const activities: ActivityItem[] = [...runActivities, ...researchActivities]

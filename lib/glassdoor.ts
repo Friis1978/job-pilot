@@ -1,4 +1,5 @@
 import type { NormalizedJob } from "@/types";
+import { stripHtml } from "@/lib/utils";
 
 type GlassdoorHeader = {
   employer: { name: string } | null;
@@ -14,6 +15,7 @@ type GlassdoorHeader = {
 type GlassdoorJob = {
   jobTitleText: string;
   listingId: number;
+  description?: string;
 };
 
 type GlassdoorListing = {
@@ -65,17 +67,18 @@ export async function searchJobsGlassdoor(
       ? `~$${Math.round(header.payPeriodAdjustedPay.p50 / 1000)}k`
       : null;
 
-    const skills =
-      header.indeedJobAttribute?.extractedJobAttributes
-        ?.map((a) => a.value)
-        .join(", ") ?? "";
+    const description = job.description
+      ? stripHtml(job.description)
+      : (header.indeedJobAttribute?.extractedJobAttributes
+          ?.map((a) => a.value)
+          .join("\n") ?? "");
 
     return {
       id: `glassdoor-${job.listingId ?? i}-${Date.now()}`,
       title: job.jobTitleText ?? header.normalizedJobTitle ?? "Unknown",
       company: header.employer?.name ?? "Unknown",
       location: header.locationName ?? location,
-      description: skills,
+      description,
       url: header.jobViewUrl ?? "",
       salary,
       job_type: null,
