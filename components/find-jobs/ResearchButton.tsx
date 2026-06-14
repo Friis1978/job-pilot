@@ -26,27 +26,47 @@ export function ResearchButton({ jobId, hasResearch = false }: Props) {
     if (loading) return;
     setLoading(true);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120_000); // 2 min max
+
     try {
       const res = await fetch("/api/agent/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobId }),
+        signal: controller.signal,
       });
-      const json = await res.json();
 
-      if (!res.ok || json.error) {
-        toast(json.error ?? "Something went wrong. Please try again.");
+      if (res.status === 401) {
+        toast("Your session has expired. Please reload the page and try again.", "error");
         return;
       }
 
-      // Store warning before reload — toast won't survive a page navigation
+      let json: { error?: string; warning?: string; success?: boolean };
+      try {
+        json = await res.json();
+      } catch {
+        toast("Research timed out. The company website may be slow — please try again.", "error");
+        return;
+      }
+
+      if (!res.ok || json.error) {
+        toast(json.error ?? "Research failed. Please try again.", "error");
+        return;
+      }
+
       if (json.warning) {
         sessionStorage.setItem(RESEARCH_WARNING_KEY, json.warning);
       }
       window.location.reload();
-    } catch {
-      toast("Something went wrong. Please try again.");
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        toast("Research timed out after 2 minutes. Please try again.", "error");
+      } else {
+        toast("Could not reach the server. Check your connection and try again.", "error");
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   }
