@@ -48,8 +48,8 @@ export type JobRow = {
   title: string;
   location: string | null;
   match_score: number;
-  salary: string | null;
   found_at: string;
+  researched_at: string | null;
   matched_skills: string[] | null;
   status: string;
   source: string;

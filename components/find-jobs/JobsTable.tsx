@@ -328,7 +328,7 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                     Match Score
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[10%]">
-                    Salary Est.
+                    Researched
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[10%]">
                     Status
@@ -383,9 +383,14 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm text-text-primary">
-                        {job.salary ?? "—"}
-                      </span>
+                      {job.researched_at ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-success">
+                          <CheckCircleIcon className="w-4 h-4" />
+                          Done
+                        </span>
+                      ) : (
+                        <span className="text-sm text-text-muted">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <StatusBadge jobId={job.id} status={(job.status as JobStatus) ?? "saved"} />
@@ -530,6 +535,23 @@ function BuildingIcon({ className }: { className?: string }) {
       strokeLinejoin="round"
     >
       <path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21V12h6v9" />
+    </svg>
+  );
+}
+
+function CheckCircleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="10" cy="10" r="8" />
+      <path d="M6.5 10l2.5 2.5 4.5-4.5" />
     </svg>
   );
 }
