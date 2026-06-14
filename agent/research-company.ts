@@ -651,141 +651,107 @@ Return ONLY valid JSON:
       }
     }
 
-    // If browser research found nothing, try a plain HTTP fetch of the homepage
+    // If browser research found nothing, try all available sources in one combined GPT-4o call:
+    // 1. Plain HTTP fetch of the company website
+    // 2. The job posting itself (which usually contains an "About the company" section)
+    // 3. GPT-4o's own training knowledge as implicit fallback
     const browserResearchEmpty =
       !companyResearchRaw.oneLiner && !companyResearchRaw.productSummary;
 
-    if (browserResearchEmpty && homepageUrl) {
-      console.log(
-        "[agent/research-company] browser research empty — trying plain HTTP fetch of homepage",
-      );
-      try {
-        const homepageRes = await fetch(homepageUrl, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-          },
-          signal: AbortSignal.timeout(10_000),
-        });
-        if (homepageRes.ok) {
-          const html = await homepageRes.text();
-          const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
-            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
-            .replace(/<[^>]+>/g, " ")
-            .replace(/\s+/g, " ")
-            .trim()
-            .slice(0, 5000);
+    const stillEmpty = browserResearchEmpty; // alias used later for synthesis label
 
-          if (text.length > 100) {
-            const httpResponse = await openai.chat.completions.create({
-              model: "gpt-4o",
-              response_format: { type: "json_object" },
-              temperature: 0,
-              max_tokens: 400,
-              messages: [
-                {
-                  role: "system",
-                  content: `You are extracting company information from a homepage. The page may be in any language.
-Return ONLY valid JSON:
-{
-  "oneLiner": "<what the company does in one sentence — or empty string if unclear>",
-  "productSummary": "<what they build/sell and who it's for — or empty string if unclear>",
-  "signals": ["<notable fact about the company: size, mission, customers, products, technologies>"]
-}`,
-                },
-                {
-                  role: "user",
-                  content: `Company name: ${job.company}\nURL: ${homepageUrl}\n\nPage text:\n${text}`,
-                },
-              ],
-            });
+    if (browserResearchEmpty) {
+      console.log("[agent/research-company] browser research empty — running combined fallback");
 
-            const raw = httpResponse.choices[0]?.message?.content;
-            if (raw) {
-              const parsed = JSON.parse(raw) as {
-                oneLiner?: string;
-                productSummary?: string;
-                signals?: string[];
-              };
-              if (parsed.oneLiner) companyResearchRaw.oneLiner = parsed.oneLiner;
-              if (parsed.productSummary) companyResearchRaw.productSummary = parsed.productSummary;
-              if (parsed.signals?.length) companyResearchRaw.signals = parsed.signals;
-              if (parsed.oneLiner || parsed.productSummary) {
-                companyResearchRaw.sourceUrls.push(homepageUrl);
-                console.log("[agent/research-company] plain HTTP fetch succeeded");
-              }
-            }
+      // Attempt plain HTTP fetch of the homepage
+      let websiteText = "";
+      if (homepageUrl) {
+        try {
+          const homepageRes = await fetch(homepageUrl, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "Accept-Language": "en-US,en;q=0.5,da;q=0.3",
+            },
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (homepageRes.ok) {
+            const html = await homepageRes.text();
+            websiteText = html
+              .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
+              .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
+              .replace(/<!--[\s\S]*?-->/g, " ")
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 4000);
+            console.log(`[agent/research-company] HTTP fetch got ${websiteText.length} chars from ${homepageUrl}`);
           }
+        } catch (httpErr) {
+          console.error("[agent/research-company] plain HTTP fetch failed", httpErr);
         }
-      } catch (httpErr) {
-        console.error("[agent/research-company] plain HTTP fetch failed", httpErr);
-        // Continue — fall through to GPT-4o training knowledge
       }
-    }
 
-    // If still nothing after HTTP fetch, ask GPT-4o to use its own knowledge about the company
-    const stillEmpty =
-      !companyResearchRaw.oneLiner && !companyResearchRaw.productSummary;
+      // Build combined context: website text + job description
+      const jobText = (job.about_role ?? "").slice(0, 3000);
+      const parts: string[] = [];
+      if (websiteText.length > 50) parts.push(`COMPANY WEBSITE (${homepageUrl}):\n${websiteText}`);
+      if (jobText) parts.push(`JOB POSTING (often contains an "About the company" section):\n${jobText}`);
+      const combinedContext = parts.join("\n\n---\n\n");
 
-    if (stillEmpty) {
-      console.log(
-        "[agent/research-company] HTTP fetch also empty — falling back to GPT-4o training knowledge",
-      );
       try {
-        const knowledgeResponse = await openai.chat.completions.create({
+        const fallbackResponse = await openai.chat.completions.create({
           model: "gpt-4o",
           response_format: { type: "json_object" },
-          temperature: 0.3,
+          temperature: 0.2,
           max_tokens: 500,
           messages: [
             {
               role: "system",
-              content: `You are a company research assistant. Using only your training knowledge, provide factual information about the given company. Be conservative — only state facts you are confident about. If you have no reliable knowledge about a field, return empty strings/arrays/null rather than inventing details.
+              content: `You are extracting company information. You have access to the company website text and/or the job posting. Job postings almost always include a company description section (often labelled "About us", "Om virksomheden", "About the company" or similar).
+
+Extract from the provided text first. If the provided text is insufficient or just a Cloudflare/bot-check page, use your own training knowledge about the company.
 
 Return ONLY valid JSON:
 {
-  "oneLiner": "<what the company does in one sentence, or empty string if unknown>",
-  "productSummary": "<what they build/sell and who it's for, or empty string if unknown>",
-  "signals": ["<notable fact: funding, customers, size, mission, known products>"],
-  "address": "<full postal address if known, otherwise null>",
-  "contactInfo": { "name": "<HR/recruiter name if known, otherwise null>", "title": "<their title, otherwise null>", "email": "<contact email if known, otherwise null>", "phone": "<phone if known, otherwise null>" }
-}`,
+  "oneLiner": "<what the company does in one sentence>",
+  "productSummary": "<what they build/sell and who it's for>",
+  "signals": ["<notable facts: size, customers, mission, funding, products, technologies>"],
+  "address": "<postal address if found, otherwise null>",
+  "contactInfo": { "name": null, "title": null, "email": null, "phone": null }
+}
+Never return empty strings — if you have partial knowledge, share it. Only return null for fields you have no information about at all.`,
             },
             {
               role: "user",
-              content: `Company: ${job.company}\nJob title: ${job.title}\nJob location: ${job.location ?? "unknown"}\nJob description (may include a company overview section — extract info from it):\n${(job.about_role ?? "").slice(0, 2500)}`,
+              content: `Company: ${job.company}\nJob title: ${job.title}\nLocation: ${job.location ?? "unknown"}\n\n${combinedContext}`,
             },
           ],
         });
 
-        const raw = knowledgeResponse.choices[0]?.message?.content;
+        const raw = fallbackResponse.choices[0]?.message?.content;
         if (raw) {
-          const knowledge = JSON.parse(raw) as {
+          const result = JSON.parse(raw) as {
             oneLiner?: string;
             productSummary?: string;
             signals?: string[];
             address?: string | null;
             contactInfo?: ContactInfo | null;
           };
-          companyResearchRaw.oneLiner = knowledge.oneLiner ?? "";
-          companyResearchRaw.productSummary = knowledge.productSummary ?? "";
-          companyResearchRaw.signals = knowledge.signals ?? [];
-          if (!companyResearchRaw.address && knowledge.address) {
-            companyResearchRaw.address = knowledge.address;
+          if (result.oneLiner) companyResearchRaw.oneLiner = result.oneLiner;
+          if (result.productSummary) companyResearchRaw.productSummary = result.productSummary;
+          if (result.signals?.length) companyResearchRaw.signals = result.signals;
+          if (!companyResearchRaw.address && result.address) companyResearchRaw.address = result.address;
+          if (!companyResearchRaw.contactFromJobPosting && result.contactInfo?.email) {
+            companyResearchRaw.contactFromJobPosting = result.contactInfo;
           }
-          if (!companyResearchRaw.contactFromJobPosting && knowledge.contactInfo?.email) {
-            companyResearchRaw.contactFromJobPosting = knowledge.contactInfo;
-          }
-          // Clear the ATS URL from sources so it doesn't appear in the dossier
-          companyResearchRaw.sourceUrls = [];
+          // Only include source URL if we actually fetched the website successfully
+          if (websiteText.length > 50 && homepageUrl) companyResearchRaw.sourceUrls.push(homepageUrl);
+          else companyResearchRaw.sourceUrls = [];
+          console.log(`[agent/research-company] combined fallback: oneLiner="${result.oneLiner}", productSummary="${result.productSummary?.slice(0, 60)}"`);
         }
-      } catch (knowledgeErr) {
-        console.error(
-          "[agent/research-company] GPT-4o knowledge fallback failed",
-          knowledgeErr,
-        );
-        // Continue — synthesis will still run with whatever partial data exists
+      } catch (fallbackErr) {
+        console.error("[agent/research-company] combined fallback failed", fallbackErr);
       }
     }
 
