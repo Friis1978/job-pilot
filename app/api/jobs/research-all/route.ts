@@ -12,19 +12,17 @@ export async function POST() {
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Only jobs that haven't been researched yet
   const { data: jobs, error: jobsError } = await insforge.database
     .from("jobs")
     .select("id, company")
-    .eq("user_id", user.id)
-    .is("researched_at", null);
+    .eq("user_id", user.id);
 
   if (jobsError) {
     return NextResponse.json({ error: "Failed to load jobs." }, { status: 500 });
   }
 
   if (!jobs?.length) {
-    return NextResponse.json({ researched: 0, skipped: 0, failed: 0, total: 0 });
+    return NextResponse.json({ researched: 0, failed: 0, total: 0 });
   }
 
   let researched = 0;

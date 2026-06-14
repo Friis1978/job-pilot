@@ -129,10 +129,9 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
         return;
       }
       if ((json.total ?? 0) === 0) {
-        toast("All jobs are already researched.", "success");
+        toast("No jobs to research.", "success");
       } else {
-        const parts = [`Researched ${json.researched} job${json.researched === 1 ? "" : "s"}`];
-        if (json.skipped) parts.push(`${json.skipped} skipped`);
+        const parts = [`Researched ${json.researched} of ${json.total} jobs`];
         if (json.failed) parts.push(`${json.failed} failed`);
         toast(parts.join(", ") + ".", "success");
       }
