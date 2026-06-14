@@ -92,7 +92,7 @@ export async function scoreJob(
       model: "gpt-4o",
       response_format: { type: "json_object" },
       temperature: 0.3,
-      max_tokens: 300,
+      max_tokens: 500,
       messages: [
         {
           role: "system",
@@ -101,9 +101,14 @@ Return ONLY valid JSON with this exact shape:
 {
   "matchScore": <integer 0-100>,
   "matchReason": "<one paragraph explaining the match quality>",
-  "matchedSkills": ["<skill the candidate has that the job requires>"],
-  "missingSkills": ["<skill the job requires that the candidate lacks>"]
+  "matchedSkills": ["<every skill from the candidate's list that appears or is implied in the job description>"],
+  "missingSkills": ["<skill the job explicitly requires that the candidate does not have>"]
 }
+
+Skill matching rules:
+- matchedSkills must include EVERY skill from the candidate's profile that is mentioned or clearly implied in the job description — do not pick only the top ones. For example: if the candidate has "Next.js" and the job mentions "Next.js", it must appear in matchedSkills. If the candidate has "Tailwind" and the job mentions "Tailwind CSS", it must appear in matchedSkills. Be exhaustive.
+- missingSkills should only include skills the job explicitly names as requirements or nice-to-haves that the candidate does not have.
+- Do not add skills to either list that aren't grounded in both the job description and the candidate's profile.
 
 Scoring rules:
 - Be strict and realistic. A high score (80+) requires the job description to explicitly mention requirements that match the candidate's skills and experience level.
