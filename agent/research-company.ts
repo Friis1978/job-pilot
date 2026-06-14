@@ -174,6 +174,37 @@ const ATS_AND_JOB_BOARD_DOMAINS = [
   "webcruiter.no",
 ];
 
+// Derive likely country TLDs from a job location string
+function countryTldsFromLocation(location: string | null): string[] {
+  if (!location) return [];
+  const loc = location.toLowerCase();
+  if (/denmark|danmark|copenhagen|københavn|\bdk\b/.test(loc)) return ["dk"];
+  if (/sweden|sverige|stockholm|\bse\b/.test(loc)) return ["se"];
+  if (/norway|norge|oslo|\bno\b/.test(loc)) return ["no"];
+  if (/finland|suomi|helsinki|\bfi\b/.test(loc)) return ["fi"];
+  if (/germany|deutschland|berlin|münchen|\bde\b/.test(loc)) return ["de"];
+  if (/netherlands|nederland|amsterdam|\bnl\b/.test(loc)) return ["nl"];
+  if (/\buk\b|united kingdom|london/.test(loc)) return ["co.uk", "uk"];
+  return [];
+}
+
+// Try a list of candidate URLs and return the first that responds successfully
+async function probeUrls(candidates: string[]): Promise<string | null> {
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url, {
+        method: "HEAD",
+        redirect: "follow",
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok || res.status < 400) return url;
+    } catch {
+      // try next
+    }
+  }
+  return null;
+}
+
 async function resolveCompanyUrl(
   sourceUrl: string,
   companyName: string,
@@ -237,6 +268,7 @@ export async function researchCompany(
       id: string;
       company: string;
       title: string;
+      location: string | null;
       about_role: string | null;
       matched_skills: string[] | null;
       missing_skills: string[] | null;
@@ -282,6 +314,7 @@ export async function researchCompany(
     // When the redirect didn't land on the company's own site, ask GPT-4o for
     // the official URL — it knows most companies including non-English ones.
     if (needsGptLookup) {
+      let gptFoundUrl = false;
       try {
         const urlResponse = await openai.chat.completions.create({
           model: "gpt-4o",
@@ -295,17 +328,40 @@ export async function researchCompany(
             },
             {
               role: "user",
-              content: `Company: ${job.company}\nJob title: ${job.title}\nJob description excerpt: ${(job.about_role ?? "").slice(0, 600)}`,
+              content: `Company: ${job.company}\nJob title: ${job.title}\nJob location: ${job.location ?? "unknown"}\nJob description excerpt: ${(job.about_role ?? "").slice(0, 600)}`,
             },
           ],
         });
         const parsed = JSON.parse(urlResponse.choices[0]?.message?.content ?? "{}") as { url?: string | null };
         if (parsed.url) {
           homepageUrl = parsed.url;
+          gptFoundUrl = true;
         }
       } catch (urlErr) {
         console.error("[agent/research-company] GPT-4o URL lookup failed", urlErr);
-        // Keep resolvedUrl as fallback
+      }
+
+      // GPT-4o doesn't know this company — probe common URL patterns before falling
+      // back to the generic .com guess. Especially important for smaller companies
+      // in non-English markets that use country TLDs (.dk, .se, .no, etc.).
+      if (!gptFoundUrl) {
+        const slug = job.company.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const countryTlds = countryTldsFromLocation(job.location);
+        const candidates: string[] = [
+          // Country TLD variants first (more likely for non-English companies)
+          ...countryTlds.flatMap((tld) => [
+            `https://${slug}.${tld}`,
+            `https://www.${slug}.${tld}`,
+          ]),
+          // .com fallback
+          `https://www.${slug}.com`,
+          `https://${slug}.com`,
+        ];
+        const probed = await probeUrls(candidates);
+        if (probed) {
+          homepageUrl = probed;
+          console.log(`[agent/research-company] URL probing found: ${probed}`);
+        }
       }
     }
 
