@@ -754,7 +754,7 @@ Return ONLY valid JSON:
             },
             {
               role: "user",
-              content: `Company: ${job.company}\nJob title: ${job.title}\nJob description excerpt: ${(job.about_role ?? "").slice(0, 600)}`,
+              content: `Company: ${job.company}\nJob title: ${job.title}\nJob location: ${job.location ?? "unknown"}\nJob description (may include a company overview section — extract info from it):\n${(job.about_role ?? "").slice(0, 2500)}`,
             },
           ],
         });
