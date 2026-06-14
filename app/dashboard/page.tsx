@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { formatDateAgo } from "@/lib/utils";
 import { Navbar } from "@/components/layout/Navbar";
@@ -36,6 +37,9 @@ export default async function DashboardPage() {
   const {
     data: { user },
   } = await insforge.auth.getCurrentUser();
+
+  if (!user) redirect("/");
+  const userMeta = user.metadata as { full_name?: string; name?: string; avatar_url?: string } | null;
 
   // ── Recent Activity + Charts ───────────────────────────────────────────────
 
@@ -220,7 +224,7 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <Navbar user={{ name: user.user_metadata?.full_name ?? user.user_metadata?.name, email: user.email, avatarUrl: (profileResult.status === "fulfilled" ? (profileResult.value.data as { avatar_url?: string | null } | null)?.avatar_url : null) ?? user.user_metadata?.avatar_url }} />
+      <Navbar user={{ name: userMeta?.full_name ?? userMeta?.name, email: user.email, avatarUrl: (profileResult.status === "fulfilled" ? (profileResult.value.data as { avatar_url?: string | null } | null)?.avatar_url : null) ?? userMeta?.avatar_url }} />
       <main className="min-h-screen bg-background">
         <div className="w-full max-w-360 mx-auto px-4 sm:px-6 py-8 flex flex-col gap-5">
           <StatsBar {...statsData} />

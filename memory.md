@@ -1,47 +1,56 @@
-# Memory — Job Import Skill Matching & Cover Letter Fixes
+# Memory — TypeScript Error Cleanup
 
-Last updated: 2026-06-13
+Last updated: 2026-06-14
 
 ## What was built
 
-### agent/import-job-from-url.ts — Better skill detection on import
-- `max_tokens` for extraction: 600 → 1500
-- Description limit in extraction prompt: "up to 1000 chars" → "up to 3000 chars, including all requirements and skills"
-- Scoring now uses full raw text (`rawText.slice(0, 5000)`) via a separate `jobForScoring` object instead of the truncated extracted description
-- `job` (used for DB storage) still uses the clean extracted description; only scoring uses raw text
-- Root cause: React and other skills mentioned later in long job postings were cut off before the scorer ever saw them
+### TypeScript errors fixed — zero errors remain (`npx tsc --noEmit` clean)
 
-### agent/generate-cover-letter.ts — All skills and work history used
-- Work history: was `workExp.slice(0, 2)`, now passes ALL roles with title, company, date range, and responsibilities
-- Job requirements: `job.requirements` and `job.responsibilities` arrays (fetched from DB but previously only used for language detection) now included in the cover letter prompt
-- System prompt updated: "Draw on ALL skills listed under 'All skills' and 'Full work history' — the 'Matched skills' list is a hint, not a limit"
-- Label changed from "Skills" → "All skills" and "Recent work" → "Full work history" in user prompt
+**app/dashboard/page.tsx**
+- Added `import { redirect } from "next/navigation"`
+- Added null guard: `if (!user) redirect("/")` after `getCurrentUser()`
+- Added `const userMeta = user.metadata as { full_name?: string; name?: string; avatar_url?: string } | null`
+- Replaced all `user.user_metadata?.*` with `userMeta?.*` in Navbar prop
+
+**app/find-jobs/page.tsx**
+- Same pattern: redirect import, null guard, userMeta helper, Navbar fix
+
+**app/find-jobs/[id]/page.tsx**
+- Added `redirect` to existing `next/navigation` import alongside `notFound`
+- Same pattern: null guard, userMeta helper, Navbar fix
+
+**app/profile/page.tsx**
+- Added `const userMeta = (authData.user?.metadata ?? null) as { full_name?: string; name?: string; avatar_url?: string } | null`
+- Replaced `authData.user?.user_metadata?.*` with `userMeta?.*` in Navbar prop
+
+**components/profile/ProfileForm.tsx**
+- Removed third argument from `insforge.storage.from("avatars").upload(path, blob)` — SDK only accepts 2 args
 
 ## Decisions made
 
-- **Separate scoring job vs display job**: `jobForScoring` has `description: rawText.slice(0, 5000)` for comprehensive skill detection; `job.description` (stored as `about_role`) stays as the clean extracted text. This avoids polluting the DB with raw scraped text.
-- **All work history in cover letter**: Intentional — the AI needs older roles to reference skills that predate the 2 most recent jobs. GPT-4o context window is large enough.
+- **InsForge user type uses `metadata` not `user_metadata`**: The InsForge SDK user object has `metadata: Record<string, unknown> | null`, not `user_metadata`. All pages that read OAuth name/avatar from the user object must cast: `user.metadata as { full_name?: string; name?: string; avatar_url?: string } | null`.
+- **Null guard pattern for authenticated pages**: All server-side pages that use `user.id` directly add `if (!user) redirect("/")` immediately after `getCurrentUser()`. This narrows the type and removes TS18047 errors.
+- **InsForge storage.upload is 2-arg only**: No options/metadata object as third argument.
 
 ## Problems solved
 
-- **LinkedIn job import missed React**: The extraction step capped description at 1000 chars. If React appeared later in the posting, scoring never saw it. Fixed by passing full raw text (5000 chars) to scoring.
-- **Dedup block on re-import**: Had to delete the specific job from the DB (`f08bafc3-e438-4b7b-96fa-8782461432e2`, CapaSystems Denmark, job ID 4399846855) via InsForge SQL to allow fresh import.
-- **Cover letter ignored older experience**: `slice(0, 2)` meant skills from 3rd+ job were invisible to the AI.
+- **TS2339 `user_metadata` does not exist**: InsForge SDK changed from Supabase-style `user_metadata` to `metadata`. Fixed by casting `user.metadata` to the expected shape.
+- **TS18047 `user` is possibly null**: Pages used `user.id` without null check. Fixed with redirect guard.
+- **TS2554 Expected 2 arguments, got 3**: InsForge `storage.upload()` doesn't accept options object. Removed it.
 
 ## Current state
 
-- Import flow: extraction is clean (3000 char description for storage), scoring is comprehensive (5000 char raw text)
-- Cover letter generation: uses full work history, full job requirements, all profile skills
-- Both fixes are code-only — no DB schema changes needed
+- TypeScript compiles clean — zero errors
+- All authenticated pages (dashboard, find-jobs, find-jobs/[id], profile) correctly handle null user and correctly read OAuth metadata
 
 ## Next session starts with
 
-Check `context/build-plan.md` and `context/progress-tracker.md` for the next planned feature. Feature 21 (Scheduled Job Alert Emails) is next — Resend for email, cron endpoint at `/api/cron/job-alerts` protected by `CRON_SECRET`. Or continue with user-directed fixes.
+Check `context/build-plan.md` and `context/progress-tracker.md` for next planned feature. Feature 21 (Scheduled Job Alert Emails) is next — Resend for email, cron endpoint at `/api/cron/job-alerts` protected by `CRON_SECRET`.
 
 ## Open questions
 
-- Cover letter PDF photo: unconfirmed whether react-pdf successfully fetches the public InsForge URL during `renderToBuffer` in production.
-- `overflow: hidden` + `borderRadius` on react-pdf `View` may not clip avatar into a circle — known react-pdf limitation.
-- InsForge SDK JSONB bug still affects any future RPC with JSONB params — document in `context/library-docs.md`.
-- Feature 13 company research ~60-120s — will timeout on Vercel free tier. Address at deployment.
-- Cover letter `max_tokens: 800` — with longer work history now in the prompt, verify the letter isn't being cut off mid-sentence.
+- Cover letter `max_tokens: 800` may cut off with longer prompts (full work history now in prompt) — worth verifying
+- react-pdf avatar clipping limitation: `overflow: hidden` + `borderRadius` may not clip into a circle
+- Cover letter PDF photo: unconfirmed whether react-pdf successfully fetches the public InsForge URL during `renderToBuffer` in production
+- InsForge SDK JSONB bug still affects any future RPC with JSONB params — document in `context/library-docs.md`
+- Feature 13 company research ~60-120s will timeout on Vercel free tier — address at deployment

@@ -82,10 +82,11 @@ export default async function ProfilePage() {
   }
 
   const { percentage, missingFields } = computeCompletion(profile);
+  const userMeta = (authData.user?.metadata ?? null) as { full_name?: string; name?: string; avatar_url?: string } | null;
 
   return (
     <>
-      <Navbar user={{ name: authData.user?.user_metadata?.full_name ?? authData.user?.user_metadata?.name, email: authData.user?.email, avatarUrl: profile?.avatar_url ?? authData.user?.user_metadata?.avatar_url }} />
+      <Navbar user={{ name: userMeta?.full_name ?? userMeta?.name, email: authData.user?.email, avatarUrl: profile?.avatar_url ?? userMeta?.avatar_url }} />
       <main className="min-h-screen bg-background py-8">
         <div className="w-full max-w-360 mx-auto px-4 sm:px-6 flex flex-col gap-6 pb-12">
           <CompletionIndicator percentage={percentage} missingFields={missingFields} />

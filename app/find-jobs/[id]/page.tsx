@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { formatDateAgo, computeSkillYears } from "@/lib/utils";
@@ -85,6 +85,9 @@ export default async function JobDetailsPage({
     data: { user },
   } = await insforge.auth.getCurrentUser();
 
+  if (!user) redirect("/");
+  const userMeta = user.metadata as { full_name?: string; name?: string; avatar_url?: string } | null;
+
   const { data, error } = await insforge.database
     .from("jobs")
     .select("*")
@@ -107,7 +110,7 @@ export default async function JobDetailsPage({
 
   return (
     <>
-      <Navbar user={{ name: user.user_metadata?.full_name ?? user.user_metadata?.name, email: user.email, avatarUrl: (profileData as { avatar_url?: string | null } | null)?.avatar_url ?? user.user_metadata?.avatar_url }} />
+      <Navbar user={{ name: userMeta?.full_name ?? userMeta?.name, email: user.email, avatarUrl: (profileData as { avatar_url?: string | null } | null)?.avatar_url ?? userMeta?.avatar_url }} />
       <main className="min-h-screen bg-background py-8">
         <div className="w-full max-w-360 mx-auto px-4 sm:px-6 flex flex-col gap-5 pb-12">
 

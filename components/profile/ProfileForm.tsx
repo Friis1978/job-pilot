@@ -306,7 +306,7 @@ export function ProfileForm({ initialData, extractedFormData, userId }: Props) {
     try {
       const path = `${userId}/avatar.jpg`;
       await insforge.storage.from("avatars").remove(path);
-      const { data: uploaded, error } = await insforge.storage.from("avatars").upload(path, blob, { contentType: "image/jpeg" });
+      const { data: uploaded, error } = await insforge.storage.from("avatars").upload(path, blob);
       if (error || !uploaded) return;
       const result = await updateAvatarUrl(uploaded.url);
       if (result.success) setAvatarUrl(uploaded.url);

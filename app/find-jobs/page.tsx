@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { Navbar } from "@/components/layout/Navbar";
 import { SearchCard } from "@/components/find-jobs/SearchCard";
@@ -9,6 +10,9 @@ export default async function FindJobsPage() {
   const {
     data: { user },
   } = await insforge.auth.getCurrentUser();
+
+  if (!user) redirect("/");
+  const userMeta = user.metadata as { full_name?: string; name?: string; avatar_url?: string } | null;
 
   const [jobsResult, searchesResult, profileResult] = await Promise.allSettled([
     insforge.database
@@ -53,7 +57,7 @@ export default async function FindJobsPage() {
 
   return (
     <>
-      <Navbar user={{ name: user.user_metadata?.full_name ?? user.user_metadata?.name, email: user.email, avatarUrl: (profileResult.status === "fulfilled" ? (profileResult.value.data as { avatar_url?: string | null } | null)?.avatar_url : null) ?? user.user_metadata?.avatar_url }} />
+      <Navbar user={{ name: userMeta?.full_name ?? userMeta?.name, email: user.email, avatarUrl: (profileResult.status === "fulfilled" ? (profileResult.value.data as { avatar_url?: string | null } | null)?.avatar_url : null) ?? userMeta?.avatar_url }} />
       <main className="min-h-screen bg-background py-8">
         <div className="w-full max-w-360 mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-6 pb-12">
           <SearchCard recentSearches={recentSearches} />
