@@ -14,20 +14,18 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Get InsForge access token
+      - name: Setup InsForge credentials
         run: |
-          TOKEN=$(curl -sf -X POST https://api.insforge.dev/api/oauth/v1/token \
+          RESPONSE=$(curl -sf -X POST https://api.insforge.dev/api/oauth/v1/token \
             -H "Content-Type: application/json" \
-            -d '{"grant_type":"refresh_token","refresh_token":"${{ secrets.INSFORGE_REFRESH_TOKEN }}","client_id":"clf_NK8cMUs41gm8ZcfdtSguVw"}' \
-            | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
-          echo "INSFORGE_ACCESS_TOKEN=$TOKEN" >> $GITHUB_ENV
-
-      - name: Write InsForge project config
-        run: |
+            -d '{"grant_type":"refresh_token","refresh_token":"${{ secrets.INSFORGE_REFRESH_TOKEN }}","client_id":"clf_NK8cMUs41gm8ZcfdtSguVw"}')
+          ACCESS=$(echo "$RESPONSE" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+          mkdir -p ~/.insforge
+          printf '{"access_token":"%s","refresh_token":"%s","user":{"id":"02b1818c-96bb-4558-a914-0880c8ff955a","email":"friis1978@gmail.com","email_verified":true}}' \
+            "$ACCESS" "${{ secrets.INSFORGE_REFRESH_TOKEN }}" > ~/.insforge/credentials.json
           mkdir -p .insforge
-          cat > .insforge/project.json << 'EOF'
-          {"project_id":"cc5c166d-a938-43d9-b453-e5fc17a9fd7b","project_name":"Job-pilot","org_id":"b1a60c39-2c6f-4dd3-aa3f-1896ee8bf988","appkey":"8kj4iaqv","region":"eu-central","oss_host":"https://8kj4iaqv.eu-central.insforge.app","api_key":"${{ secrets.INSFORGE_PROJECT_API_KEY }}"}
-          EOF
+          printf '{"project_id":"cc5c166d-a938-43d9-b453-e5fc17a9fd7b","project_name":"Job-pilot","org_id":"b1a60c39-2c6f-4dd3-aa3f-1896ee8bf988","appkey":"8kj4iaqv","region":"eu-central","oss_host":"https://8kj4iaqv.eu-central.insforge.app","api_key":"%s"}' \
+            "${{ secrets.INSFORGE_PROJECT_API_KEY }}" > .insforge/project.json
 
       - name: Deploy
         run: npx @insforge/cli@latest deployments deploy .
