@@ -29,17 +29,26 @@ export function ResearchButton({ jobId, hasResearch = false }: Props) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 120_000); // 2 min max
 
-    try {
-      const res = await fetch("/api/agent/research", {
+    async function doResearch(): Promise<Response> {
+      return fetch("/api/agent/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobId }),
         signal: controller.signal,
       });
+    }
+
+    try {
+      let res = await doResearch();
 
       if (res.status === 401) {
-        toast("Your session has expired. Please reload the page and try again.", "error");
-        return;
+        // Session expired — silently refresh and retry once before giving up.
+        await fetch("/api/auth/refresh", { method: "POST", credentials: "include" });
+        res = await doResearch();
+        if (res.status === 401) {
+          toast("Your session has expired. Please reload the page and try again.", "error");
+          return;
+        }
       }
 
       let json: { error?: string; warning?: string; success?: boolean };

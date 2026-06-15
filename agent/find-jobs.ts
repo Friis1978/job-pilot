@@ -106,7 +106,8 @@ Return ONLY valid JSON with this exact shape:
 }
 
 Skill matching rules:
-- matchedSkills must include EVERY skill from the candidate's profile that is mentioned or clearly implied in the job description — do not pick only the top ones. For example: if the candidate has "Next.js" and the job mentions "Next.js", it must appear in matchedSkills. If the candidate has "Tailwind" and the job mentions "Tailwind CSS", it must appear in matchedSkills. Be exhaustive.
+- matchedSkills must include EVERY skill from the candidate's profile that is explicitly named in the job description, or is a direct alias/variant of an explicitly named technology (e.g. "Tailwind" matches "Tailwind CSS"; "React Hooks" matches if "React" is named). Be exhaustive — do not skip skills that genuinely match.
+- Do NOT include a skill just because it is commonly associated with a mentioned technology. If the job says "Azure" but not "Docker", do not add "Docker" — it is not in the description.
 - missingSkills should only include skills the job explicitly names as requirements or nice-to-haves that the candidate does not have.
 - Do not add skills to either list that aren't grounded in both the job description and the candidate's profile.
 

@@ -14,10 +14,15 @@ export function RescoreButton({ jobId }: Props) {
     if (loading) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/jobs/${jobId}/rescore`, { method: "POST" });
+      let res = await fetch(`/api/jobs/${jobId}/rescore`, { method: "POST" });
       if (res.status === 401) {
-        toast("Your session has expired. Please reload the page.", "error");
-        return;
+        // Session expired — silently refresh and retry once before giving up.
+        await fetch("/api/auth/refresh", { method: "POST", credentials: "include" });
+        res = await fetch(`/api/jobs/${jobId}/rescore`, { method: "POST" });
+        if (res.status === 401) {
+          toast("Your session has expired. Please reload the page.", "error");
+          return;
+        }
       }
       const json = await res.json();
       if (!res.ok || json.error) {

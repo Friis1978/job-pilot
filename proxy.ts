@@ -3,7 +3,20 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PROTECTED_PATHS = ["/dashboard", "/profile", "/find-jobs"];
 
-export async function middleware(request: NextRequest) {
+// Routes where we skip updateSession — the route handler manages its own refresh
+// to avoid double-consuming the refresh token (token rotation).
+const SKIP_UPDATE_SESSION = ["/api/auth/refresh"];
+
+export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Pass auth-refresh requests straight through — the route handler owns the refresh.
+  // Running updateSession here too would consume the refresh token before the handler
+  // can use it, causing the second refresh attempt to fail (token rotation).
+  if (SKIP_UPDATE_SESSION.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
+
   // Use a temporary response so updateSession can write refreshed cookies onto it.
   const tempResponse = NextResponse.next({
     request: { headers: request.headers },
@@ -18,13 +31,13 @@ export async function middleware(request: NextRequest) {
     requestCookies: request.cookies as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     responseCookies: tempResponse.cookies as any,
+    // Refresh 2 minutes before expiry so normal page loads keep the token fresh.
+    refreshLeewaySeconds: 120,
     options: {
       accessToken: { maxAge: 60 * 60 * 24 * 7 },   // 7 days
       refreshToken: { maxAge: 60 * 60 * 24 * 30 },  // 30 days
     },
   });
-
-  const { pathname } = request.nextUrl;
 
   const isProtected = PROTECTED_PATHS.some((path) =>
     pathname.startsWith(path),
@@ -39,7 +52,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Forward the valid access token to API route handlers via a custom header.
-  // Route handlers cannot reliably read cookies that middleware refreshed on the
+  // Route handlers cannot reliably read cookies that proxy refreshed on the
   // response (Next.js gives them the original request cookies), so we pass the
   // token explicitly and read it in createInsforgeServer.
   const requestHeaders = new Headers(request.headers);
