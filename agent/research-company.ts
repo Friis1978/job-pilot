@@ -469,6 +469,7 @@ Only extract contacts explicitly named in the text. For culturePoints include th
       const session = await browserbase.sessions.create({
         projectId: process.env.BROWSERBASE_PROJECT_ID!,
         timeout: 120,
+        region: "eu-central-1",
       });
 
       stagehand = new Stagehand({
@@ -499,7 +500,11 @@ Only extract contacts explicitly named in the text. For culturePoints include th
               await stagehand.act(
                 "Click the button or link that takes you to the full job posting or lets you apply at the employer's own website. Ignore internal Careerjet/Jooble links.",
               );
-              await page.waitForLoadState("networkidle");
+              // Race against a 10s timeout — networkidle can hang on pages with background polling
+              await Promise.race([
+                page.waitForLoadState("networkidle"),
+                new Promise<void>((r) => setTimeout(r, 10000)),
+              ]);
             }
           } catch {
             // Click failed or not on a job board — continue with current page
@@ -674,9 +679,7 @@ Only include contacts explicitly named in the text. Do not infer.`,
           );
         } else {
           // Sub-page extraction — max 3, prefer about/blog/engineering/product over careers
-          const allPageLinks = homepageData.pageLinks ?? [];
-          const careersLinks = allPageLinks.filter((l) => l.kind === "careers");
-          const subPageLinks = allPageLinks
+          const subPageLinks = (homepageData.pageLinks ?? [])
             .filter((l) => l.kind !== "careers")
             .sort((a, b) => {
               const ai = PREFERRED_PAGE_KINDS.indexOf(a.kind);
@@ -723,34 +726,6 @@ Only include contacts explicitly named in the text. Do not infer.`,
                 link.url,
                 subErr,
               );
-            }
-          }
-          // If no named contact yet, try the company's own careers/jobs page to find
-          // the specific listing — particularly useful when source_url is a job aggregator
-          // (Jooble/Careerjet) that doesn't expose the full description.
-          if (!companyResearchRaw.contactFromJobPosting?.name && careersLinks.length > 0) {
-            try {
-              await page.goto(careersLinks[0].url, { waitUntil: "networkidle" });
-              await stagehand.act(
-                `Find and click on the job posting titled "${job.title}" or the closest matching job for ${job.company}. If you see a list of job listings, click the one that best matches this title.`,
-              );
-              await page.waitForLoadState("networkidle");
-
-              const careerPageContact = await stagehand.extract(
-                `This is a job posting on the employer's own website for the role "${job.title}". Extract the named contact person(s) listed for enquiries: their full name, job title, email, and phone number.`,
-                jobPostingContactSchema,
-              );
-              if (careerPageContact.contactName || careerPageContact.contactEmail || careerPageContact.contactPhone) {
-                const existing = companyResearchRaw.contactFromJobPosting;
-                companyResearchRaw.contactFromJobPosting = {
-                  name: existing?.name ?? careerPageContact.contactName ?? null,
-                  title: existing?.title ?? careerPageContact.contactTitle ?? null,
-                  email: existing?.email ?? careerPageContact.contactEmail ?? null,
-                  phone: existing?.phone ?? careerPageContact.contactPhone ?? null,
-                };
-              }
-            } catch (careersErr) {
-              console.error("[agent/research-company] careers page contact lookup failed", careersErr);
             }
           }
         }
