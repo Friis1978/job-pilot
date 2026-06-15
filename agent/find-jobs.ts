@@ -11,6 +11,67 @@ import type { Profile, AdzunaJob, NormalizedJob, ScoredJob } from "@/types";
 
 type ScoringResult = ScoredJob & { job: NormalizedJob };
 
+// Follow the job URL redirect and extract the full description from the employer's own page.
+// Jooble and Careerjet only return short snippets; the real posting often has contact persons,
+// "About us" sections, and requirements that are critical for scoring and research.
+async function enrichJobDescription(job: NormalizedJob): Promise<NormalizedJob> {
+  if (job.description.length > 300) return job; // Already has enough content
+
+  try {
+    const res = await fetch(job.url, {
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "da-DK,da;q=0.9,en-US,en;q=0.5",
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!res.ok) return job;
+
+    // Skip if we're still on a job aggregator or tracking domain
+    const finalHost = new URL(res.url).hostname;
+    const AGGREGATOR_DOMAINS = [
+      "careerjet", "jooble", "jobviewtrack", "glassdoor", "adzuna",
+      "linkedin", "indeed", "jobindex", "stepstone", "monster",
+    ];
+    if (AGGREGATOR_DOMAINS.some((d) => finalHost.includes(d))) return job;
+
+    const html = await res.text();
+
+    // Skip bot-check pages
+    if (/bekræftelse påkrævet|checking your browser|just a moment|enable javascript to/i.test(html)) {
+      return job;
+    }
+
+    const text = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 6000);
+
+    const improved: NormalizedJob = { ...job };
+    if (text.length > job.description.length + 200) {
+      improved.description = text;
+    }
+    // Use the resolved employer URL so research visits the real posting, not a tracking link
+    if (res.url !== job.url) {
+      improved.url = res.url;
+    }
+    return improved;
+  } catch {
+    return job; // Enrichment failed — keep original snippet
+  }
+}
+
 type FindJobsResult = {
   success: boolean;
   jobsFound?: number;
@@ -290,9 +351,13 @@ export async function findJobs(
         ),
     );
 
+    // Enrich short-snippet jobs (Jooble, Careerjet) by following the redirect URL
+    // and fetching the full description from the employer's own page, in parallel.
+    const enrichedJobs = await Promise.all(newJobs.map(enrichJobDescription));
+
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const scoringResults = await Promise.all(
-      newJobs.map((job) => scoreJob(job, profile, openai, location)),
+      enrichedJobs.map((job) => scoreJob(job, profile, openai, location)),
     );
 
     const qualifyingJobs = scoringResults.filter(
