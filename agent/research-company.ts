@@ -548,6 +548,90 @@ Only extract contacts explicitly named in the text. For culturePoints include th
           if (postingData.companyAddress) {
             companyResearchRaw.address = postingData.companyAddress;
           }
+
+          // If Stagehand didn't find a named contact, read the full rendered page text
+          // and run GPT-4o on it. Jooble tracking URLs redirect to the actual job posting
+          // which may have the full description (contacts, "Hvem er vi?") that isn't
+          // stored in about_role (Jooble only provides a short snippet).
+          const missingNamedContact = !companyResearchRaw.contactFromJobPosting?.name;
+          if (missingNamedContact) {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const pageText = (await page.evaluate(() => (document as any).body.innerText)) as string;
+              const currentAboutRole = job.about_role ?? "";
+
+              if (pageText && pageText.length > currentAboutRole.length + 100) {
+                const pageExtractResponse = await openai.chat.completions.create({
+                  model: "gpt-4o",
+                  response_format: { type: "json_object" },
+                  temperature: 0,
+                  max_tokens: 500,
+                  messages: [
+                    {
+                      role: "system",
+                      content: `Extract from this job posting page. The text may be in any language (Danish, Swedish, English, etc.).
+Return ONLY valid JSON:
+{
+  "contactName": "<full name of a person explicitly listed as a contact for enquiries — or null>",
+  "contactTitle": "<their job title — or null>",
+  "contactEmail": "<their email address — or null>",
+  "contactPhone": "<their phone number — or null>",
+  "culturePoints": ["<sentences from 'Hvem er vi?', 'Om os', 'About us', or similar company identity sections>"],
+  "fullDescription": "<the main job description text — omit nav, footer, cookie banners>"
+}
+Only include contacts explicitly named in the text. Do not infer.`,
+                    },
+                    { role: "user", content: pageText.slice(0, 5000) },
+                  ],
+                });
+
+                const pageRaw = pageExtractResponse.choices[0]?.message?.content;
+                if (pageRaw) {
+                  const pageParsed = JSON.parse(pageRaw) as {
+                    contactName?: string | null;
+                    contactTitle?: string | null;
+                    contactEmail?: string | null;
+                    contactPhone?: string | null;
+                    culturePoints?: string[];
+                    fullDescription?: string;
+                  };
+
+                  if (pageParsed.contactName || pageParsed.contactEmail || pageParsed.contactPhone) {
+                    const existing = companyResearchRaw.contactFromJobPosting;
+                    companyResearchRaw.contactFromJobPosting = {
+                      name: existing?.name ?? pageParsed.contactName ?? null,
+                      title: existing?.title ?? pageParsed.contactTitle ?? null,
+                      email: existing?.email ?? pageParsed.contactEmail ?? null,
+                      phone: existing?.phone ?? pageParsed.contactPhone ?? null,
+                    };
+                  }
+
+                  const culturePoints = pageParsed.culturePoints ?? [];
+                  if (culturePoints.length > 0) {
+                    companyResearchRaw.subPages.push({
+                      keyPoints: [],
+                      technologies: [],
+                      valuesOrCulture: culturePoints,
+                      notable: [],
+                      address: null,
+                    });
+                  }
+
+                  // If the page text is much richer than the stored snippet, update about_role
+                  const fullDesc = pageParsed.fullDescription;
+                  if (fullDesc && fullDesc.length > currentAboutRole.length + 200) {
+                    await insforge.database
+                      .from("jobs")
+                      .update({ about_role: fullDesc.slice(0, 8000) })
+                      .eq("id", jobId)
+                      .eq("user_id", userId);
+                  }
+                }
+              }
+            } catch (pageTextErr) {
+              console.error("[agent/research-company] page text extraction failed", pageTextErr);
+            }
+          }
         } catch (postingErr) {
           console.error("[agent/research-company] job posting contact extraction failed", postingErr);
         }
