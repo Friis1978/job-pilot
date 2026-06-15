@@ -402,6 +402,69 @@ export async function researchCompany(
       sourceUrls: [homepageUrl],
     };
 
+    // Pre-process the stored job description to extract contact persons and company
+    // culture/identity sections ("Hvem er vi?", "Om os", "About us", etc.) before
+    // any browser research. The DB text is the authoritative source for this info.
+    if (job.about_role) {
+      try {
+        const jdExtractResponse = await openai.chat.completions.create({
+          model: "gpt-4o",
+          response_format: { type: "json_object" },
+          temperature: 0,
+          max_tokens: 400,
+          messages: [
+            {
+              role: "system",
+              content: `Extract from this job description. The text may be in any language (Danish, Swedish, English, etc.).
+Return ONLY valid JSON:
+{
+  "contactName": "<full name of the hiring contact / contact person mentioned for enquiries — or null>",
+  "contactTitle": "<their job title — or null>",
+  "contactEmail": "<their email address — or null>",
+  "contactPhone": "<their phone number — or null>",
+  "culturePoints": ["<sentences from sections like 'Hvem er vi?', 'Om os', 'About us', 'Vi er', 'Our culture' that describe the company identity, team size, values, or working environment>"]
+}
+Only extract contacts explicitly named in the text. For culturePoints include the actual content, not headings.`,
+            },
+            { role: "user", content: job.about_role.slice(0, 4000) },
+          ],
+        });
+
+        const jdRaw = jdExtractResponse.choices[0]?.message?.content;
+        if (jdRaw) {
+          const jdParsed = JSON.parse(jdRaw) as {
+            contactName?: string | null;
+            contactTitle?: string | null;
+            contactEmail?: string | null;
+            contactPhone?: string | null;
+            culturePoints?: string[];
+          };
+
+          if (jdParsed.contactName || jdParsed.contactEmail || jdParsed.contactPhone) {
+            companyResearchRaw.contactFromJobPosting = {
+              name: jdParsed.contactName ?? null,
+              title: jdParsed.contactTitle ?? null,
+              email: jdParsed.contactEmail ?? null,
+              phone: jdParsed.contactPhone ?? null,
+            };
+          }
+
+          const culturePoints = jdParsed.culturePoints ?? [];
+          if (culturePoints.length > 0) {
+            companyResearchRaw.subPages.push({
+              keyPoints: [],
+              technologies: [],
+              valuesOrCulture: culturePoints,
+              notable: [],
+              address: null,
+            });
+          }
+        }
+      } catch (jdExtractErr) {
+        console.error("[agent/research-company] job description extraction failed", jdExtractErr);
+      }
+    }
+
     try {
       const session = await browserbase.sessions.create({
         projectId: process.env.BROWSERBASE_PROJECT_ID!,
@@ -463,11 +526,14 @@ export async function researchCompany(
             jobPostingContactSchema,
           );
           if (postingData.contactName || postingData.contactEmail || postingData.contactPhone) {
+            // Merge with pre-extracted contact (from about_role) — browser data fills gaps
+            // but the job description text contact takes priority as the authoritative source.
+            const existing = companyResearchRaw.contactFromJobPosting;
             companyResearchRaw.contactFromJobPosting = {
-              name: postingData.contactName ?? null,
-              title: postingData.contactTitle ?? null,
-              email: postingData.contactEmail ?? companyResearchRaw.contactFromJobPosting?.email ?? null,
-              phone: postingData.contactPhone ?? null,
+              name: existing?.name ?? postingData.contactName ?? null,
+              title: existing?.title ?? postingData.contactTitle ?? null,
+              email: existing?.email ?? postingData.contactEmail ?? null,
+              phone: existing?.phone ?? postingData.contactPhone ?? null,
             };
           }
           if (postingData.recruiterName || postingData.recruiterEmail || postingData.recruiterPhone) {
