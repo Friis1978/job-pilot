@@ -255,8 +255,8 @@ export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
           <View>
             <Text style={styles.sectionLabel}>Skills</Text>
             <View style={styles.divider} />
-            <Text style={styles.skillsText}>
-              {(profile.skills ?? [])
+            {(() => {
+              const sorted = (profile.skills ?? [])
                 .slice()
                 .sort((a, b) => {
                   const yA = skillYears[a] ?? 0;
@@ -267,9 +267,15 @@ export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
                 .map((skill) => {
                   const yrs = skillYears[skill];
                   return yrs && yrs > 0 ? `${skill} (${yrs} yr${yrs === 1 ? "" : "s"})` : skill;
-                })
-                .join("  ·  ")}
-            </Text>
+                });
+              // Chunk into rows of 8 — react-pdf miscalculates height for long
+              // wrapping Text nodes, pushing the next section into the wrong position.
+              const rows: string[][] = [];
+              for (let i = 0; i < sorted.length; i += 8) rows.push(sorted.slice(i, i + 8));
+              return rows.map((row, ri) => (
+                <Text key={ri} style={styles.skillsText}>{row.join("  ·  ")}</Text>
+              ));
+            })()}
           </View>
         ) : null}
 
