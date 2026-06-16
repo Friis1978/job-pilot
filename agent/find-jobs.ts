@@ -6,7 +6,7 @@ import { searchJobsSweden } from "@/lib/jobtech";
 import { searchJobsJooble } from "@/lib/jooble";
 import { searchJobsCareerjet } from "@/lib/careerjet";
 import { searchJobsGlassdoor } from "@/lib/glassdoor";
-import { MATCH_THRESHOLD, stripHtml, computeSkillYears, getLocationAliases } from "@/lib/utils";
+import { MATCH_THRESHOLD, stripHtml, computeSkillYears, getLocationAliases, normalizeLocationToEnglish } from "@/lib/utils";
 import type { Profile, AdzunaJob, NormalizedJob, ScoredJob } from "@/types";
 
 type ScoringResult = ScoredJob & { job: NormalizedJob };
@@ -396,7 +396,7 @@ export async function findJobs(
         external_apply_url: r.job.url,
         title: r.job.title,
         company: r.job.company,
-        location: r.job.location,
+        location: normalizeLocationToEnglish(r.job.location),
         salary: r.job.salary ?? null,
         job_type: r.job.job_type ?? "fulltime",
         about_role: r.job.description,

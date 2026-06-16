@@ -29,6 +29,40 @@ export function getLocationAliases(location: string): string[] {
   return LOCATION_ALIASES[location.toLowerCase().trim()] ?? [location];
 }
 
+// Maps non-English location terms to their canonical English form.
+// Applied to job locations before saving to DB.
+const LOCATION_TO_ENGLISH: Record<string, string> = {
+  "københavn":    "Copenhagen",
+  "kbh":          "Copenhagen",
+  "kbh.":         "Copenhagen",
+  "århus":        "Aarhus",
+  "helsingør":    "Elsinore",
+  "sønderjylland":"South Jutland",
+  "midtjylland":  "Central Jutland",
+  "nordjylland":  "North Jutland",
+  "sjælland":     "Zealand",
+  "fyn":          "Funen",
+  "bornholm":     "Bornholm",
+  "danmark":      "Denmark",
+};
+
+/**
+ * Translates non-English location names to English.
+ * Handles full strings like "København, Denmark" and partial matches within
+ * comma-separated segments (e.g. "Østerbro, København" → "Østerbro, Copenhagen").
+ */
+export function normalizeLocationToEnglish(location: string | null | undefined): string | null {
+  if (!location) return location ?? null;
+  return location
+    .split(",")
+    .map((segment) => {
+      const trimmed = segment.trim();
+      const english = LOCATION_TO_ENGLISH[trimmed.toLowerCase()];
+      return english ?? trimmed;
+    })
+    .join(", ");
+}
+
 export function computeTotalYearsExperience(
   workExperience: WorkExperience[] | null | undefined,
 ): number {

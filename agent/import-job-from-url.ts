@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { Stagehand } from "@browserbasehq/stagehand";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
-import { stripHtml } from "@/lib/utils";
+import { stripHtml, normalizeLocationToEnglish } from "@/lib/utils";
 import { browserbase } from "@/lib/browserbase";
 import { scoreJob } from "@/agent/find-jobs";
 import type { Profile, NormalizedJob } from "@/types";
@@ -358,7 +358,7 @@ If title or company cannot be determined, return them as empty strings.`,
       external_apply_url: canonicalUrl,
       title: job.title,
       company: job.company,
-      location: job.location,
+      location: normalizeLocationToEnglish(job.location),
       salary: job.salary ?? null,
       job_type: job.job_type ?? "fulltime",
       about_role: job.description,
