@@ -10,7 +10,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-export type MatchScorePoint = { label: string; search: number; imported: number };
+import type { MatchScorePoint } from "@/lib/posthog-query";
+export type { MatchScorePoint };
 
 type Props = { data: MatchScorePoint[] };
 

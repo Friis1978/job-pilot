@@ -111,11 +111,42 @@ export async function getDashboardStats(userId: string): Promise<DashboardStats>
   };
 }
 
-// ── Jobs Found Over Time — type only (data built from DB in dashboard/page.tsx) ──
+// ── Jobs Found Over Time (last 30 days, daily, split by source) ─────────────
 
 export type JobsOverTimePoint = { label: string; search: number; imported: number };
 
-// ── Match Score Distribution (all time, 5 buckets) ──────────────────────────
+export async function getJobsOverTime(userId: string): Promise<JobsOverTimePoint[]> {
+  const { results } = await hogql(
+    `SELECT toDate(timestamp) AS day, properties.source AS source, count() AS cnt
+     FROM events
+     WHERE event = 'job_found'
+       AND distinct_id = '${userId}'
+       AND timestamp >= now() - INTERVAL 30 DAY
+     GROUP BY day, source
+     ORDER BY day`,
+  );
+
+  const byDay = new Map<string, { search: number; imported: number }>();
+  for (const [day, source, cnt] of results) {
+    const key = String(day);
+    const entry = byDay.get(key) ?? { search: 0, imported: 0 };
+    if (String(source) === "url_import") entry.imported += Number(cnt);
+    else entry.search += Number(cnt);
+    byDay.set(key, entry);
+  }
+
+  const now = Date.now();
+  return Array.from({ length: 30 }, (_, i) => {
+    const d = new Date(now - (29 - i) * 24 * 60 * 60 * 1000);
+    const key = utcDateKey(d);
+    const label = `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} ${d.getUTCDate()}`;
+    return { label, ...(byDay.get(key) ?? { search: 0, imported: 0 }) };
+  });
+}
+
+// ── Match Score Distribution (all time, 5 buckets, split by source) ──────────
+
+export type MatchScorePoint = { label: string; search: number; imported: number };
 
 const SCORE_BUCKETS = [
   { label: "50-60%", min: 50, max: 60 },
@@ -125,36 +156,35 @@ const SCORE_BUCKETS = [
   { label: "90-100%", min: 90, max: 101 },
 ] as const;
 
-export async function getMatchScoreDistribution(
-  userId: string,
-): Promise<ChartPoint[]> {
+export async function getMatchScoreDistribution(userId: string): Promise<MatchScorePoint[]> {
   const { results } = await hogql(
-    `SELECT properties.matchScore AS score, count() AS cnt
+    `SELECT properties.matchScore AS score, properties.source AS source, count() AS cnt
      FROM events
      WHERE event = 'job_found'
        AND distinct_id = '${userId}'
        AND isNotNull(properties.matchScore)
-     GROUP BY score`,
+     GROUP BY score, source`,
   );
 
-  const counts: Record<string, number> = Object.fromEntries(
-    SCORE_BUCKETS.map((b) => [b.label, 0]),
-  );
+  const search: Record<string, number> = Object.fromEntries(SCORE_BUCKETS.map((b) => [b.label, 0]));
+  const imported: Record<string, number> = Object.fromEntries(SCORE_BUCKETS.map((b) => [b.label, 0]));
 
-  for (const [score, cnt] of results) {
+  for (const [score, source, cnt] of results) {
     const s = Number(score);
     const bucket = SCORE_BUCKETS.find((b) => s >= b.min && s < b.max);
-    if (bucket) counts[bucket.label] += Number(cnt);
+    if (!bucket) continue;
+    if (String(source) === "url_import") imported[bucket.label] += Number(cnt);
+    else search[bucket.label] += Number(cnt);
   }
 
-  return SCORE_BUCKETS.map((b) => ({ label: b.label, value: counts[b.label] }));
+  return SCORE_BUCKETS.map((b) => ({ label: b.label, search: search[b.label], imported: imported[b.label] }));
 }
 
 // ── Company Research Activity (last 7 days, daily) ───────────────────────────
 
-export async function getCompanyResearchActivity(
-  userId: string,
-): Promise<ChartPoint[]> {
+export type CompanyResearchPoint = { label: string; search: number; imported: number };
+
+export async function getCompanyResearchActivity(userId: string): Promise<CompanyResearchPoint[]> {
   const { results } = await hogql(
     `SELECT toDate(timestamp) AS day, count() AS cnt
      FROM events
@@ -174,7 +204,8 @@ export async function getCompanyResearchActivity(
     const d = new Date(now - (6 - i) * 24 * 60 * 60 * 1000);
     return {
       label: DAY_LABELS[d.getUTCDay()],
-      value: countByDay.get(utcDateKey(d)) ?? 0,
+      search: countByDay.get(utcDateKey(d)) ?? 0,
+      imported: 0,
     };
   });
 }

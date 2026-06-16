@@ -197,6 +197,12 @@ export async function importJobFromUrl(userId: string, url: string): Promise<Res
         });
         html = await res.text();
         rawText = stripHtml(html).replace(/\s+/g, " ").trim();
+        // Bot-check pages (Cloudflare, Careerjet, etc.) return a short challenge
+        // that passes the length threshold but contains no job data — clear it so
+        // we fall through to browser rendering.
+        if (/bekræftelse påkrævet|checking your browser|just a moment|enable javascript|unusual traffic/i.test(rawText)) {
+          rawText = "";
+        }
       } catch {
         rawText = "";
       }

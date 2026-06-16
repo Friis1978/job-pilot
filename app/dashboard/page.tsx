@@ -9,10 +9,7 @@ import { CompanyResearchChart } from "@/components/dashboard/CompanyResearchChar
 import { JobsOverTimeChart } from "@/components/dashboard/JobsOverTimeChart";
 import { MatchScoreChart } from "@/components/dashboard/MatchScoreChart";
 import { PipelineCard } from "@/components/dashboard/PipelineCard";
-import { getDashboardStats } from "@/lib/posthog-query";
-import type { JobsOverTimePoint } from "@/lib/posthog-query";
-import type { MatchScorePoint } from "@/components/dashboard/MatchScoreChart";
-import type { CompanyResearchPoint } from "@/components/dashboard/CompanyResearchChart";
+import { getDashboardStats, getJobsOverTime, getMatchScoreDistribution, getCompanyResearchActivity } from "@/lib/posthog-query";
 
 type AgentRunRow = {
   job_title_searched: string | null;
@@ -43,8 +40,6 @@ export default async function DashboardPage() {
 
   // ── Recent Activity + Charts ───────────────────────────────────────────────
 
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-
   const [
     runsResult,
     researchedResult,
@@ -70,22 +65,9 @@ export default async function DashboardPage() {
       .order("researched_at", { ascending: false })
       .limit(20),
     getDashboardStats(user.id),
-    insforge.database
-      .from("jobs")
-      .select("source, found_at")
-      .eq("user_id", user.id)
-      .gte("found_at", thirtyDaysAgo),
-    insforge.database
-      .from("jobs")
-      .select("match_score, source")
-      .eq("user_id", user.id)
-      .not("match_score", "is", null),
-    insforge.database
-      .from("jobs")
-      .select("company, source, researched_at")
-      .eq("user_id", user.id)
-      .not("researched_at", "is", null)
-      .order("researched_at", { ascending: true }),
+    getJobsOverTime(user.id),
+    getMatchScoreDistribution(user.id),
+    getCompanyResearchActivity(user.id),
     insforge.database
       .from("jobs")
       .select("status")
@@ -104,74 +86,9 @@ export default async function DashboardPage() {
     dashboardStatsResult.status === "fulfilled"
       ? dashboardStatsResult.value
       : null;
-  const jobsOverTimeData: JobsOverTimePoint[] = (() => {
-    const rows = jobsOverTimeResult.status === "fulfilled" ? (jobsOverTimeResult.value.data ?? []) : [];
-    const byDay = new Map<string, { search: number; imported: number }>();
-    for (const row of rows as { source: string; found_at: string }[]) {
-      const day = row.found_at.slice(0, 10); // "YYYY-MM-DD"
-      const entry = byDay.get(day) ?? { search: 0, imported: 0 };
-      if (row.source === "url") entry.imported++;
-      else entry.search++;
-      byDay.set(day, entry);
-    }
-    const now = Date.now();
-    return Array.from({ length: 30 }, (_, i) => {
-      const d = new Date(now - (29 - i) * 24 * 60 * 60 * 1000);
-      const key = d.toISOString().slice(0, 10);
-      const label = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" }) + " " + d.getUTCDate();
-      return { label, search: byDay.get(key)?.search ?? 0, imported: byDay.get(key)?.imported ?? 0 };
-    });
-  })();
-  const matchScoreData: MatchScorePoint[] = (() => {
-    const buckets = [
-      { label: "50-60%", min: 50, max: 60 },
-      { label: "60-70%", min: 60, max: 70 },
-      { label: "70-80%", min: 70, max: 80 },
-      { label: "80-90%", min: 80, max: 90 },
-      { label: "90-100%", min: 90, max: 101 },
-    ];
-    const search = Object.fromEntries(buckets.map((b) => [b.label, 0]));
-    const imported = Object.fromEntries(buckets.map((b) => [b.label, 0]));
-    const rows = matchScoreResult.status === "fulfilled" ? (matchScoreResult.value.data ?? []) : [];
-    for (const row of rows as { match_score: number; source: string }[]) {
-      const bucket = buckets.find((b) => row.match_score >= b.min && row.match_score < b.max);
-      if (!bucket) continue;
-      if (row.source === "url") imported[bucket.label]++;
-      else search[bucket.label]++;
-    }
-    return buckets.map((b) => ({ label: b.label, search: search[b.label], imported: imported[b.label] }));
-  })();
-  const companyResearchData: CompanyResearchPoint[] = (() => {
-    const rows = companyResearchResult.status === "fulfilled"
-      ? (companyResearchResult.value.data ?? []) as { company: string; source: string; researched_at: string }[]
-      : [];
-    // Deduplicate by company name — keep the most recent entry per company
-    const seen = new Set<string>();
-    const deduped = rows.filter((r) => {
-      const key = r.company.toLowerCase().trim();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    // Group deduplicated entries into 7-day buckets by when research was done
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const byDay = new Map<string, { search: number; imported: number }>();
-    for (const row of deduped) {
-      if (new Date(row.researched_at).getTime() < sevenDaysAgo) continue;
-      const day = row.researched_at.slice(0, 10);
-      const entry = byDay.get(day) ?? { search: 0, imported: 0 };
-      if (row.source === "url") entry.imported++;
-      else entry.search++;
-      byDay.set(day, entry);
-    }
-    const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const now = Date.now();
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(now - (6 - i) * 24 * 60 * 60 * 1000);
-      const key = d.toISOString().slice(0, 10);
-      return { label: DAY_LABELS[d.getUTCDay()], search: byDay.get(key)?.search ?? 0, imported: byDay.get(key)?.imported ?? 0 };
-    });
-  })();
+  const jobsOverTimeData = jobsOverTimeResult.status === "fulfilled" ? jobsOverTimeResult.value : [];
+  const matchScoreData = matchScoreResult.status === "fulfilled" ? matchScoreResult.value : [];
+  const companyResearchData = companyResearchResult.status === "fulfilled" ? companyResearchResult.value : [];
 
   const pipelineData = (() => {
     const counts = { saved: 0, applied: 0, interviewing: 0, offer: 0, rejected: 0 };
