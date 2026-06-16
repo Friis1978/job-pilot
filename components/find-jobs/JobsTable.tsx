@@ -13,7 +13,8 @@ import { Tooltip } from "@/components/ui/Tooltip";
 export type { JobRow };
 
 type FilterOption = "all" | "high" | "low";
-type SortOption = "newest" | "oldest" | "match_score";
+type SortCol = "company" | "title" | "location" | "match_score" | "researched" | "status" | "found_at";
+type SortDir = "asc" | "desc";
 type StatusFilter = "all" | JobStatus;
 
 const PAGE_SIZE = 20;
@@ -24,14 +25,7 @@ const FILTER_LABELS: Record<FilterOption, string> = {
   low: "Low Match",
 };
 
-const SORT_LABELS: Record<SortOption, string> = {
-  newest: "Newest",
-  match_score: "Match Score",
-  oldest: "Oldest",
-};
-
 const FILTER_CYCLE: FilterOption[] = ["all", "high", "low"];
-const SORT_CYCLE: SortOption[] = ["newest", "match_score", "oldest"];
 
 const STATUS_FILTERS: Array<{ key: StatusFilter; label: string; dot: string }> = [
   { key: "all",          label: "All",          dot: "" },
@@ -52,7 +46,8 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
   const router = useRouter();
   const { rescoring, researching, rescoreAll, researchAll } = useBulkOps();
   const [filter, setFilter] = useState<FilterOption>("all");
-  const [sort, setSort] = useState<SortOption>("match_score");
+  const [sortCol, setSortCol] = useState<SortCol>("match_score");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [clearing, setClearing] = useState(false);
@@ -66,8 +61,16 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
     setPage(1);
   }
 
-  function cycleSort() {
-    setSort((s) => SORT_CYCLE[(SORT_CYCLE.indexOf(s) + 1) % SORT_CYCLE.length]);
+  function handleSort(col: SortCol) {
+    setSortCol((prev) => {
+      if (prev === col) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return col;
+      }
+      // Default direction per column
+      setSortDir(col === "company" || col === "title" || col === "location" || col === "status" ? "asc" : "desc");
+      return col;
+    });
     setPage(1);
   }
 
@@ -167,10 +170,17 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
 
   // Sort
   const sorted = [...filtered].sort((a, b) => {
-    if (sort === "match_score") return b.match_score - a.match_score;
-    if (sort === "oldest")
-      return new Date(a.found_at).getTime() - new Date(b.found_at).getTime();
-    return new Date(b.found_at).getTime() - new Date(a.found_at).getTime();
+    const mul = sortDir === "asc" ? 1 : -1;
+    switch (sortCol) {
+      case "company":   return mul * a.company.localeCompare(b.company);
+      case "title":     return mul * a.title.localeCompare(b.title);
+      case "location":  return mul * (a.location ?? "").localeCompare(b.location ?? "");
+      case "match_score": return mul * (a.match_score - b.match_score);
+      case "researched":  return mul * ((a.researched_at ? 1 : 0) - (b.researched_at ? 1 : 0));
+      case "status":    return mul * ((a.status ?? "saved").localeCompare(b.status ?? "saved"));
+      case "found_at":  return mul * (new Date(a.found_at).getTime() - new Date(b.found_at).getTime());
+      default:          return 0;
+    }
   });
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
@@ -204,18 +214,7 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
             {FILTER_LABELS[filter]}
             <ChevronDownIcon className="w-3.5 h-3.5 text-text-muted" />
           </button>
-          <button
-            onClick={cycleSort}
-            className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-sm font-medium transition-colors ${
-              sort !== "newest"
-                ? "border-accent text-accent bg-accent-muted"
-                : "border-border text-text-primary hover:bg-surface-secondary"
-            }`}
-          >
-            {SORT_LABELS[sort]}
-            <ChevronDownIcon className="w-3.5 h-3.5 text-text-muted" />
-          </button>
-          {jobs.length > 0 && (
+{jobs.length > 0 && (
             <>
               <button
                 onClick={rescoreAll}
@@ -338,27 +337,30 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[18%]">
-                    Company
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[20%]">
-                    Role
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[12%]">
-                    Location
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[16%]">
-                    Match Score
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[10%]">
-                    Researched
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[10%]">
-                    Status
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[8%] whitespace-nowrap">
-                    Date Found
-                  </th>
+                  {(
+                    [
+                      { col: "company",     label: "Company",     width: "w-[18%]" },
+                      { col: "title",       label: "Role",        width: "w-[20%]" },
+                      { col: "location",    label: "Location",    width: "w-[12%]" },
+                      { col: "match_score", label: "Match Score", width: "w-[16%]" },
+                      { col: "researched",  label: "Researched",  width: "w-[10%]" },
+                      { col: "status",      label: "Status",      width: "w-[10%]" },
+                      { col: "found_at",    label: "Date Found",  width: "w-[8%]" },
+                    ] as Array<{ col: SortCol; label: string; width: string }>
+                  ).map(({ col, label, width }) => (
+                    <th
+                      key={col}
+                      onClick={() => handleSort(col)}
+                      className={`px-6 py-4 text-left text-xs font-medium uppercase tracking-wide cursor-pointer select-none whitespace-nowrap transition-colors ${width} ${
+                        sortCol === col ? "text-text-primary" : "text-text-secondary hover:text-text-primary"
+                      }`}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {label}
+                        <SortIcon active={sortCol === col} dir={sortDir} />
+                      </span>
+                    </th>
+                  ))}
                   <th className="px-4 py-4 w-[6%]" />
                 </tr>
               </thead>
@@ -520,6 +522,19 @@ function SourceBadge({ source }: { source: string }) {
   return (
     <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-surface-secondary text-text-muted border border-border w-fit">
       {label}
+    </span>
+  );
+}
+
+function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
+  return (
+    <span className={`inline-flex flex-col gap-[2px] ${active ? "text-text-primary" : "text-text-muted"}`}>
+      <svg width="7" height="4" viewBox="0 0 7 4" fill="currentColor" className={active && dir === "asc" ? "opacity-100" : "opacity-30"}>
+        <path d="M3.5 0L7 4H0L3.5 0Z" />
+      </svg>
+      <svg width="7" height="4" viewBox="0 0 7 4" fill="currentColor" className={active && dir === "desc" ? "opacity-100" : "opacity-30"}>
+        <path d="M3.5 4L0 0H7L3.5 4Z" />
+      </svg>
     </span>
   );
 }
