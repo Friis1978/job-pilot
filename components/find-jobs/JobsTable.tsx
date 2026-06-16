@@ -356,7 +356,7 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                   <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[10%]">
                     Status
                   </th>
-                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[8%]">
+                  <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wide text-text-secondary w-[8%] whitespace-nowrap">
                     Date Found
                   </th>
                   <th className="px-4 py-4 w-[6%]" />
@@ -428,7 +428,7 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                     <td className="px-6 py-4">
                       <StatusBadge jobId={job.id} status={(job.status as JobStatus) ?? "saved"} />
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm text-text-muted">
                         {formatDateAgo(job.found_at)}
                       </span>
