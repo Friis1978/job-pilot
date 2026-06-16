@@ -9,7 +9,8 @@ import { CompanyResearchChart } from "@/components/dashboard/CompanyResearchChar
 import { JobsOverTimeChart } from "@/components/dashboard/JobsOverTimeChart";
 import { MatchScoreChart } from "@/components/dashboard/MatchScoreChart";
 import { PipelineCard } from "@/components/dashboard/PipelineCard";
-import { getDashboardStats, getJobsOverTime, getMatchScoreDistribution, getCompanyResearchActivity } from "@/lib/posthog-query";
+import { getDashboardStats, getJobsOverTime, getMatchScoreDistribution } from "@/lib/posthog-query";
+import type { CompanyResearchPoint } from "@/components/dashboard/CompanyResearchChart";
 
 type AgentRunRow = {
   job_title_searched: string | null;
@@ -67,7 +68,12 @@ export default async function DashboardPage() {
     getDashboardStats(user.id),
     getJobsOverTime(user.id),
     getMatchScoreDistribution(user.id),
-    getCompanyResearchActivity(user.id),
+    insforge.database
+      .from("jobs")
+      .select("researched_at, source")
+      .eq("user_id", user.id)
+      .not("researched_at", "is", null)
+      .gte("researched_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
     insforge.database
       .from("jobs")
       .select("status")
@@ -88,7 +94,33 @@ export default async function DashboardPage() {
       : null;
   const jobsOverTimeData = jobsOverTimeResult.status === "fulfilled" ? jobsOverTimeResult.value : [];
   const matchScoreData = matchScoreResult.status === "fulfilled" ? matchScoreResult.value : [];
-  const companyResearchData = companyResearchResult.status === "fulfilled" ? companyResearchResult.value : [];
+  const companyResearchData = (() => {
+    type ResearchRow = { researched_at: string; source: string };
+    const rows: ResearchRow[] =
+      companyResearchResult.status === "fulfilled"
+        ? ((companyResearchResult.value.data as ResearchRow[] | null) ?? [])
+        : [];
+
+    const DAY_LABELS_LOCAL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+    const byDay = new Map<string, { search: number; imported: number }>();
+    for (const row of rows) {
+      const d = new Date(row.researched_at);
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+      const entry = byDay.get(key) ?? { search: 0, imported: 0 };
+      if (row.source === "url") entry.imported++;
+      else entry.search++;
+      byDay.set(key, entry);
+    }
+
+    return Array.from({ length: 7 }, (_, i): CompanyResearchPoint => {
+      const d = new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000);
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+      return {
+        label: DAY_LABELS_LOCAL[d.getUTCDay()],
+        ...(byDay.get(key) ?? { search: 0, imported: 0 }),
+      };
+    });
+  })();
 
   const pipelineData = (() => {
     const counts = { saved: 0, applied: 0, interviewing: 0, offer: 0, rejected: 0 };

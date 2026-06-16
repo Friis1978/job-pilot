@@ -4,6 +4,7 @@ import { Stagehand } from "@browserbasehq/stagehand";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { browserbase } from "@/lib/browserbase";
+import { stripHtml } from "@/lib/utils";
 import type { Profile } from "@/types";
 
 type ResearchCompanyResult = {
@@ -411,22 +412,27 @@ export async function researchCompany(
           model: "gpt-4o",
           response_format: { type: "json_object" },
           temperature: 0,
-          max_tokens: 400,
+          max_tokens: 900,
           messages: [
             {
               role: "system",
-              content: `Extract from this job description. The text may be in any language (Danish, Swedish, English, etc.).
+              content: `Extract from this job description. The text may be in any language (Danish, Swedish, English, etc.). Read the ENTIRE text including the end where contact/application instructions often appear.
 Return ONLY valid JSON:
 {
-  "contactName": "<full name of the hiring contact / contact person mentioned for enquiries — or null>",
+  "contactName": "<full name of an internal hiring contact at the employer company — or null>",
   "contactTitle": "<their job title — or null>",
   "contactEmail": "<their email address — or null>",
   "contactPhone": "<their phone number — or null>",
+  "recruiterName": "<full name of an external recruiter at a staffing/recruitment agency (e.g. Right People Group, Michael Page) — or null>",
+  "recruiterTitle": "<recruiter job title — or null>",
+  "recruiterEmail": "<recruiter email address — or null>",
+  "recruiterPhone": "<recruiter phone number — or null>",
+  "recruiterCompany": "<name of the recruitment/staffing agency — or null>",
   "culturePoints": ["<sentences from sections like 'Hvem er vi?', 'Om os', 'About us', 'Vi er', 'Our culture' that describe the company identity, team size, values, or working environment>"]
 }
-Only extract contacts explicitly named in the text. For culturePoints include the actual content, not headings.`,
+Only extract contacts explicitly named in the text. Distinguish carefully: internal contacts work for the hiring company; recruiters work for an agency hired to fill the role.`,
             },
-            { role: "user", content: job.about_role.slice(0, 4000) },
+            { role: "user", content: job.about_role.slice(0, 8000) },
           ],
         });
 
@@ -437,6 +443,11 @@ Only extract contacts explicitly named in the text. For culturePoints include th
             contactTitle?: string | null;
             contactEmail?: string | null;
             contactPhone?: string | null;
+            recruiterName?: string | null;
+            recruiterTitle?: string | null;
+            recruiterEmail?: string | null;
+            recruiterPhone?: string | null;
+            recruiterCompany?: string | null;
             culturePoints?: string[];
           };
 
@@ -446,6 +457,16 @@ Only extract contacts explicitly named in the text. For culturePoints include th
               title: jdParsed.contactTitle ?? null,
               email: jdParsed.contactEmail ?? null,
               phone: jdParsed.contactPhone ?? null,
+            };
+          }
+
+          if (jdParsed.recruiterName || jdParsed.recruiterEmail || jdParsed.recruiterPhone) {
+            companyResearchRaw.recruiterContact = {
+              name: jdParsed.recruiterName ?? null,
+              title: jdParsed.recruiterTitle ?? null,
+              email: jdParsed.recruiterEmail ?? null,
+              phone: jdParsed.recruiterPhone ?? null,
+              company: jdParsed.recruiterCompany ?? null,
             };
           }
 
@@ -463,6 +484,97 @@ Only extract contacts explicitly named in the text. For culturePoints include th
       } catch (jdExtractErr) {
         console.error("[agent/research-company] job description extraction failed", jdExtractErr);
       }
+    }
+
+    // HTTP-based source URL extraction — runs before the browser for reliability.
+    // SSR pages (Emply, Angular, Next.js) have all content in the raw HTML; a plain
+    // HTTP fetch bypasses browser rendering issues and always gets the full page text.
+    if (job.source_url) {
+      try {
+        const res = await fetch(job.source_url, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (res.ok) {
+          const html = await res.text();
+          const cleanedHtml = html
+            .replace(/<style[\s\S]*?<\/style>/gi, "")
+            .replace(/<script[\s\S]*?<\/script>/gi, "");
+          const rawText = stripHtml(cleanedHtml).replace(/\s+/g, " ").trim();
+          if (rawText.length > 500) {
+            console.log(`[research-company] HTTP fetch source_url: ${rawText.length} chars, tail: ${rawText.slice(-500)}`);
+            const httpExtractResponse = await openai.chat.completions.create({
+              model: "gpt-4o",
+              response_format: { type: "json_object" },
+              temperature: 0,
+              max_tokens: 900,
+              messages: [
+                {
+                  role: "system",
+                  content: `Extract from this job posting page. The text may be in any language (Danish, Swedish, English, etc.). Read the entire text — contact info often appears at the end.
+Return ONLY valid JSON:
+{
+  "contactName": "<full name of an internal hiring contact at the employer company — or null>",
+  "contactTitle": "<their job title — or null>",
+  "contactEmail": "<their email address — or null>",
+  "contactPhone": "<their phone number — or null>",
+  "recruiterName": "<full name of an external recruiter at a staffing/recruitment agency — or null>",
+  "recruiterTitle": "<recruiter job title — or null>",
+  "recruiterEmail": "<recruiter email address — or null>",
+  "recruiterPhone": "<recruiter phone number — or null>",
+  "recruiterCompany": "<name of the recruitment/staffing agency — or null>",
+  "culturePoints": ["<up to 3 sentences from company identity sections>"]
+}
+Only include contacts explicitly named in the text. Distinguish internal contacts (work at hiring company) from external recruiters (work at a recruiting agency).`,
+                },
+                { role: "user", content: rawText.slice(0, 10000) },
+              ],
+            });
+            const httpRaw = httpExtractResponse.choices[0]?.message?.content;
+            console.log(`[research-company] HTTP extract GPT-4o: ${httpRaw?.slice(0, 300)}`);
+            if (httpRaw) {
+              const httpParsed = JSON.parse(httpRaw) as {
+                contactName?: string | null; contactTitle?: string | null;
+                contactEmail?: string | null; contactPhone?: string | null;
+                recruiterName?: string | null; recruiterTitle?: string | null;
+                recruiterEmail?: string | null; recruiterPhone?: string | null;
+                recruiterCompany?: string | null; culturePoints?: string[];
+              };
+              if (httpParsed.contactName || httpParsed.contactEmail || httpParsed.contactPhone) {
+                const existing = companyResearchRaw.contactFromJobPosting;
+                companyResearchRaw.contactFromJobPosting = {
+                  name: existing?.name ?? httpParsed.contactName ?? null,
+                  title: existing?.title ?? httpParsed.contactTitle ?? null,
+                  email: existing?.email ?? httpParsed.contactEmail ?? null,
+                  phone: existing?.phone ?? httpParsed.contactPhone ?? null,
+                };
+              }
+              if (httpParsed.recruiterName || httpParsed.recruiterEmail || httpParsed.recruiterPhone) {
+                const existing = companyResearchRaw.recruiterContact;
+                companyResearchRaw.recruiterContact = {
+                  name: existing?.name ?? httpParsed.recruiterName ?? null,
+                  title: existing?.title ?? httpParsed.recruiterTitle ?? null,
+                  email: existing?.email ?? httpParsed.recruiterEmail ?? null,
+                  phone: existing?.phone ?? httpParsed.recruiterPhone ?? null,
+                  company: existing?.company ?? httpParsed.recruiterCompany ?? null,
+                };
+              }
+              const culturePoints = httpParsed.culturePoints ?? [];
+              if (culturePoints.length > 0) {
+                companyResearchRaw.subPages.push({
+                  keyPoints: [], technologies: [], valuesOrCulture: culturePoints, notable: [], address: null,
+                });
+              }
+            }
+          }
+        }
+      } catch (httpErr) {
+        console.error("[agent/research-company] HTTP source_url extraction failed", httpErr);
+      }
+      console.log(`[research-company] after HTTP extract: contact=${JSON.stringify(companyResearchRaw.contactFromJobPosting)}, recruiter=${JSON.stringify(companyResearchRaw.recruiterContact)}`);
     }
 
     try {
@@ -488,14 +600,25 @@ Only extract contacts explicitly named in the text. For culturePoints include th
       // Job posting contact extraction — runs first, uses real browser to handle JS-rendered ATS pages
       if (job.source_url) {
         try {
-          await page.goto(job.source_url, { waitUntil: "networkidle" });
+          try {
+            await page.goto(job.source_url, { waitUntil: "networkidle", timeoutMs: 25000 });
+          } catch {
+            // Timeout waiting for networkidle — proceed with whatever is rendered
+          }
 
-          // If we landed on a job board aggregator (Careerjet, Jooble, etc.), the full
+          // If we landed on a job board AGGREGATOR (Careerjet, Jooble, etc.), the full
           // job description and named contacts are on the employer's original posting —
           // try to click through to it before extracting.
+          // IMPORTANT: Do NOT click through from ATS platforms (Emply, Greenhouse,
+          // Teamtailor, etc.) — those ARE the employer's own job posting page.
+          const JOB_BOARD_CLICKTHROUGH_DOMAINS = [
+            "careerjet", "jooble", "jobindex", "stepstone", "monster",
+            "glassdoor", "simplyhired", "ziprecruiter", "adzuna", "indeed",
+            "jobviewtrack",
+          ];
           try {
             const landedUrl = page.url();
-            const onJobBoard = ATS_AND_JOB_BOARD_DOMAINS.some((d) => landedUrl.includes(d));
+            const onJobBoard = JOB_BOARD_CLICKTHROUGH_DOMAINS.some((d) => landedUrl.includes(d));
             if (onJobBoard) {
               await stagehand.act(
                 "Click the button or link that takes you to the full job posting or lets you apply at the employer's own website. Ignore internal Careerjet/Jooble links.",
@@ -510,148 +633,175 @@ Only extract contacts explicitly named in the text. For culturePoints include th
             // Click failed or not on a job board — continue with current page
           }
 
-          // Extract mailto: links directly from the DOM — catches emails that job boards
-          // visually obfuscate but leave in the HTML (e.g. Careerjet, some ATS platforms)
-          const GENERIC_EMAIL_DOMAINS = new Set([
-            "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "live.com", "icloud.com",
-          ]);
-          let applyEmail: string | null = null;
-          try {
-            const mailtoLinks = await page.evaluate(() =>
-              Array.from(document.querySelectorAll('a[href^="mailto:"]'))
-                .map((a) => a.getAttribute("href")?.replace(/^mailto:/i, "").split("?")[0].trim() ?? "")
-                .filter((e) => e.includes("@"))
-            ) as string[];
-            applyEmail = mailtoLinks.find(
-              (e) => !GENERIC_EMAIL_DOMAINS.has(e.split("@")[1]?.toLowerCase() ?? ""),
-            ) ?? null;
-          } catch {
-            // page.evaluate unavailable — continue without
-          }
-
-          // If the email domain differs from our GPT-4o homepage guess, it's more reliable
-          // (e.g. source_url → careerjet → GPT-4o guessed wrong brand domain)
-          if (applyEmail) {
-            const emailDomain = applyEmail.split("@")[1]?.toLowerCase();
-            if (emailDomain && !homepageUrl.toLowerCase().includes(emailDomain)) {
-              homepageUrl = `https://www.${emailDomain}`;
-              companyResearchRaw.sourceUrls = [homepageUrl];
-            }
-            companyResearchRaw.contactFromJobPosting = {
-              name: null, title: null, email: applyEmail, phone: null,
-            };
-          }
-
-          const postingData = await stagehand.extract(
-            "This is a job posting. Extract the contact person (recruiter or hiring manager) including their name, title, email and phone. Also extract the company's full postal address if shown.",
-            jobPostingContactSchema,
-          );
-          if (postingData.contactName || postingData.contactEmail || postingData.contactPhone) {
-            // Merge with pre-extracted contact (from about_role) — browser data fills gaps
-            // but the job description text contact takes priority as the authoritative source.
-            const existing = companyResearchRaw.contactFromJobPosting;
-            companyResearchRaw.contactFromJobPosting = {
-              name: existing?.name ?? postingData.contactName ?? null,
-              title: existing?.title ?? postingData.contactTitle ?? null,
-              email: existing?.email ?? postingData.contactEmail ?? null,
-              phone: existing?.phone ?? postingData.contactPhone ?? null,
-            };
-          }
-          if (postingData.recruiterName || postingData.recruiterEmail || postingData.recruiterPhone) {
-            companyResearchRaw.recruiterContact = {
-              name: postingData.recruiterName ?? null,
-              title: postingData.recruiterTitle ?? null,
-              email: postingData.recruiterEmail ?? null,
-              phone: postingData.recruiterPhone ?? null,
-              company: postingData.recruiterCompany ?? null,
-            };
-          }
-          if (postingData.companyAddress) {
-            companyResearchRaw.address = postingData.companyAddress;
-          }
-
-          // If Stagehand didn't find a named contact, read the full rendered page text
-          // and run GPT-4o on it. Jooble tracking URLs redirect to the actual job posting
-          // which may have the full description (contacts, "Hvem er vi?") that isn't
-          // stored in about_role (Jooble only provides a short snippet).
-          const missingNamedContact = !companyResearchRaw.contactFromJobPosting?.name;
-          if (missingNamedContact) {
+          // On job board aggregators only: extract mailto: links from the DOM to find
+          // the employer's direct email (job boards sometimes hide it in HTML while
+          // obfuscating it visually). On ATS pages (Emply, Greenhouse, etc.) this must
+          // NOT run — ATS pages may contain recruiter agency emails (e.g. Right People
+          // Group) which would wrongly override the employer's homepage URL and classify
+          // the recruiter as the internal "hiring contact".
+          const currentLandedUrl = page.url();
+          const stillOnJobBoard = JOB_BOARD_CLICKTHROUGH_DOMAINS.some((d) => currentLandedUrl.includes(d));
+          if (stillOnJobBoard) {
+            const GENERIC_EMAIL_DOMAINS = new Set([
+              "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "live.com", "icloud.com",
+            ]);
+            let applyEmail: string | null = null;
             try {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const pageText = (await page.evaluate(() => (document as any).body.innerText)) as string;
-              const currentAboutRole = job.about_role ?? "";
+              const mailtoLinks = await page.evaluate(() =>
+                Array.from(document.querySelectorAll('a[href^="mailto:"]'))
+                  .map((a) => a.getAttribute("href")?.replace(/^mailto:/i, "").split("?")[0].trim() ?? "")
+                  .filter((e) => e.includes("@"))
+              ) as string[];
+              applyEmail = mailtoLinks.find(
+                (e) => !GENERIC_EMAIL_DOMAINS.has(e.split("@")[1]?.toLowerCase() ?? ""),
+              ) ?? null;
+            } catch {
+              // page.evaluate unavailable — continue without
+            }
 
-              if (pageText && pageText.length > currentAboutRole.length + 100) {
-                const pageExtractResponse = await openai.chat.completions.create({
-                  model: "gpt-4o",
-                  response_format: { type: "json_object" },
-                  temperature: 0,
-                  max_tokens: 500,
-                  messages: [
-                    {
-                      role: "system",
-                      content: `Extract from this job posting page. The text may be in any language (Danish, Swedish, English, etc.).
+            // If the email domain differs from our GPT-4o homepage guess, it's more reliable
+            // (e.g. source_url → careerjet → GPT-4o guessed wrong brand domain)
+            if (applyEmail) {
+              const emailDomain = applyEmail.split("@")[1]?.toLowerCase();
+              if (emailDomain && !homepageUrl.toLowerCase().includes(emailDomain)) {
+                homepageUrl = `https://www.${emailDomain}`;
+                companyResearchRaw.sourceUrls = [homepageUrl];
+              }
+              companyResearchRaw.contactFromJobPosting = {
+                name: null, title: null, email: applyEmail, phone: null,
+              };
+            }
+          }
+
+          // Primary contact extraction: read the full rendered page text via body.innerText.
+          // This runs BEFORE Stagehand's screenshot-based extract() so it has higher priority.
+          // Stagehand only sees the visible viewport — contacts on Danish job postings
+          // (e.g. "Interesseret? Vi samarbejder med Right People Group…", sidebar contact)
+          // often appear below the fold and are missed by screenshot extraction.
+          console.log(`[research-company] navigated to source_url, current URL: ${page.url()}`);
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const pageText = (await page.evaluate(() => (document as any).body.innerText)) as string;
+            console.log(`[research-company] body.innerText length: ${pageText?.length ?? 0}`);
+            if (pageText && pageText.length > 10) {
+              console.log(`[research-company] innerText tail (last 800 chars): ${pageText.slice(-800)}`);
+            }
+
+            if (pageText && pageText.length > 200) {
+              const pageExtractResponse = await openai.chat.completions.create({
+                model: "gpt-4o",
+                response_format: { type: "json_object" },
+                temperature: 0,
+                max_tokens: 900,
+                messages: [
+                  {
+                    role: "system",
+                    content: `Extract from this job posting page. The text may be in any language (Danish, Swedish, English, etc.). Read the entire text — contact info often appears at the end.
 Return ONLY valid JSON:
 {
-  "contactName": "<full name of a person explicitly listed as a contact for enquiries — or null>",
+  "contactName": "<full name of an internal hiring contact at the employer company — or null>",
   "contactTitle": "<their job title — or null>",
   "contactEmail": "<their email address — or null>",
   "contactPhone": "<their phone number — or null>",
-  "culturePoints": ["<sentences from 'Hvem er vi?', 'Om os', 'About us', or similar company identity sections>"],
-  "fullDescription": "<the main job description text — omit nav, footer, cookie banners>"
+  "recruiterName": "<full name of an external recruiter at a staffing/recruitment agency — or null>",
+  "recruiterTitle": "<recruiter job title — or null>",
+  "recruiterEmail": "<recruiter email address — or null>",
+  "recruiterPhone": "<recruiter phone number — or null>",
+  "recruiterCompany": "<name of the recruitment/staffing agency — or null>",
+  "culturePoints": ["<up to 3 sentences from 'Hvem er vi?', 'Om os', 'About us', or similar company identity sections>"]
 }
-Only include contacts explicitly named in the text. Do not infer.`,
-                    },
-                    { role: "user", content: pageText.slice(0, 5000) },
-                  ],
-                });
+Only include contacts explicitly named in the text. Distinguish internal contacts (work at hiring company) from recruiters (work at agency).`,
+                  },
+                  { role: "user", content: pageText.slice(0, 10000) },
+                ],
+              });
 
-                const pageRaw = pageExtractResponse.choices[0]?.message?.content;
-                if (pageRaw) {
-                  const pageParsed = JSON.parse(pageRaw) as {
-                    contactName?: string | null;
-                    contactTitle?: string | null;
-                    contactEmail?: string | null;
-                    contactPhone?: string | null;
-                    culturePoints?: string[];
-                    fullDescription?: string;
+              const pageRaw = pageExtractResponse.choices[0]?.message?.content;
+              console.log(`[research-company] page text GPT-4o raw: ${pageRaw?.slice(0, 500)}`);
+              if (pageRaw) {
+                const pageParsed = JSON.parse(pageRaw) as {
+                  contactName?: string | null;
+                  contactTitle?: string | null;
+                  contactEmail?: string | null;
+                  contactPhone?: string | null;
+                  recruiterName?: string | null;
+                  recruiterTitle?: string | null;
+                  recruiterEmail?: string | null;
+                  recruiterPhone?: string | null;
+                  recruiterCompany?: string | null;
+                  culturePoints?: string[];
+                };
+
+                if (pageParsed.contactName || pageParsed.contactEmail || pageParsed.contactPhone) {
+                  const existing = companyResearchRaw.contactFromJobPosting;
+                  companyResearchRaw.contactFromJobPosting = {
+                    name: existing?.name ?? pageParsed.contactName ?? null,
+                    title: existing?.title ?? pageParsed.contactTitle ?? null,
+                    email: existing?.email ?? pageParsed.contactEmail ?? null,
+                    phone: existing?.phone ?? pageParsed.contactPhone ?? null,
                   };
+                }
 
-                  if (pageParsed.contactName || pageParsed.contactEmail || pageParsed.contactPhone) {
-                    const existing = companyResearchRaw.contactFromJobPosting;
-                    companyResearchRaw.contactFromJobPosting = {
-                      name: existing?.name ?? pageParsed.contactName ?? null,
-                      title: existing?.title ?? pageParsed.contactTitle ?? null,
-                      email: existing?.email ?? pageParsed.contactEmail ?? null,
-                      phone: existing?.phone ?? pageParsed.contactPhone ?? null,
-                    };
-                  }
+                if (pageParsed.recruiterName || pageParsed.recruiterEmail || pageParsed.recruiterPhone) {
+                  const existing = companyResearchRaw.recruiterContact;
+                  companyResearchRaw.recruiterContact = {
+                    name: existing?.name ?? pageParsed.recruiterName ?? null,
+                    title: existing?.title ?? pageParsed.recruiterTitle ?? null,
+                    email: existing?.email ?? pageParsed.recruiterEmail ?? null,
+                    phone: existing?.phone ?? pageParsed.recruiterPhone ?? null,
+                    company: existing?.company ?? pageParsed.recruiterCompany ?? null,
+                  };
+                }
 
-                  const culturePoints = pageParsed.culturePoints ?? [];
-                  if (culturePoints.length > 0) {
-                    companyResearchRaw.subPages.push({
-                      keyPoints: [],
-                      technologies: [],
-                      valuesOrCulture: culturePoints,
-                      notable: [],
-                      address: null,
-                    });
-                  }
-
-                  // If the page text is much richer than the stored snippet, update about_role
-                  const fullDesc = pageParsed.fullDescription;
-                  if (fullDesc && fullDesc.length > currentAboutRole.length + 200) {
-                    await insforge.database
-                      .from("jobs")
-                      .update({ about_role: fullDesc.slice(0, 8000) })
-                      .eq("id", jobId)
-                      .eq("user_id", userId);
-                  }
+                const culturePoints = pageParsed.culturePoints ?? [];
+                if (culturePoints.length > 0) {
+                  companyResearchRaw.subPages.push({
+                    keyPoints: [],
+                    technologies: [],
+                    valuesOrCulture: culturePoints,
+                    notable: [],
+                    address: null,
+                  });
                 }
               }
-            } catch (pageTextErr) {
-              console.error("[agent/research-company] page text extraction failed", pageTextErr);
             }
+          } catch (pageTextErr) {
+            console.error("[agent/research-company] page text extraction failed", pageTextErr);
+          }
+          console.log(`[research-company] after page-text extract: contact=${JSON.stringify(companyResearchRaw.contactFromJobPosting)}, recruiter=${JSON.stringify(companyResearchRaw.recruiterContact)}`);
+
+          // Secondary contact extraction: Stagehand screenshot-based extract fills any gaps
+          // left by the page text step (e.g. address, or contacts page text missed).
+          // Wrapped in its own try/catch so a Stagehand failure never skips other work.
+          try {
+            const postingData = await stagehand.extract(
+              "This is a job posting. Extract the contact person (recruiter or hiring manager) including their name, title, email and phone. Also extract the company's full postal address if shown.",
+              jobPostingContactSchema,
+            );
+            if (postingData.contactName || postingData.contactEmail || postingData.contactPhone) {
+              const existing = companyResearchRaw.contactFromJobPosting;
+              companyResearchRaw.contactFromJobPosting = {
+                name: existing?.name ?? postingData.contactName ?? null,
+                title: existing?.title ?? postingData.contactTitle ?? null,
+                email: existing?.email ?? postingData.contactEmail ?? null,
+                phone: existing?.phone ?? postingData.contactPhone ?? null,
+              };
+            }
+            if (postingData.recruiterName || postingData.recruiterEmail || postingData.recruiterPhone) {
+              const existing = companyResearchRaw.recruiterContact;
+              companyResearchRaw.recruiterContact = {
+                name: existing?.name ?? postingData.recruiterName ?? null,
+                title: existing?.title ?? postingData.recruiterTitle ?? null,
+                email: existing?.email ?? postingData.recruiterEmail ?? null,
+                phone: existing?.phone ?? postingData.recruiterPhone ?? null,
+                company: existing?.company ?? postingData.recruiterCompany ?? null,
+              };
+            }
+            if (postingData.companyAddress) {
+              companyResearchRaw.address = postingData.companyAddress;
+            }
+          } catch (stagehandErr) {
+            console.error("[agent/research-company] stagehand extract failed", stagehandErr);
           }
         } catch (postingErr) {
           console.error("[agent/research-company] job posting contact extraction failed", postingErr);
@@ -946,6 +1096,7 @@ Never return empty strings — if you have partial knowledge, share it. Only ret
     const systemPrompt = `You are a sharp career strategist preparing a candidate to apply for a specific role. You are given (a) research about the company${researchSourceLabel}, (b) the job posting, and (c) the candidate's profile. Produce a concise, concrete briefing that gives this specific candidate an edge for this specific role.
 
 Rules:
+- Write ALL output in English. If any input text is in Danish, Swedish, Norwegian, or another language, translate it — do not quote it in the original language.
 - Ground every company claim in the provided research or job posting. Never invent funding, customers, headcount, or facts. If research was thin, infer carefully from the job posting and say what's inferred.
 - Be specific to THIS candidate. Connect their actual skills and past work to this company's stack, product, and values. No generic advice that would apply to anyone.
 - Turn the candidate's missing skills into a strategy: how to frame the gap honestly and what adjacent experience to lean on.
@@ -996,7 +1147,7 @@ Work history: ${JSON.stringify((profile.work_experience ?? []).slice(0, 3))}`;
         model: "gpt-4o",
         response_format: { type: "json_object" },
         temperature: 0.4,
-        max_tokens: 800,
+        max_tokens: 1500,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -1005,7 +1156,7 @@ Work history: ${JSON.stringify((profile.work_experience ?? []).slice(0, 3))}`;
 
       dossier = JSON.parse(response.choices[0].message.content!);
       // Override sources with actual scraped URLs — GPT-4o tends to hallucinate these
-      dossier.sources = companyResearchRaw.sourceUrls.filter(Boolean);
+      dossier.sources = [...new Set(companyResearchRaw.sourceUrls.filter(Boolean))];
     } catch (synthesisErr) {
       console.error(
         "[agent/research-company] synthesis failed",

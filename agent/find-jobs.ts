@@ -172,10 +172,12 @@ Return ONLY valid JSON with this exact shape:
   "missingSkills": ["<skill the job explicitly requires that the candidate does not have>"]
 }
 
+Language note: Job descriptions may be written in any language — Danish, Swedish, Norwegian, German, or others. Technical skill names (TypeScript, Vue.js, React, Nuxt, Node.js, Python, etc.) appear in English even inside non-English text. Read the full description regardless of language and match skills by their English name.
+
 Skill matching rules:
-- matchedSkills must include EVERY skill from the candidate's profile that is explicitly named in the job description, or is a direct alias/variant of an explicitly named technology (e.g. "Tailwind" matches "Tailwind CSS"; "React Hooks" matches if "React" is named; "Node" matches "Node.js"). Be exhaustive — do not skip skills that genuinely match.
-- A direct alias means a more specific or shortened form of the SAME technology. Word similarity alone is NOT a match: "graphing platform" does not match "GraphQL", "graph database" does not match "GraphQL", "scripting" does not match "TypeScript". The technology name itself must appear.
-- Do NOT include a skill just because it is commonly associated with a mentioned technology. If the job says "Azure" but not "Docker", do not add "Docker" — it is not in the description.
+- matchedSkills must include EVERY skill from the candidate's profile that is explicitly named in the job description, or is a direct alias/variant of an explicitly named technology (e.g. "Tailwind" matches "Tailwind CSS"; "React Hooks" matches if "React" is named; "Node" matches "Node.js"; "Vue" matches "Vue 3"). Be exhaustive — do not skip skills that genuinely match.
+- A direct alias means a more specific or shortened form of the SAME technology. Word similarity alone is NOT a match: "graphing platform" does not match "GraphQL", "scripting" does not match "TypeScript". The technology name itself must appear.
+- Do NOT include a skill just because it is commonly associated with a mentioned technology. If the job says "Azure" but not "Docker", do not add "Docker".
 - missingSkills should only include skills the job explicitly names as requirements or nice-to-haves that the candidate does not have.
 - Do not add skills to either list that aren't grounded in both the job description and the candidate's profile.
 

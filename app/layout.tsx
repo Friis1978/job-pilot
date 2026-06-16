@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { PostHogIdentitySync } from "@/components/PostHogIdentitySync";
 import { Toaster } from "@/components/ui/Toaster";
+import { BulkOpsProvider } from "@/components/BulkOpsProvider";
 import { createInsforgeServer } from "@/lib/insforge-server";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -26,7 +27,9 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         {user && <PostHogIdentitySync userId={user.id} email={user.email ?? null} />}
         <Toaster />
-        {children}
+        <BulkOpsProvider>
+          {children}
+        </BulkOpsProvider>
       </body>
     </html>
   );

@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { Stagehand } from "@browserbasehq/stagehand";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
-import { stripHtml, MATCH_THRESHOLD } from "@/lib/utils";
+import { stripHtml } from "@/lib/utils";
 import { browserbase } from "@/lib/browserbase";
 import { scoreJob } from "@/agent/find-jobs";
 import type { Profile, NormalizedJob } from "@/types";
@@ -196,7 +196,15 @@ export async function importJobFromUrl(userId: string, url: string): Promise<Res
           },
         });
         html = await res.text();
-        rawText = stripHtml(html).replace(/\s+/g, " ").trim();
+        // Pre-remove <script> and <style> content before stripping tags.
+        // Angular/Next.js SSR pages embed large JSON blobs (ng-state, __NEXT_DATA__)
+        // inside <script> tags. Without this step, stripHtml leaves the raw JSON text
+        // in rawText, which then dominates the first N chars and pushes the actual
+        // job description content past the scoring window.
+        const cleanedHtml = html
+          .replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<script[\s\S]*?<\/script>/gi, "");
+        rawText = stripHtml(cleanedHtml).replace(/\s+/g, " ").trim();
         // Bot-check pages (Cloudflare, Careerjet, etc.) return a short challenge
         // that passes the length threshold but contains no job data — clear it so
         // we fall through to browser rendering.
@@ -208,8 +216,8 @@ export async function importJobFromUrl(userId: string, url: string): Promise<Res
       }
 
       // SSR frameworks (Angular, Next.js, Nuxt…) embed their state as JSON in a
-      // <script type="application/json"> tag. stripHtml strips those entirely,
-      // leaving only "Please enable JavaScript". Extract the state first.
+      // <script type="application/json"> tag — extract from the original html
+      // (before script removal) when the clean text is too short to be useful.
       if (rawText.length < 200 && html.length > 0) {
         const embeddedState = extractEmbeddedState(html);
         if (embeddedState) {
@@ -243,6 +251,22 @@ export async function importJobFromUrl(userId: string, url: string): Promise<Res
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+  // Deduplicate the raw text before sending to GPT-4o.
+  // SPAs (like Emply) often render content twice — once in SSR HTML and once after
+  // hydration — producing large duplicate blocks that waste context window.
+  const deduplicatedText = (() => {
+    const lines = rawText.split(/\n+/);
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const line of lines) {
+      const key = line.trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(line);
+    }
+    return out.join("\n");
+  })();
+
   // GPT-4o extraction
   let extracted: ExtractedJob;
   try {
@@ -250,31 +274,32 @@ export async function importJobFromUrl(userId: string, url: string): Promise<Res
       model: "gpt-4o",
       response_format: { type: "json_object" },
       temperature: 0.1,
-      max_tokens: 1500,
+      max_tokens: 2500,
       messages: [
         {
           role: "system",
           content: `You are a job posting parser. Extract structured data from a job posting.
 The input may be plain text, HTML, or a JSON blob from a framework's server-side state (Angular ng-state, Next.js __NEXT_DATA__, etc.) — parse whichever it is.
+The posting may be in any language (Danish, Swedish, Norwegian, German, etc.). Extract the description in the ORIGINAL language — do not translate it.
+Ignore navigation text (e.g. "Log ind", "Min profil", "Sign in", breadcrumbs, cookie banners) — only extract actual job posting content.
 Return ONLY valid JSON with this exact shape:
 {
   "title": "<job title>",
   "company": "<company name>",
   "location": "<city and/or country, or 'Remote', or null if not found>",
-  "description": "<full job description including all requirements and skills, up to 3000 chars, stripped of HTML tags>",
+  "description": "<full job description in the original language, including role summary, responsibilities, requirements and qualifications — up to 3000 chars>",
   "salary": "<salary range or null>",
   "job_type": "<fulltime|parttime|contract|temporary or null>"
 }
 Location rules:
-- Look for city names, country names, office addresses, jobAdWorkLocation, or phrases like "onsite in X" or "based in X"
+- Look for city names, country names, office addresses, or phrases like "onsite in X", "based in X", or Danish equivalents
 - If only a street address is given, extract the city from it
-- The posting may be in any language — extract location regardless of language
 - If no location can be determined at all, return null
 If title or company cannot be determined, return them as empty strings.`,
         },
         {
           role: "user",
-          content: `Extract the job details from this content (first 6000 chars):\n\n${rawText.slice(0, 6000)}`,
+          content: `Extract the job details from this content:\n\n${deduplicatedText.slice(0, 10000)}`,
         },
       ],
     });
@@ -292,24 +317,29 @@ If title or company cannot be determined, return them as empty strings.`,
     return { success: false, error: "Could not identify the job title or company from this page." };
   }
 
-  // Build NormalizedJob — use extracted description for display/storage
+  // Build NormalizedJob — use extracted description for display/storage.
+  // Fall back to deduplicated raw text if GPT-4o returned an empty description
+  // (common when the page is in a non-English language and the model skips it).
+  const extractedDescription = extracted.description?.trim() || "";
+  const fallbackDescription = extractedDescription || deduplicatedText.slice(0, 3000);
+
   const job: NormalizedJob = {
     id: crypto.randomUUID(),
     title: extracted.title.trim(),
     company: extracted.company.trim(),
     location: extracted.location?.trim() || null,
-    description: extracted.description?.trim() || "",
+    description: fallbackDescription,
     url: canonicalUrl,
     salary: extracted.salary ?? null,
     job_type: extracted.job_type ?? null,
     source: "url",
   };
 
-  // Score against profile using the full raw text so no skills are missed due to
-  // the description truncation in the extraction step
+  // Score against profile using the deduplicated text so skills mentioned later
+  // in the posting aren't pushed out of context by duplicate content.
   const jobForScoring: NormalizedJob = {
     ...job,
-    description: rawText.slice(0, 5000),
+    description: deduplicatedText.slice(0, 8000),
   };
   const scored = await scoreJob(jobForScoring, profile, openai, "");
   if (!scored) {
@@ -317,12 +347,9 @@ If title or company cannot be determined, return them as empty strings.`,
     return { success: false, error: "Scoring failed. Please try again." };
   }
 
-  if (scored.matchScore < MATCH_THRESHOLD) {
-    await posthog.shutdown();
-    return { success: false, error: `This job scored ${scored.matchScore}% — below the 70% minimum match rate. Import skipped.` };
-  }
-
   // Save to DB
+  // Note: no threshold check here — the user explicitly chose to import this job,
+  // so we always save it. The score is still computed and visible on the detail page.
   const { error: insertError } = await insforge.database.from("jobs").insert([
     {
       user_id: userId,

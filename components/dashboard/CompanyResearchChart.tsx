@@ -10,8 +10,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-import type { CompanyResearchPoint } from "@/lib/posthog-query";
-export type { CompanyResearchPoint };
+export type CompanyResearchPoint = { label: string; search: number; imported: number };
 
 type Props = { data: CompanyResearchPoint[] };
 

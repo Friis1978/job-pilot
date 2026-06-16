@@ -7,6 +7,7 @@ import { toast } from "@/lib/toast";
 import type { JobRow } from "@/types";
 import { StatusBadge } from "@/components/find-jobs/StatusBadge";
 import type { JobStatus } from "@/components/find-jobs/StatusBadge";
+import { useBulkOps } from "@/components/BulkOpsProvider";
 
 export type { JobRow };
 
@@ -48,6 +49,7 @@ function getBarColor(score: number): string {
 
 export function JobsTable({ jobs }: { jobs: JobRow[] }) {
   const router = useRouter();
+  const { rescoring, researching, rescoreAll, researchAll } = useBulkOps();
   const [filter, setFilter] = useState<FilterOption>("all");
   const [sort, setSort] = useState<SortOption>("match_score");
   const [search, setSearch] = useState("");
@@ -55,8 +57,6 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
   const [clearing, setClearing] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [rescoring, setRescoring] = useState(false);
-  const [researching, setResearching] = useState(false);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
@@ -97,50 +97,6 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
 
   function handleClearBlur() {
     setConfirmClear(false);
-  }
-
-  async function handleRescoreAll() {
-    if (rescoring) return;
-    setRescoring(true);
-    try {
-      const res = await fetch("/api/jobs/rescore-all", { method: "POST" });
-      const json = await res.json() as { updated?: number; failed?: number; error?: string };
-      if (!res.ok || json.error) {
-        toast(json.error ?? "Re-scoring failed.", "error");
-        return;
-      }
-      toast(`Re-scored ${json.updated} job${json.updated === 1 ? "" : "s"}${json.failed ? ` (${json.failed} failed)` : ""}.`, "success");
-      router.refresh();
-    } catch {
-      toast("Could not reach the server.", "error");
-    } finally {
-      setRescoring(false);
-    }
-  }
-
-  async function handleResearchAll() {
-    if (researching) return;
-    setResearching(true);
-    try {
-      const res = await fetch("/api/jobs/research-all", { method: "POST" });
-      const json = await res.json() as { researched?: number; failed?: number; skipped?: number; total?: number; error?: string };
-      if (!res.ok || json.error) {
-        toast(json.error ?? "Research failed.", "error");
-        return;
-      }
-      if ((json.total ?? 0) === 0) {
-        toast("No jobs to research.", "success");
-      } else {
-        const parts = [`Researched ${json.researched} of ${json.total} jobs`];
-        if (json.failed) parts.push(`${json.failed} failed`);
-        toast(parts.join(", ") + ".", "success");
-      }
-      router.refresh();
-    } catch {
-      toast("Could not reach the server.", "error");
-    } finally {
-      setResearching(false);
-    }
   }
 
   async function handleDeleteJob(e: React.MouseEvent, jobId: string) {
@@ -261,7 +217,7 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
           {jobs.length > 0 && (
             <>
               <button
-                onClick={handleRescoreAll}
+                onClick={rescoreAll}
                 disabled={rescoring}
                 title="Re-run skill matching on all saved jobs using your current profile"
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-sm font-medium text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -270,7 +226,7 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                 {rescoring ? "Re-scoring..." : "Re-score all"}
               </button>
               <button
-                onClick={handleResearchAll}
+                onClick={researchAll}
                 disabled={researching}
                 title="Research all companies that haven't been researched yet"
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-sm font-medium text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

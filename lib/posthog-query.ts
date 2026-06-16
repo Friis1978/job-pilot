@@ -180,32 +180,3 @@ export async function getMatchScoreDistribution(userId: string): Promise<MatchSc
   return SCORE_BUCKETS.map((b) => ({ label: b.label, search: search[b.label], imported: imported[b.label] }));
 }
 
-// ── Company Research Activity (last 7 days, daily) ───────────────────────────
-
-export type CompanyResearchPoint = { label: string; search: number; imported: number };
-
-export async function getCompanyResearchActivity(userId: string): Promise<CompanyResearchPoint[]> {
-  const { results } = await hogql(
-    `SELECT toDate(timestamp) AS day, count() AS cnt
-     FROM events
-     WHERE event = 'company_researched'
-       AND distinct_id = '${userId}'
-       AND timestamp >= now() - INTERVAL 7 DAY
-     GROUP BY day
-     ORDER BY day`,
-  );
-
-  const countByDay = new Map<string, number>(
-    results.map(([day, cnt]) => [String(day), Number(cnt)]),
-  );
-
-  const now = Date.now();
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(now - (6 - i) * 24 * 60 * 60 * 1000);
-    return {
-      label: DAY_LABELS[d.getUTCDay()],
-      search: countByDay.get(utcDateKey(d)) ?? 0,
-      imported: 0,
-    };
-  });
-}
