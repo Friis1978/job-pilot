@@ -14,9 +14,9 @@ type ScoringResult = ScoredJob & { job: NormalizedJob };
 // Follow the job URL redirect and extract the full description from the employer's own page.
 // Jooble and Careerjet only return short snippets; the real posting often has contact persons,
 // "About us" sections, and requirements that are critical for scoring and research.
+// Always follows the redirect to resolve tracking URLs (e.g. jobviewtrack.com) to the real
+// employer page — even when the description is already long enough to skip enrichment.
 async function enrichJobDescription(job: NormalizedJob): Promise<NormalizedJob> {
-  if (job.description.length > 300) return job; // Already has enough content
-
   try {
     const res = await fetch(job.url, {
       redirect: "follow",
@@ -36,13 +36,24 @@ async function enrichJobDescription(job: NormalizedJob): Promise<NormalizedJob> 
       "careerjet", "jooble", "jobviewtrack", "glassdoor", "adzuna",
       "linkedin", "indeed", "jobindex", "stepstone", "monster",
     ];
-    if (AGGREGATOR_DOMAINS.some((d) => finalHost.includes(d))) return job;
+    const isAggregator = AGGREGATOR_DOMAINS.some((d) => finalHost.includes(d));
+
+    const improved: NormalizedJob = { ...job };
+    // Always capture the resolved employer URL — replaces tracking/redirect links
+    if (res.url !== job.url && !isAggregator) {
+      improved.url = res.url;
+    }
+
+    // Skip description enrichment if already has enough content or landed on aggregator
+    if (job.description.length > 300 || isAggregator) {
+      return improved;
+    }
 
     const html = await res.text();
 
     // Skip bot-check pages
     if (/bekræftelse påkrævet|checking your browser|just a moment|enable javascript to/i.test(html)) {
-      return job;
+      return improved;
     }
 
     const text = html
@@ -58,13 +69,8 @@ async function enrichJobDescription(job: NormalizedJob): Promise<NormalizedJob> 
       .trim()
       .slice(0, 6000);
 
-    const improved: NormalizedJob = { ...job };
     if (text.length > job.description.length + 200) {
       improved.description = text;
-    }
-    // Use the resolved employer URL so research visits the real posting, not a tracking link
-    if (res.url !== job.url) {
-      improved.url = res.url;
     }
     return improved;
   } catch {
