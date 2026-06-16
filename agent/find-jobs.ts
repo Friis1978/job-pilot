@@ -148,11 +148,25 @@ export async function scoreJob(
   searchedLocation: string,
 ): Promise<ScoringResult | null> {
   const isRemoteSearch = /^remote$/i.test(searchedLocation.trim());
-  const locationRule = searchedLocation
-    ? isRemoteSearch
+  let locationRule: string;
+  if (searchedLocation) {
+    locationRule = isRemoteSearch
       ? `- Location rule: The candidate is specifically looking for remote jobs. If the job does not explicitly offer remote work, set matchScore to 0.`
-      : `- Location rule: The candidate is searching for onsite jobs in "${searchedLocation}". If the job location does not match this location, set matchScore to 0 — this includes fully remote jobs, which do not satisfy an onsite location search.`
-    : "";
+      : `- Location rule: The candidate is searching for onsite jobs in "${searchedLocation}". If the job location does not match this location, set matchScore to 0 — this includes fully remote jobs, which do not satisfy an onsite location search.`;
+  } else {
+    // No search location — fall back to profile preferences
+    const pref = profile.remote_preference?.toLowerCase();
+    const locs = profile.preferred_locations?.filter(Boolean) ?? [];
+    if (pref === "remote") {
+      locationRule = `- Location rule: The candidate strongly prefers fully remote work. If the job is onsite-only with no remote option, cap matchScore at 30. If the job is hybrid or remote-friendly, no penalty.`;
+    } else if (pref === "onsite" && locs.length > 0) {
+      locationRule = `- Location rule: The candidate strongly prefers onsite work in ${locs.map((l) => `"${l}"`).join(" or ")}. If the job is in a completely different city or country (e.g. outside ${locs.join(", ")}), cap matchScore at 35. If the job is fully remote with no onsite option in the candidate's preferred location, cap matchScore at 40. Only give full location credit if the job is onsite in ${locs.join(" or ")}.`;
+    } else if (pref === "hybrid" && locs.length > 0) {
+      locationRule = `- Location rule: The candidate prefers hybrid work in ${locs.map((l) => `"${l}"`).join(" or ")}. If the job is onsite-only in a different city or country, cap matchScore at 40. Fully remote jobs are acceptable. Hybrid or remote jobs near ${locs.join(" or ")} are ideal.`;
+    } else {
+      locationRule = "";
+    }
+  }
 
   try {
     const response = await openai.chat.completions.create({
