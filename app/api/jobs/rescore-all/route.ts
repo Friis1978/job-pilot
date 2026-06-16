@@ -28,7 +28,7 @@ export async function POST() {
 
   const { data: profileData, error: profileError } = await insforge.database
     .from("profiles")
-    .select("current_title, years_experience, experience_level, skills, work_experience")
+    .select("current_title, years_experience, experience_level, skills, work_experience, remote_preference, preferred_locations")
     .eq("id", user.id)
     .single();
 
@@ -59,7 +59,7 @@ export async function POST() {
         },
         profile,
         openai,
-        job.location ?? "",
+        "",  // use profile's remote_preference + preferred_locations, not job's location
       );
 
       if (!scored) { failed++; continue; }
