@@ -29,6 +29,7 @@ const OPENING_STRATEGIES = [
 export async function generateCoverLetter(
   userId: string,
   jobId: string,
+  extraInstructions?: string,
 ): Promise<Result> {
   const insforge = await createInsforgeServer();
   const posthog = getPostHogClient();
@@ -45,7 +46,7 @@ export async function generateCoverLetter(
     insforge.database
       .from("profiles")
       .select(
-        "full_name, current_title, years_experience, skills, work_experience, cover_letter_tone",
+        "full_name, current_title, years_experience, skills, work_experience, cover_letter_tone, cover_letter_instructions",
       )
       .eq("id", userId)
       .single(),
@@ -65,6 +66,7 @@ export async function generateCoverLetter(
   const profile = profileRes.data;
 
   const tone = (profile.cover_letter_tone as string | null) ?? "Professional";
+  const customInstructions = (profile.cover_letter_instructions as string | null) ?? null;
   const allJobText = [
     job.title ?? "",
     job.about_role ?? "",
@@ -98,14 +100,15 @@ export async function generateCoverLetter(
 
     const openingStrategy = OPENING_STRATEGIES[Math.floor(Math.random() * OPENING_STRATEGIES.length)];
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0.9,
-      max_tokens: 800,
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert cover letter writer. Write a compelling, personalised cover letter in a ${tone} tone.
+
+    const systemPrompt = customInstructions
+      ? `You are an expert cover letter writer. The candidate has provided a personal instruction set below — follow it precisely. It overrides all default rules.
+
+Job description language: ${language} — write the letter in ${language} unless the instructions say otherwise.
+
+CANDIDATE'S COVER LETTER INSTRUCTIONS:
+${customInstructions}`
+      : `You are an expert cover letter writer. Write a compelling, personalised cover letter in a ${tone} tone.
 
 Opening strategy for THIS letter: ${openingStrategy}
 
@@ -124,7 +127,16 @@ Rules:
 - Close with a direct, confident call to action — not "I hope to hear from you"
 - 3–4 paragraphs, no longer
 - Do NOT include subject line, date, address block, or signature — just the letter body
-- Write in first person as the candidate`,
+- Write in first person as the candidate`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      temperature: 0.9,
+      max_tokens: 800,
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt,
         },
         {
           role: "user",
@@ -144,6 +156,10 @@ All skills: ${(profile.skills as string[] | null)?.join(", ") ?? "Not provided"}
 Full work history:
 ${recentWork || "Not provided"}`,
         },
+        ...(extraInstructions?.trim() ? [{
+          role: "user" as const,
+          content: `IMPORTANT — extra instructions for this specific letter (override anything above if they conflict):\n${extraInstructions.trim()}\n\nNow write the letter.`,
+        }] : []),
       ],
     });
 

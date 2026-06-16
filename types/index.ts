@@ -33,6 +33,7 @@ export type Profile = {
   preferred_locations: string[] | null;
   salary_expectation: string | null;
   cover_letter_tone: string | null;
+  cover_letter_instructions: string | null;
   linkedin_url: string | null;
   portfolio_url: string | null;
   resume_pdf_url: string | null;
@@ -119,4 +120,5 @@ export type ProfileFormInput = {
   salaryExpectation: string;
   preferredLocations: string;
   coverLetterTone: string;
+  coverLetterInstructions: string;
 };

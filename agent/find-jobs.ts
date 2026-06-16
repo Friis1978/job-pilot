@@ -192,7 +192,7 @@ Skill matching rules:
 - matchedSkills must include EVERY skill from the candidate's profile that is explicitly named in the job description, or is a direct alias/variant of an explicitly named technology (e.g. "Tailwind" matches "Tailwind CSS"; "React Hooks" matches if "React" is named; "Node" matches "Node.js"; "Vue" matches "Vue 3"). Be exhaustive — do not skip skills that genuinely match.
 - A direct alias means a more specific or shortened form of the SAME technology. Word similarity alone is NOT a match: "graphing platform" does not match "GraphQL", "scripting" does not match "TypeScript". The technology name itself must appear.
 - Do NOT include a skill just because it is commonly associated with a mentioned technology. If the job says "Azure" but not "Docker", do not add "Docker".
-- missingSkills should only include skills the job explicitly names as requirements or nice-to-haves that the candidate does not have.
+- missingSkills should only include skills the job lists as candidate requirements or qualifications (e.g. in sections like "What You Will Bring", "Requirements", "You Need"). Do NOT add skills that only appear in a "Tech Stack", "Our Tools", or "About Us" section — those describe what the company uses, not what the candidate must know.
 - Do not add skills to either list that aren't grounded in both the job description and the candidate's profile.
 
 Scoring rules:
@@ -387,13 +387,19 @@ export async function findJobs(
       (r): r is ScoringResult => r !== null && r.matchScore >= minScore,
     );
 
+    // Tracking/aggregator URLs (jobviewtrack.com, etc.) expire and break — store null
+    // rather than a URL that will 502 in a week. Title+company dedup still works.
+    const TRACKING_DOMAINS = ["jobviewtrack", "careerjet", "jooble"];
+    const resolvedUrl = (url: string) =>
+      TRACKING_DOMAINS.some((d) => url.includes(d)) ? null : url;
+
     if (qualifyingJobs.length > 0) {
       const jobRecords = qualifyingJobs.map((r) => ({
         user_id: userId,
         run_id: runId,
         source: "search",
-        source_url: r.job.url,
-        external_apply_url: r.job.url,
+        source_url: resolvedUrl(r.job.url),
+        external_apply_url: resolvedUrl(r.job.url),
         title: r.job.title,
         company: r.job.company,
         location: normalizeLocationToEnglish(r.job.location),

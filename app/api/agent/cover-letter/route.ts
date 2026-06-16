@@ -14,8 +14,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const jobId = typeof body?.jobId === "string" ? body.jobId.trim() : "";
     if (!jobId) return NextResponse.json({ error: "jobId required" }, { status: 400 });
+    const extraInstructions = typeof body?.extraInstructions === "string" ? body.extraInstructions : undefined;
 
-    const result = await generateCoverLetter(user.id, jobId);
+    const result = await generateCoverLetter(user.id, jobId, extraInstructions);
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }

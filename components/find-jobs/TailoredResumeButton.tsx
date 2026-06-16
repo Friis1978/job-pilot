@@ -38,22 +38,22 @@ export function TailoredResumeButton({ jobId, companyName, hasResearch }: Props)
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col items-end gap-1 shrink-0">
       <button
         onClick={handleGenerate}
         disabled={loading}
-        className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium transition-colors hover:bg-accent-dark disabled:opacity-60 disabled:cursor-not-allowed"
+        className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-accent-foreground rounded-lg text-xs font-medium hover:bg-accent-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? (
-          <SpinnerIcon className="w-4 h-4 shrink-0 animate-spin" />
+          <SpinnerIcon className="w-3.5 h-3.5 animate-spin" />
         ) : (
-          <DocumentIcon className="w-4 h-4 shrink-0" />
+          <DocumentIcon className="w-3.5 h-3.5" />
         )}
         {loading ? "Generating..." : "Download Tailored Resume"}
       </button>
       {!hasResearch && (
-        <p className="text-xs text-text-muted">
-          Tip: run Company Research first for a more targeted resume.
+        <p className="text-xs text-text-muted text-right">
+          Run Company Research first for best results.
         </p>
       )}
     </div>

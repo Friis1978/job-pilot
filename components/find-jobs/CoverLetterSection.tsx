@@ -12,6 +12,7 @@ type Props = {
 export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Props) {
   const [coverLetter, setCoverLetter] = useState(initialCoverLetter);
   const [generating, setGenerating] = useState(false);
+  const [extraInstructions, setExtraInstructions] = useState("");
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [saving, setSaving] = useState(false);
@@ -25,7 +26,7 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Pro
       const res = await fetch("/api/agent/cover-letter", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId }),
+        body: JSON.stringify({ jobId, extraInstructions: extraInstructions.trim() || undefined }),
       });
       const json = await res.json();
       if (!res.ok || json.error) {
@@ -168,7 +169,7 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Pro
             <button
               onClick={handleGenerate}
               disabled={generating}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-secondary border border-border rounded-lg text-xs font-medium text-text-secondary hover:bg-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-accent-foreground rounded-lg text-xs font-medium hover:bg-accent-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {generating ? (
                 <SpinnerIcon className="w-3.5 h-3.5 animate-spin" />
@@ -178,6 +179,21 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Pro
               {generating ? "Generating..." : "Regenerate"}
             </button>
           </div>
+        )}
+
+        {!coverLetter && !editing && (
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {generating ? (
+              <SpinnerIcon className="w-4 h-4 animate-spin" />
+            ) : (
+              <SparkleIcon className="w-4 h-4" />
+            )}
+            {generating ? "Generating..." : "Generate Cover Letter"}
+          </button>
         )}
 
         {editing && (
@@ -199,22 +215,23 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Pro
             </button>
           </div>
         )}
-
-        {!coverLetter && !editing && (
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {generating ? (
-              <SpinnerIcon className="w-4 h-4 animate-spin" />
-            ) : (
-              <SparkleIcon className="w-4 h-4" />
-            )}
-            {generating ? "Generating..." : "Generate Cover Letter"}
-          </button>
-        )}
       </div>
+
+      {/* Extra instructions */}
+      {!editing && (
+        <div className="px-4 py-3 border-b border-border bg-surface">
+          <label className="block text-xs font-medium uppercase tracking-wide text-text-secondary mb-1.5">
+            Extra instructions
+          </label>
+          <textarea
+            value={extraInstructions}
+            onChange={(e) => setExtraInstructions(e.target.value)}
+            placeholder="e.g. emphasize Bandfolio, write in Danish, make it shorter"
+            rows={2}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-y"
+          />
+        </div>
+      )}
 
       {/* Body */}
       <div className="bg-surface-secondary p-5">

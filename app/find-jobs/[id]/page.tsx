@@ -325,14 +325,16 @@ export default async function JobDetailsPage({
               <DocIcon className="w-5 h-5 text-text-muted shrink-0" />
               <h2 className="flex-1 text-base font-semibold text-text-primary">Tailored Resume</h2>
             </div>
-            <p className="text-sm text-text-secondary mb-4 leading-5">
-              Generate a version of your resume with the summary and bullet points rewritten to match what {job.company} is looking for — based on the job description{job.company_research ? " and company research" : ""}.
-            </p>
-            <TailoredResumeButton
-              jobId={job.id}
-              companyName={job.company}
-              hasResearch={!!job.company_research}
-            />
+            <div className="flex items-start gap-4">
+              <p className="flex-1 text-sm text-text-secondary leading-5">
+                Generate a version of your resume with the summary and bullet points rewritten to match what {job.company} is looking for — based on the job description{job.company_research ? " and company research" : ""}.
+              </p>
+              <TailoredResumeButton
+                jobId={job.id}
+                companyName={job.company}
+                hasResearch={!!job.company_research}
+              />
+            </div>
           </div>
 
           {/* Cover Letter */}

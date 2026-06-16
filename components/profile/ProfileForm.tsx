@@ -42,6 +42,7 @@ type FormData = {
   salaryExpectation: string;
   preferredLocations: string;
   coverLetterTone: string;
+  coverLetterInstructions: string;
 };
 
 const CHANGE_LABELS: Partial<Record<keyof FormData, string>> = {
@@ -60,6 +61,7 @@ const CHANGE_LABELS: Partial<Record<keyof FormData, string>> = {
   salaryExpectation:  "Salary Expectation",
   preferredLocations: "Preferred Locations",
   coverLetterTone:    "Cover Letter Tone",
+  coverLetterInstructions: "Cover Letter Instructions",
 };
 
 const EDUCATION_FIELDS: (keyof FormData)[] = ["highestDegree", "fieldOfStudy", "institution", "graduationYear"];
@@ -136,7 +138,7 @@ function profileToFormData(p: Profile | null | undefined): FormData {
       workExperience: [], highestDegree: "", fieldOfStudy: "",
       institution: "", graduationYear: "", jobTitlesSeeking: "",
       remotePreference: "", salaryExpectation: "", preferredLocations: "",
-      coverLetterTone: "",
+      coverLetterTone: "", coverLetterInstructions: "",
     };
   }
   const edu = p.education as { degree?: string; field?: string; institution?: string; year?: string } | null;
@@ -173,6 +175,7 @@ function profileToFormData(p: Profile | null | undefined): FormData {
     salaryExpectation: p.salary_expectation ?? "",
     preferredLocations: (p.preferred_locations ?? []).join(", "),
     coverLetterTone: p.cover_letter_tone ?? "",
+    coverLetterInstructions: p.cover_letter_instructions ?? "",
   };
 }
 
@@ -1218,6 +1221,54 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
             </div>
           </div>
         </div>
+        </SectionAccordion>
+
+        {/* Cover Letter Instructions */}
+        <SectionAccordion title="Cover Letter Instructions">
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-text-secondary">
+              Paste a Markdown instruction set that guides cover letter generation — voice rules, projects, career facts, structural preferences. The agent uses this instead of its defaults.
+            </p>
+            <div className="flex items-center gap-2">
+              <label
+                htmlFor="cl-instructions-upload"
+                className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors"
+              >
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <path d="M6.5 1v7M3.5 4l3-3 3 3M1.5 10v1a1 1 0 001 1h9a1 1 0 001-1v-1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Load .md file
+              </label>
+              <input
+                id="cl-instructions-upload"
+                type="file"
+                accept=".md,.txt"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    setField("coverLetterInstructions", (ev.target?.result as string) ?? "");
+                  };
+                  reader.readAsText(file);
+                }}
+              />
+              {data.coverLetterInstructions && (
+                <span className="text-xs text-text-muted">
+                  {data.coverLetterInstructions.length.toLocaleString()} chars
+                </span>
+              )}
+            </div>
+            <textarea
+              value={data.coverLetterInstructions}
+              onChange={(e) => setField("coverLetterInstructions", e.target.value)}
+              placeholder="# Cover Letter Instructions&#10;&#10;Paste your instruction set here, or load a .md file above..."
+              rows={12}
+              className="w-full px-3 py-2 border border-border rounded-lg text-xs font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-y"
+            />
+          </div>
         </SectionAccordion>
 
         {/* Sticky save footer */}

@@ -112,6 +112,11 @@ const styles = StyleSheet.create({
     lineHeight: 1.5,
     flex: 1,
   },
+  skillsRowText: {
+    fontSize: 9,
+    color: TEXT,
+    lineHeight: 1.5,
+  },
   // Work experience
   roleRow: {
     flexDirection: "row",
@@ -243,10 +248,16 @@ export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
                   const yrs = skillYears[skill];
                   return yrs && yrs > 0 ? `${skill} (${yrs} yr${yrs === 1 ? "" : "s"})` : skill;
                 });
+              const rows: string[][] = [];
+              for (let i = 0; i < sorted.length; i += 8) rows.push(sorted.slice(i, i + 8));
               return (
                 <View key={gi} style={styles.skillGroupRow}>
                   <Text style={styles.skillGroupLabel}>{group.label}</Text>
-                  <Text style={styles.skillsText}>{sorted.join("  ·  ")}</Text>
+                  <View style={{ flex: 1 }}>
+                    {rows.map((row, ri) => (
+                      <Text key={ri} style={styles.skillsRowText}>{row.join("  ·  ")}</Text>
+                    ))}
+                  </View>
                 </View>
               );
             })}
@@ -273,7 +284,7 @@ export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
               const rows: string[][] = [];
               for (let i = 0; i < sorted.length; i += 8) rows.push(sorted.slice(i, i + 8));
               return rows.map((row, ri) => (
-                <Text key={ri} style={styles.skillsText}>{row.join("  ·  ")}</Text>
+                <Text key={ri} style={styles.skillsRowText}>{row.join("  ·  ")}</Text>
               ));
             })()}
           </View>

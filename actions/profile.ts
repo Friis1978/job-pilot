@@ -81,6 +81,7 @@ export async function saveProfile(
       preferred_locations: preferredLocations.length > 0 ? preferredLocations : null,
       salary_expectation: input.salaryExpectation || null,
       cover_letter_tone: input.coverLetterTone || null,
+      cover_letter_instructions: input.coverLetterInstructions || null,
       linkedin_url: input.linkedinUrl || null,
       portfolio_url: input.portfolioUrl || null,
     };

@@ -1,74 +1,55 @@
-# Memory — Location Scoring, Bulk Ops, Contact Extraction, Dashboard
+# Memory — Resume PDF Rendering + UI Polish
 
 Last updated: 2026-06-16
 
 ## What was built
 
-**`components/BulkOpsProvider.tsx`** (new) — layout-level React context that owns `rescoring`/`researching` state, fires fetch calls to `/api/jobs/rescore-all` and `/api/jobs/research-all`, and renders a persistent floating status banner (bottom-right). State survives navigation between pages.
+**`app/api/resume/ResumePDF.tsx`** — fixed overlapping skills text (two separate bugs):
+1. Added `skillsRowText` style (no `flex: 1`) for use in chunked row Text nodes — `flex: 1` on multiple Text siblings in a column View causes them all to render at the same Y position in react-pdf
+2. Applied `skillsRowText` to both the `skillGroups` chunked rows AND the flat skills chunked rows
+3. `skillGroups` path: inner `<View style={{ flex: 1 }}>` wraps chunked rows — this is correct; the fix was removing `flex: 1` from the Text children inside it
 
-**`app/layout.tsx`** — wraps children in `<BulkOpsProvider>` so bulk op state persists across route changes.
+**`components/find-jobs/TailoredResumeButton.tsx`** — two changes this session:
+- Layout: button now sits to the RIGHT of the description text (parent page uses `flex items-start gap-4`)
+- Style: changed from big `bg-accent px-4 py-2 text-sm` → small `bg-accent text-accent-foreground px-3 py-1.5 text-xs` (matching cover letter header buttons in size and Apply button in color)
 
-**`components/find-jobs/JobsTable.tsx`** — removed local `rescoring`/`researching` state and both handler functions; now uses `useBulkOps()` context. Company, title, and location cells use `<Tooltip>` with `max-w-0` on `<td>` and `truncate block` on text spans. Location shows `—` with no tooltip when null.
+**`components/find-jobs/CoverLetterSection.tsx`** — Regenerate button changed from grey (`bg-surface-secondary border border-border text-text-secondary`) to accent (`bg-accent text-accent-foreground hover:bg-accent-dark`)
 
-**`components/ui/Tooltip.tsx`** (new) — black-background tooltip with downward arrow, hover-triggered, using `group/tooltip` pattern.
+**`app/find-jobs/[id]/page.tsx`** — Tailored Resume section: wrapped `<p>` and `<TailoredResumeButton>` in `flex items-start gap-4` so button sits to the right of the text
 
-**`app/dashboard/page.tsx`** — company research chart data comes from direct DB query on `jobs.researched_at + jobs.source` instead of PostHog events (hours-long ingestion delay). Splits `search` vs `imported` by `source === 'url'`.
-
-**`components/dashboard/CompanyResearchChart.tsx`** — `CompanyResearchPoint` type is now defined locally (was re-exported from posthog-query which no longer exports it).
-
-**`lib/posthog-query.ts`** — removed `getCompanyResearchActivity()` and `CompanyResearchPoint`.
-
-**`agent/research-company.ts`** — multiple fixes:
-- **HTTP fetch of source_url runs BEFORE browser** (new primary step) — strips HTML, passes to GPT-4o for contact extraction. Works for SSR pages (Emply/Angular) because full content is in raw HTML.
-- Page text extraction (`body.innerText`) now runs BEFORE `stagehand.extract()`, each in own try/catch.
-- `waitUntil: "networkidle"` with 25s timeout wrapped in try/catch.
-- All synthesis output translated to English via system prompt rule.
-- `sourceUrls` deduplicated with `[...new Set(...)]`.
-- Diagnostic `console.log` statements added throughout extraction pipeline (intentionally left in for now).
-
-**`agent/import-job-from-url.ts`** — pre-cleans HTML (removes script/style) before `stripHtml` so Angular SSR ng-state JSON doesn't pollute the scoring window.
-
-**`agent/find-jobs.ts`** — `scoreJob` now builds a location penalty rule from `profile.remote_preference` + `profile.preferred_locations` when `searchedLocation` is empty:
-- `onsite` + preferred cities → caps score at 35 for jobs elsewhere, 40 for fully remote
-- `remote` → caps at 30 for onsite-only jobs
-- `hybrid` + preferred cities → caps at 40 for onsite-only elsewhere
-- No preference → no rule (unchanged behavior)
+**DB** — nulled `resume_generated_at` for user (friis1978@gmail.com) to bust the cached broken PDF and force regeneration with fixed code
 
 ## Decisions made
 
-- **HTTP fetch before browser for contact extraction**: SSR pages have all content in raw HTML. Plain fetch is more reliable than waiting for Angular hydration in Browserbase.
-- **BulkOpsProvider at layout level**: Only way to keep operation state alive across client-side navigation in Next.js App Router.
-- **Dashboard research chart from DB not PostHog**: PostHog has ingestion delay; `jobs.researched_at` is immediate.
-- **mailto: extraction gated to job board aggregators only**: ATS pages (Emply, Greenhouse, etc.) may contain recruiter agency emails that would wrongly override the employer's homepageUrl.
-- **Profile location prefs used in fallback scoring**: `scoreJob` receives a full `Profile` object — no signature change needed, just reads `profile.remote_preference` and `profile.preferred_locations` when `searchedLocation === ""`.
+- **`skillsRowText` style (no flex)**: react-pdf crashes when multiple `Text` nodes with `flex: 1` share a column container — they all stack at Y=0. `skillsText` (with `flex: 1`) is kept only for the single-text horizontal layout case; chunked rows use `skillsRowText`.
+- **Accent color for primary action buttons**: TailoredResumeButton, Regenerate, and Generate Cover Letter all use `bg-accent` — consistent with Apply Now button.
+- **TailoredResumeButton is small (px-3 py-1.5 text-xs)**: matches the cover letter header button sizing, not the old full-width large button.
 
 ## Problems solved
 
-- **Contacts missing (Torben Åstradsson + Mashiah Moltrup-Ryom) on Emply job**: (1) stagehand.extract() throwing silently skipped page text block via outer catch, (2) page text ran after stagehand (wrong priority), (3) browser body.innerText may not reflect full Angular hydration. Fixed with HTTP fetch as primary extraction.
-- **Wrong company researched (Right People Group instead of F&P)**: mailto: link `mmr@rightpeoplegroup.com` was overriding `homepageUrl`. Fixed by gating mailto: to job board domains only.
-- **Import match score 60% / only Nuxt found**: stripHtml on raw Angular SSR HTML included ng-state JSON at front, pushing job description past scoring window. Fixed by pre-cleaning HTML.
-- **Dashboard research chart always empty**: Was querying PostHog (ingestion delay). Fixed by querying DB.
-- **Bulk ops cancelled on navigation**: State was local to JobsTable component. Fixed by BulkOpsProvider.
-- **Duplicate sources in research dossier**: Fixed with `[...new Set(...)]`.
-- **Dossier text in Danish**: Fixed by adding English-only rule to synthesis system prompt.
-- **Air Apps Lisbon job scored 90%**: `scoreJob` had no location rule when `searchedLocation` is `""`. Fixed by falling back to profile's `remote_preference`/`preferred_locations` — Lisbon job will now cap at ≤35 after rescore.
+- **Skills overlapping in PDF**: All caused by `flex: 1` on `Text` nodes in column containers in react-pdf. Fixed by using `skillsRowText` (no flex) for chunked rows.
+- **Cached broken PDF served after code fix**: Nulled `resume_generated_at` in DB so next download triggers regeneration.
+- **Normal resume (skillGroups path) and tailored resume (flat skills path) both had the same bug**: Fixed both in same edit.
 
 ## Current state
 
-- Deployed commit `c17779a` — deployment triggered, in progress at https://8kj4iaqv.insforge.site
 - All TypeScript compiles clean
-- Contact extraction NOT yet verified working after deploy — user needs to re-research F&P job and check if Torben + Mashiah appear
-- Diagnostic console.log statements are intentionally in production code for now — remove once contacts confirmed working
-- Air Apps Lisbon job still shows 90% until user triggers "Rescore All" on deployed version
+- Resume PDF renders correctly (both normal and tailored)
+- TailoredResumeButton: small, accent-colored, right-aligned next to text
+- CoverLetterSection: Regenerate button is now accent-colored
+- User should re-upload cover letter instructions via Profile → "Load .md file" from `/Users/rfh/Desktop/CLAUDE-Cover-Letter-Instructions.md` (DB may have reconstructed version, not exact file)
+- Contact extraction (Torben Åstradsson + Mashiah Moltrup-Ryom on F&P / Emply job) not yet verified
+- Diagnostic `console.log` still in `agent/research-company.ts` — remove once contacts confirmed
+- Air Apps Lisbon job still shows 90% — user needs to trigger "Rescore All"
 
 ## Next session starts with
 
-1. Verify deploy completed at https://8kj4iaqv.insforge.site
-2. Re-research F&P / Emply job and verify Torben Åstradsson (IT manager contact) and Mashiah Moltrup-Ryom (recruiter) appear in dossier
-3. If contacts confirmed, remove all diagnostic `console.log` from `agent/research-company.ts`
-4. Trigger "Rescore All" and verify Air Apps Lisbon job score drops to ≤35
+1. User re-uploads cover letter instructions via Profile "Load .md file" button
+2. Verify F&P / Emply job contact extraction (Torben Åstradsson + Mashiah Moltrup-Ryom)
+3. If confirmed, remove diagnostic `console.log` from `agent/research-company.ts`
+4. Trigger "Rescore All" and verify Air Apps Lisbon drops to ≤35
 
 ## Open questions
 
-- Does HTTP fetch of the Emply source_url return full SSR HTML with contacts, or does Emply block server-side fetches? (Logs will reveal this)
-- Is the Emply job URL `https://forsikringogpension.career.emply.com/ad/senior-frontendudvikler-nuxt/kpdjpb` still live?
+- Does HTTP fetch of the Emply source_url return full SSR HTML with contacts?
+- Is the cover letter instructions content in DB exact or reconstructed?
