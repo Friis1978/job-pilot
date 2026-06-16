@@ -160,9 +160,9 @@ export async function scoreJob(
     if (pref === "remote") {
       locationRule = `- Location rule: The candidate strongly prefers fully remote work. If the job is onsite-only with no remote option, cap matchScore at 30. If the job is hybrid or remote-friendly, no penalty.`;
     } else if (pref === "onsite" && locs.length > 0) {
-      locationRule = `- Location rule: The candidate strongly prefers onsite work in ${locs.map((l) => `"${l}"`).join(" or ")}. If the job is in a completely different city or country (e.g. outside ${locs.join(", ")}), cap matchScore at 35. If the job is fully remote with no onsite option in the candidate's preferred location, cap matchScore at 40. Only give full location credit if the job is onsite in ${locs.join(" or ")}.`;
+      locationRule = `- Location rule: The candidate strongly prefers onsite work in or near ${locs.map((l) => `"${l}"`).join(" or ")} (including suburbs and towns within commuting distance, e.g. towns in the greater ${locs[0]} metropolitan area). If the job is in a completely different region or country — clearly not within daily commuting distance of ${locs.join(", ")} — cap matchScore at 35. If the job is fully remote with no onsite option near the candidate's preferred location, cap matchScore at 40. Do NOT penalise jobs in nearby towns or suburbs.`;
     } else if (pref === "hybrid" && locs.length > 0) {
-      locationRule = `- Location rule: The candidate prefers hybrid work in ${locs.map((l) => `"${l}"`).join(" or ")}. If the job is onsite-only in a different city or country, cap matchScore at 40. Fully remote jobs are acceptable. Hybrid or remote jobs near ${locs.join(" or ")} are ideal.`;
+      locationRule = `- Location rule: The candidate prefers hybrid work in or near ${locs.map((l) => `"${l}"`).join(" or ")} (including suburbs and towns within commuting distance). If the job is onsite-only in a completely different region or country, cap matchScore at 40. Fully remote jobs are acceptable. Hybrid or remote jobs near ${locs.join(" or ")} are ideal.`;
     } else {
       locationRule = "";
     }
