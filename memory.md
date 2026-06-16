@@ -1,56 +1,74 @@
-# Memory — Branding, CI Deploy, Profile UX
+# Memory — Location Scoring, Bulk Ops, Contact Extraction, Dashboard
 
-Last updated: 2026-06-14
+Last updated: 2026-06-16
 
 ## What was built
 
-- **`app/icon.svg`** — replaced hand-crafted purple dashboard icon with the official `jobpilot-icon.svg` (briefcase + magnifying glass, blue gradient `#1E3A8A` → `#2563EB`)
-- **`components/layout/Navbar.tsx`** — logo changed from `/logo.png` to `/jobpilot-logo-horizontal.svg`
-- **`components/layout/Footer.tsx`** — same logo swap
-- **`app/globals.css`** — primary accent color changed from purple (`#7c5cfc`) to blue (`#2563EB`), dark variant `#1E3A8A`, light/muted updated to `#dbeafe` / `#eff6ff`; hero-gradient updated from pink/purple to blue tones
-- **`components/profile/ProfileForm.tsx`** — sticky save footer got `shadow-[0_-4px_16px_rgba(0,0,0,0.08)]` so it lifts visually from content
-- **`.github/workflows/deploy.yml`** — fixed CI auth: calls InsForge token exchange endpoint to get fresh `access_token`, writes complete `~/.insforge/credentials.json` (access_token + refresh_token + user object) + `.insforge/project.json` with project config, then runs `npx @insforge/cli@latest deployments deploy .` — **CI is now working (green)**
+**`components/BulkOpsProvider.tsx`** (new) — layout-level React context that owns `rescoring`/`researching` state, fires fetch calls to `/api/jobs/rescore-all` and `/api/jobs/research-all`, and renders a persistent floating status banner (bottom-right). State survives navigation between pages.
 
-Earlier this session (carried forward from prior context):
+**`app/layout.tsx`** — wraps children in `<BulkOpsProvider>` so bulk op state persists across route changes.
 
-- **`app/api/resume/generate/route.ts`** — streams PDF bytes directly (not URL); caches in private storage server-side
-- **`components/profile/ProfileForm.tsx`** — blob download for resume, hydration fix for accordion Remove button (div wrapper + sibling buttons)
-- **`app/api/resume/ResumePDF.tsx`** — name→title spacing (marginBottom 3→8), `wrap={false}` on role blocks
-- **`middleware.ts`** + **`lib/insforge-server.ts`** — forward access token via `x-insforge-access-token` header to bypass cookie visibility issue in route handlers
-- **`app/icon.svg`** (original) — SVG favicon (now replaced by jobpilot-icon above)
-- **`README.md`** — full project README with stack, pages, env vars, deployment docs
+**`components/find-jobs/JobsTable.tsx`** — removed local `rescoring`/`researching` state and both handler functions; now uses `useBulkOps()` context. Company, title, and location cells use `<Tooltip>` with `max-w-0` on `<td>` and `truncate block` on text spans. Location shows `—` with no tooltip when null.
+
+**`components/ui/Tooltip.tsx`** (new) — black-background tooltip with downward arrow, hover-triggered, using `group/tooltip` pattern.
+
+**`app/dashboard/page.tsx`** — company research chart data comes from direct DB query on `jobs.researched_at + jobs.source` instead of PostHog events (hours-long ingestion delay). Splits `search` vs `imported` by `source === 'url'`.
+
+**`components/dashboard/CompanyResearchChart.tsx`** — `CompanyResearchPoint` type is now defined locally (was re-exported from posthog-query which no longer exports it).
+
+**`lib/posthog-query.ts`** — removed `getCompanyResearchActivity()` and `CompanyResearchPoint`.
+
+**`agent/research-company.ts`** — multiple fixes:
+- **HTTP fetch of source_url runs BEFORE browser** (new primary step) — strips HTML, passes to GPT-4o for contact extraction. Works for SSR pages (Emply/Angular) because full content is in raw HTML.
+- Page text extraction (`body.innerText`) now runs BEFORE `stagehand.extract()`, each in own try/catch.
+- `waitUntil: "networkidle"` with 25s timeout wrapped in try/catch.
+- All synthesis output translated to English via system prompt rule.
+- `sourceUrls` deduplicated with `[...new Set(...)]`.
+- Diagnostic `console.log` statements added throughout extraction pipeline (intentionally left in for now).
+
+**`agent/import-job-from-url.ts`** — pre-cleans HTML (removes script/style) before `stripHtml` so Angular SSR ng-state JSON doesn't pollute the scoring window.
+
+**`agent/find-jobs.ts`** — `scoreJob` now builds a location penalty rule from `profile.remote_preference` + `profile.preferred_locations` when `searchedLocation` is empty:
+- `onsite` + preferred cities → caps score at 35 for jobs elsewhere, 40 for fully remote
+- `remote` → caps at 30 for onsite-only jobs
+- `hybrid` + preferred cities → caps at 40 for onsite-only elsewhere
+- No preference → no rule (unchanged behavior)
 
 ## Decisions made
 
-- **Blue as primary**: `#2563EB` is `--color-accent`, `#1E3A8A` is `--color-accent-dark`. Taken directly from official brand SVG gradients.
-- **CI deploy auth**: exchange `INSFORGE_REFRESH_TOKEN` secret for fresh access token at run time, write full credentials JSON manually → bypasses browser OAuth. `INSFORGE_PROJECT_API_KEY` secret provides project API key.
-- **PDF delivery via stream, not URL**: resumes bucket is private. Server streams bytes through API route — browser never touches storage URLs.
-- **Auth token forwarding via custom header**: Next.js route handlers don't see cookies set by middleware on the response. Custom request header is the reliable path.
-- **`wrap={false}` on role blocks**: prevents page breaks mid-role in PDF.
+- **HTTP fetch before browser for contact extraction**: SSR pages have all content in raw HTML. Plain fetch is more reliable than waiting for Angular hydration in Browserbase.
+- **BulkOpsProvider at layout level**: Only way to keep operation state alive across client-side navigation in Next.js App Router.
+- **Dashboard research chart from DB not PostHog**: PostHog has ingestion delay; `jobs.researched_at` is immediate.
+- **mailto: extraction gated to job board aggregators only**: ATS pages (Emply, Greenhouse, etc.) may contain recruiter agency emails that would wrongly override the employer's homepageUrl.
+- **Profile location prefs used in fallback scoring**: `scoreJob` receives a full `Profile` object — no signature change needed, just reads `profile.remote_preference` and `profile.preferred_locations` when `searchedLocation === ""`.
 
 ## Problems solved
 
-- **GitHub Actions browser OAuth loop**: CLI `requireAuth()` needs `credentials.access_token` in `~/.insforge/credentials.json`. Fixed by pre-populating with freshly exchanged token before deploy step.
-- **AUTH_INVALID_CREDENTIALS on resume download**: private storage URL requires bearer token browser doesn't have. Fixed by streaming through API route.
-- **Button-in-button hydration error**: accordion Remove button nested inside accordion toggle button. Fixed with div wrapper + sibling buttons.
-- **Middleware cookie forwarding**: refreshed token on middleware response not visible in route handler `cookies()`. Fixed via custom request header.
+- **Contacts missing (Torben Åstradsson + Mashiah Moltrup-Ryom) on Emply job**: (1) stagehand.extract() throwing silently skipped page text block via outer catch, (2) page text ran after stagehand (wrong priority), (3) browser body.innerText may not reflect full Angular hydration. Fixed with HTTP fetch as primary extraction.
+- **Wrong company researched (Right People Group instead of F&P)**: mailto: link `mmr@rightpeoplegroup.com` was overriding `homepageUrl`. Fixed by gating mailto: to job board domains only.
+- **Import match score 60% / only Nuxt found**: stripHtml on raw Angular SSR HTML included ng-state JSON at front, pushing job description past scoring window. Fixed by pre-cleaning HTML.
+- **Dashboard research chart always empty**: Was querying PostHog (ingestion delay). Fixed by querying DB.
+- **Bulk ops cancelled on navigation**: State was local to JobsTable component. Fixed by BulkOpsProvider.
+- **Duplicate sources in research dossier**: Fixed with `[...new Set(...)]`.
+- **Dossier text in Danish**: Fixed by adding English-only rule to synthesis system prompt.
+- **Air Apps Lisbon job scored 90%**: `scoreJob` had no location rule when `searchedLocation` is `""`. Fixed by falling back to profile's `remote_preference`/`preferred_locations` — Lisbon job will now cap at ≤35 after rescore.
 
 ## Current state
 
-- App is live at https://8kj4iaqv.insforge.site
-- CI deploy on push to `main` is working (last run: success)
-- Brand colors are blue throughout (accent, nav active state, buttons, avatar background)
-- Profile form sticky save bar has upward shadow
-- Resume PDF generates and downloads correctly
+- Deployed commit `c17779a` — deployment triggered, in progress at https://8kj4iaqv.insforge.site
+- All TypeScript compiles clean
+- Contact extraction NOT yet verified working after deploy — user needs to re-research F&P job and check if Torben + Mashiah appear
+- Diagnostic console.log statements are intentionally in production code for now — remove once contacts confirmed working
+- Air Apps Lisbon job still shows 90% until user triggers "Rescore All" on deployed version
 
 ## Next session starts with
 
-No outstanding tasks. Check `context/build-plan.md` and `context/progress-tracker.md` for the next planned feature. Feature 21 (Scheduled Job Alert Emails) was previously identified as next.
+1. Verify deploy completed at https://8kj4iaqv.insforge.site
+2. Re-research F&P / Emply job and verify Torben Åstradsson (IT manager contact) and Mashiah Moltrup-Ryom (recruiter) appear in dossier
+3. If contacts confirmed, remove all diagnostic `console.log` from `agent/research-company.ts`
+4. Trigger "Rescore All" and verify Air Apps Lisbon job score drops to ≤35
 
 ## Open questions
 
-- Cover letter `max_tokens: 800` may cut off with longer prompts — worth verifying
-- react-pdf avatar clipping: `overflow: hidden` + `borderRadius` may not clip into circle in production
-- Cover letter PDF photo: unconfirmed whether react-pdf fetches InsForge public URL during `renderToBuffer` in production
-- InsForge SDK JSONB bug still affects any future RPC with JSONB params — document in `context/library-docs.md`
-- Feature 13 company research ~60-120s may timeout on Vercel free tier — address if needed
+- Does HTTP fetch of the Emply source_url return full SSR HTML with contacts, or does Emply block server-side fetches? (Logs will reveal this)
+- Is the Emply job URL `https://forsikringogpension.career.emply.com/ad/senior-frontendudvikler-nuxt/kpdjpb` still live?

@@ -8,6 +8,7 @@ import type { JobRow } from "@/types";
 import { StatusBadge } from "@/components/find-jobs/StatusBadge";
 import type { JobStatus } from "@/components/find-jobs/StatusBadge";
 import { useBulkOps } from "@/components/BulkOpsProvider";
+import { Tooltip } from "@/components/ui/Tooltip";
 
 export type { JobRow };
 
@@ -368,28 +369,38 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                     onClick={() => router.push(`/find-jobs/${job.id}`)}
                     className={`group hover:bg-surface-secondary transition-colors cursor-pointer${index < paginated.length - 1 ? " border-b border-border" : ""}`}
                   >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
+                    <td className="px-6 py-4 max-w-0">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className="shrink-0 w-9 h-9 bg-surface-secondary border border-border rounded-lg flex items-center justify-center">
                           <BuildingIcon className="w-5 h-5 text-text-muted" />
                         </div>
-                        <div className="flex flex-col gap-1">
-                          <span className="text-sm font-semibold text-text-primary">
-                            {job.company}
-                          </span>
+                        <div className="flex flex-col gap-1 min-w-0">
+                          <Tooltip content={job.company}>
+                            <span className="text-sm font-semibold text-text-primary truncate block">
+                              {job.company}
+                            </span>
+                          </Tooltip>
                           <SourceBadge source={job.source} />
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-text-primary">
-                        {job.title}
-                      </span>
+                    <td className="px-6 py-4 max-w-0">
+                      <Tooltip content={job.title}>
+                        <span className="text-sm text-text-primary truncate block">
+                          {job.title}
+                        </span>
+                      </Tooltip>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-text-muted">
-                        {job.location ?? "—"}
-                      </span>
+                    <td className="px-6 py-4 max-w-0">
+                      {job.location ? (
+                        <Tooltip content={job.location}>
+                          <span className="text-sm text-text-muted truncate block">
+                            {job.location}
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <span className="text-sm text-text-muted">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
