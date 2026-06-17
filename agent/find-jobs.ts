@@ -388,10 +388,10 @@ export async function findJobs(
       (r): r is ScoringResult => r !== null && r.matchScore >= minScore,
     );
 
-    // Skip jobs from tracking/aggregator domains — their URLs expire and can't be used to apply.
-    const TRACKING_DOMAINS = ["jobviewtrack", "careerjet", "jooble"];
+    // jobviewtrack.com URLs are short-lived redirect trackers — they 502 after a week.
+    // Jooble and Careerjet links are permanent listing pages and are kept as-is.
     const jobsWithUrl = qualifyingJobs.filter(
-      (r) => r.job.url && !TRACKING_DOMAINS.some((d) => r.job.url.includes(d)),
+      (r) => r.job.url && !r.job.url.includes("jobviewtrack"),
     );
 
     if (jobsWithUrl.length > 0) {
