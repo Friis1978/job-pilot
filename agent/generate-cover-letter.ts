@@ -117,17 +117,24 @@ export async function generateCoverLetter(
     const openingStrategy = OPENING_STRATEGIES[Math.floor(Math.random() * OPENING_STRATEGIES.length)];
 
 
+    const coreRules = `
+Content rules — apply regardless of any other instructions:
+- Use the match reason to understand exactly why this candidate fits this role — build the narrative around it
+- Use the company research to show you understand what this company actually does, what challenges they face, and what kind of person would succeed there — then connect that directly to the candidate's background. Do not just name-drop the company; show you understand their world
+- Draw on ALL of the candidate's work history — matched skills are a hint, not the limit. Older roles can contain highly relevant experience
+- Where the candidate has years of experience for a skill relevant to this role, include the number naturally (e.g. "5 years of React")
+- If personal projects are listed, weave in at least one that's relevant — mention it by name and include its live URL or GitHub URL inline ("you can see this at https://...") — real links turn claims into proof
+- If motivation, key achievement, energy tasks, or career vision are provided, let them shape the letter — these reveal who the candidate genuinely is, not just what they've done
+- Acknowledge gap skills briefly — one sentence max, frame as adjacent strength or fast ramp
+- Close with a direct, confident call to action — not "I hope to hear from you"
+${companyTypePreference.length > 0 ? `- The candidate prefers ${companyTypePreference.join(" / ")} environments — reflect language and values that resonate with that culture\n` : ""}- 3–4 paragraphs, no longer
+- Do NOT include subject line, date, address block, or signature — just the letter body
+- Write in first person as the candidate
+- Write the entire letter in ${language}`;
+
     const systemPrompt = customInstructions
-      ? `You are an expert cover letter writer. The candidate's instruction set below governs voice, structure, and style. Follow it for HOW to write the letter.
-
-Job description language: ${language} — write the letter in ${language} unless the instructions say otherwise.
-
-Regardless of the instructions, ALWAYS draw on the full candidate context in the user message to make the letter specific and personal:
-- Reference relevant work experience and concrete achievements
-- If personal projects are listed, weave in at least one — mention it by name and include its live URL or GitHub URL inline if available ("you can see this at https://...") — real links turn claims into proof
-- If motivation, key achievement, energy, or career vision are provided, let them shape the letter's tone and emphasis — these reveal who the candidate actually is
-${companyTypePreference.length > 0 ? `- The candidate prefers ${companyTypePreference.join(" / ")} environments — reflect language and values that resonate with that culture\n` : ""}
-The instructions are the style guide. The profile data is the substance. Both must be present.
+      ? `You are an expert cover letter writer. The candidate's instruction set below is their personal style guide — follow it for voice, tone, structure, and formatting preferences.
+${coreRules}
 
 CANDIDATE'S COVER LETTER INSTRUCTIONS:
 ${customInstructions}`
@@ -135,23 +142,13 @@ ${customInstructions}`
 
 Opening strategy for THIS letter: ${openingStrategy}
 
-Rules:
-- Write the entire letter in ${language} — the job description is in ${language}, so the letter must be too
+Additional style rules:
 - NEVER start with "I" as the first word
 - NEVER use: "excited", "thrilled", "passion", "couldn't help", "perfect opportunity", "dream role", "long-time admirer", "ideal candidate", or any variant of these
 - Do NOT open with enthusiasm about the company — lead with substance, not flattery
 - Address it to the hiring team at the company (no "Dear Sir/Madam", no "To Whom It May Concern")
 - Every claim must be grounded in the candidate's actual experience — no vague assertions
-- Draw on ALL skills listed under "All skills" and "Full work history" — the "Matched skills" list is a hint, not a limit
-- Where the candidate has years of experience for a skill relevant to this role, include the specific number naturally in the letter (e.g. "5 years of React" or "3 years building with TypeScript") — use the skill experience data provided
-- Connect specific past work to what this role actually requires, drawing from the full work history including older roles
-- If the candidate has personal projects with a live URL or GitHub URL, reference at least one project by name and include its URL inline — e.g. "you can see this at https://..." — real links turn claims into proof
-- If company research is provided, reference one concrete specific detail (not generic praise)
-- Acknowledge skill gaps honestly and briefly — one sentence max, frame as adjacent strength or quick ramp
-- Close with a direct, confident call to action — not "I hope to hear from you"
-${companyTypePreference.length > 0 ? `- The candidate prefers ${companyTypePreference.join(" / ")} environments — where relevant, reflect language and values that resonate with that culture\n` : ""}- 3–4 paragraphs, no longer
-- Do NOT include subject line, date, address block, or signature — just the letter body
-- Write in first person as the candidate`;
+${coreRules}`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -169,7 +166,7 @@ Title: ${job.title}
 Company: ${job.company}
 Description: ${job.about_role ?? "Not provided"}${(job.requirements as string[] | null)?.length ? `\nRequirements:\n${(job.requirements as string[]).map((r) => `- ${r}`).join("\n")}` : ""}${(job.responsibilities as string[] | null)?.length ? `\nResponsibilities:\n${(job.responsibilities as string[]).map((r) => `- ${r}`).join("\n")}` : ""}
 Matched skills: ${(job.matched_skills as string[] | null)?.join(", ") ?? "None"}
-Gap skills: ${(job.missing_skills as string[] | null)?.join(", ") ?? "None"}
+Gap skills: ${(job.missing_skills as string[] | null)?.join(", ") ?? "None"}${(job.match_reason as string | null) ? `\nWhy this job fits the candidate: ${job.match_reason}` : ""}
 ${companyContext}
 
 CANDIDATE:
