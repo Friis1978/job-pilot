@@ -346,7 +346,9 @@ export async function researchCompany(
           messages: [
             {
               role: "system",
-              content: `Return the official website URL for the given company. Only return a URL you are confident about — do not guess. Return JSON: { "url": "<full url or null>" }`,
+              content: `Return the official website URL for the given company.
+IMPORTANT: If the job is in Denmark, Sweden, Norway, Finland, Germany, Netherlands, or another non-US country, return the LOCAL or REGIONAL entity's website (e.g. a .dk, .se, .no, .fi, .de, .nl, or .eu domain), NOT the US/global parent company's website. For example, if the company is a Danish subsidiary or European entity, return the Danish/European URL — not the American headquarters.
+Only return a URL you are confident about — do not guess. Return JSON: { "url": "<full url or null>" }`,
             },
             {
               role: "user",
@@ -361,6 +363,35 @@ export async function researchCompany(
         }
       } catch (urlErr) {
         console.error("[agent/research-company] GPT-4o URL lookup failed", urlErr);
+      }
+
+      // Even if GPT-4o found a URL, if the job is in a country with a known TLD (e.g. .dk)
+      // but the returned URL doesn't use it, probe for a local version first — the GPT may
+      // have returned the US/global parent instead of the local entity.
+      if (gptFoundUrl) {
+        const countryTlds = countryTldsFromLocation(job.location);
+        if (countryTlds.length > 0) {
+          try {
+            const homepageDomain = new URL(homepageUrl).hostname.toLowerCase();
+            const hasLocalTld = countryTlds.some((tld) => homepageDomain.endsWith(`.${tld}`));
+            if (!hasLocalTld) {
+              const slug = companySlug(job.company);
+              const slugH = companySlugHyphen(job.company);
+              const localCandidates = countryTlds.flatMap((tld) => [
+                `https://${slug}.${tld}`,
+                `https://www.${slug}.${tld}`,
+                ...(slugH !== slug ? [`https://${slugH}.${tld}`, `https://www.${slugH}.${tld}`] : []),
+              ]);
+              const probed = await probeUrls(localCandidates);
+              if (probed) {
+                console.log(`[agent/research-company] local TLD override: ${homepageUrl} → ${probed}`);
+                homepageUrl = probed;
+              }
+            }
+          } catch {
+            // URL parse failed — keep existing homepageUrl
+          }
+        }
       }
 
       // GPT-4o doesn't know this company — probe common URL patterns before falling
@@ -616,6 +647,103 @@ Only include contacts explicitly named in the text. Distinguish internal contact
             "glassdoor", "simplyhired", "ziprecruiter", "adzuna", "indeed",
             "jobviewtrack",
           ];
+
+          // ── Pre-click-through extraction ─────────────────────────────────────
+          // Job boards (Careerjet, Jobbank, etc.) show the FULL job description
+          // on their own page. Extract it NOW, before navigating away to the
+          // employer's site. This is the most reliable source for contact info
+          // and the complete JD when about_role was truncated at import time.
+          try {
+            const preClickUrl = page.url();
+            const onJobBoardPreClick = JOB_BOARD_CLICKTHROUGH_DOMAINS.some((d) => preClickUrl.includes(d));
+            if (onJobBoardPreClick) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const boardText = (await page.evaluate(() => (document as any).body.innerText)) as string;
+              console.log(`[research-company] job board pre-click text: ${boardText?.length ?? 0} chars from ${preClickUrl}`);
+              if (boardText && boardText.length > 300) {
+                const boardExtract = await openai.chat.completions.create({
+                  model: "gpt-4o",
+                  response_format: { type: "json_object" },
+                  temperature: 0,
+                  max_tokens: 1000,
+                  messages: [
+                    {
+                      role: "system",
+                      content: `Extract from this job board page. The text may be in any language (Danish, Swedish, English, etc.).
+Return ONLY valid JSON:
+{
+  "contactName": "<full name of an internal hiring contact at the employer — or null>",
+  "contactTitle": "<their job title — or null>",
+  "contactEmail": "<email address — or null>",
+  "contactPhone": "<phone number — or null>",
+  "recruiterName": "<external recruiter full name — or null>",
+  "recruiterTitle": "<recruiter title — or null>",
+  "recruiterEmail": "<recruiter email — or null>",
+  "recruiterPhone": "<recruiter phone — or null>",
+  "recruiterCompany": "<recruiting agency name — or null>",
+  "culturePoints": ["<sentences from About us / Om os / company description sections>"],
+  "fullJobText": "<the complete job description: all responsibilities, requirements, company description — NOT a summary, the actual text>"
+}
+Only extract contacts explicitly named. fullJobText should be the raw job description text, not a summary.`,
+                    },
+                    { role: "user", content: boardText.slice(0, 12000) },
+                  ],
+                });
+                const boardRaw = boardExtract.choices[0]?.message?.content;
+                if (boardRaw) {
+                  const board = JSON.parse(boardRaw) as {
+                    contactName?: string | null; contactTitle?: string | null;
+                    contactEmail?: string | null; contactPhone?: string | null;
+                    recruiterName?: string | null; recruiterTitle?: string | null;
+                    recruiterEmail?: string | null; recruiterPhone?: string | null;
+                    recruiterCompany?: string | null;
+                    culturePoints?: string[];
+                    fullJobText?: string | null;
+                  };
+                  if (board.contactName || board.contactEmail || board.contactPhone) {
+                    const ex = companyResearchRaw.contactFromJobPosting;
+                    companyResearchRaw.contactFromJobPosting = {
+                      name: ex?.name ?? board.contactName ?? null,
+                      title: ex?.title ?? board.contactTitle ?? null,
+                      email: ex?.email ?? board.contactEmail ?? null,
+                      phone: ex?.phone ?? board.contactPhone ?? null,
+                    };
+                  }
+                  if (board.recruiterName || board.recruiterEmail) {
+                    const ex = companyResearchRaw.recruiterContact;
+                    companyResearchRaw.recruiterContact = {
+                      name: ex?.name ?? board.recruiterName ?? null,
+                      title: ex?.title ?? board.recruiterTitle ?? null,
+                      email: ex?.email ?? board.recruiterEmail ?? null,
+                      phone: ex?.phone ?? board.recruiterPhone ?? null,
+                      company: ex?.company ?? board.recruiterCompany ?? null,
+                    };
+                  }
+                  if (board.culturePoints?.length) {
+                    companyResearchRaw.subPages.push({
+                      keyPoints: [], technologies: [],
+                      valuesOrCulture: board.culturePoints,
+                      notable: [], address: null,
+                    });
+                  }
+                  // Update about_role if we found a substantially fuller description
+                  if (board.fullJobText && board.fullJobText.length > (job.about_role?.length ?? 0) + 200) {
+                    console.log(`[research-company] job board has fuller JD: ${board.fullJobText.length} chars (was ${job.about_role?.length ?? 0})`);
+                    job.about_role = board.fullJobText;
+                    await insforge.database
+                      .from("jobs")
+                      .update({ about_role: board.fullJobText })
+                      .eq("id", jobId)
+                      .eq("user_id", userId);
+                  }
+                  console.log(`[research-company] pre-click extracted: contact=${board.contactName ?? "none"}, fullJD=${board.fullJobText?.length ?? 0} chars`);
+                }
+              }
+            }
+          } catch (preClickErr) {
+            console.error("[research-company] pre-click-through extraction failed", preClickErr);
+          }
+
           try {
             const landedUrl = page.url();
             const onJobBoard = JOB_BOARD_CLICKTHROUGH_DOMAINS.some((d) => landedUrl.includes(d));
@@ -822,7 +950,7 @@ Only include contacts explicitly named in the text. Distinguish internal contact
           homepageData.productSummary ?? "";
         companyResearchRaw.signals = homepageData.signals ?? [];
 
-        // Bail if parked domain or wrong site
+        // Bail if parked domain or wrong site — fall through to DuckDuckGo search
         if (!homepageData.oneLiner && !homepageData.productSummary) {
           console.log(
             "[agent/research-company] no homepage content — skipping sub-pages",
@@ -878,6 +1006,116 @@ Only include contacts explicitly named in the text. Distinguish internal contact
               );
             }
           }
+        }
+
+        // ── DuckDuckGo search for supplementary company signals ────────────────
+        // Finds news articles, engineering blogs, LinkedIn pages, and original job
+        // postings that are indexed but not reachable from the company homepage.
+        // Runs after homepage so we don't duplicate pages already visited.
+        // Always runs — even good homepages miss funding rounds, key people, culture
+        // articles, and the full job posting contact info.
+        try {
+          const ddgQuery = `${job.company} ${job.location ?? "Denmark"} engineering culture tech stack about`;
+          const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(ddgQuery)}&kl=dk-da`;
+          await page.goto(ddgUrl, { waitUntil: "load", timeoutMs: 15000 });
+
+          // Extract result hrefs — DDG HTML wraps them in redirect links, resolve via evaluate
+          const ddgLinks = await page.evaluate(() => {
+            return Array.from(document.querySelectorAll(".result__a"))
+              .slice(0, 6)
+              .map((a) => {
+                const href = (a as HTMLAnchorElement).href ?? "";
+                // DDG redirect: //duckduckgo.com/l/?uddg=<encoded-url>
+                const match = href.match(/[?&]uddg=([^&]+)/);
+                return match ? decodeURIComponent(match[1]) : href;
+              })
+              .filter((u) => u.startsWith("http"));
+          }) as string[];
+
+          console.log(`[research-company] DDG found ${ddgLinks.length} result URLs`);
+
+          // Visit each result that isn't the homepage we just scraped or a social media site
+          const SKIP_DDG = ["facebook.com", "twitter.com", "x.com", "youtube.com", "instagram.com", "tiktok.com"];
+          const homepageHostname = (() => { try { return new URL(homepageUrl).hostname; } catch { return ""; } })();
+          let ddgVisited = 0;
+
+          for (const resultUrl of ddgLinks) {
+            if (ddgVisited >= 3) break;
+            try {
+              const resultHostname = new URL(resultUrl).hostname;
+              if (SKIP_DDG.some((d) => resultHostname.includes(d))) continue;
+              if (resultHostname === homepageHostname) continue; // already scraped
+
+              await page.goto(resultUrl, { waitUntil: "networkidle", timeoutMs: 15000 });
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const resultText = (await page.evaluate(() => (document as any).body.innerText)) as string;
+              if (!resultText || resultText.length < 300) continue;
+
+              const ddgExtract = await openai.chat.completions.create({
+                model: "gpt-4o",
+                response_format: { type: "json_object" },
+                temperature: 0,
+                max_tokens: 700,
+                messages: [
+                  {
+                    role: "system",
+                    content: `Extract from this web page about a company. Translate everything to English.
+Return ONLY valid JSON:
+{
+  "keyPoints": ["<concrete facts about what the company does, their product, customers>"],
+  "technologies": ["<specific tech: languages, frameworks, tools, platforms>"],
+  "valuesOrCulture": ["<values, working style, team culture, engineering practices>"],
+  "notable": ["<funding, headcount, revenue, customers, partnerships, awards, news>"],
+  "contactName": "<hiring manager or HR contact name — or null>",
+  "contactEmail": "<contact email — or null>",
+  "contactPhone": "<contact phone — or null>",
+  "address": "<full postal address — or null>"
+}
+Skip nav, footers, cookie banners, and marketing boilerplate.`,
+                  },
+                  { role: "user", content: resultText.slice(0, 6000) },
+                ],
+              });
+
+              const ddgRaw = ddgExtract.choices[0]?.message?.content;
+              if (ddgRaw) {
+                const ddg = JSON.parse(ddgRaw) as {
+                  keyPoints?: string[]; technologies?: string[];
+                  valuesOrCulture?: string[]; notable?: string[];
+                  contactName?: string | null; contactEmail?: string | null;
+                  contactPhone?: string | null; address?: string | null;
+                };
+                if (
+                  (ddg.keyPoints?.length ?? 0) > 0 ||
+                  (ddg.technologies?.length ?? 0) > 0 ||
+                  (ddg.valuesOrCulture?.length ?? 0) > 0 ||
+                  (ddg.notable?.length ?? 0) > 0
+                ) {
+                  companyResearchRaw.subPages.push({
+                    keyPoints: ddg.keyPoints ?? [],
+                    technologies: ddg.technologies ?? [],
+                    valuesOrCulture: ddg.valuesOrCulture ?? [],
+                    notable: ddg.notable ?? [],
+                    address: ddg.address ?? null,
+                  });
+                  companyResearchRaw.sourceUrls.push(resultUrl);
+                  if (ddg.address && !companyResearchRaw.address) companyResearchRaw.address = ddg.address;
+                  if (!companyResearchRaw.contactFromJobPosting && (ddg.contactName || ddg.contactEmail)) {
+                    companyResearchRaw.contactFromJobPosting = {
+                      name: ddg.contactName ?? null, title: null,
+                      email: ddg.contactEmail ?? null, phone: ddg.contactPhone ?? null,
+                    };
+                  }
+                  console.log(`[research-company] DDG result ${resultUrl}: ${ddg.keyPoints?.length ?? 0} keyPoints, ${ddg.technologies?.length ?? 0} tech, ${ddg.notable?.length ?? 0} notable`);
+                  ddgVisited++;
+                }
+              }
+            } catch (ddgResultErr) {
+              console.error("[research-company] DDG result visit failed", resultUrl, ddgResultErr);
+            }
+          }
+        } catch (ddgErr) {
+          console.error("[research-company] DuckDuckGo search failed", ddgErr);
         }
       } catch (homepageErr) {
         console.error(
@@ -1120,8 +1358,21 @@ Return ONLY valid JSON matching this shape:
   "sources": string[]
 }`;
 
+    // Flatten subPages into a deduplicated summary for synthesis — these contain
+    // culture/tech points extracted from the job description AND from browser sub-pages.
+    // Previously excluded (subPages: undefined), which caused all JD-extracted context to be lost.
+    const subPagesSummary = companyResearchRaw.subPages
+      .filter((p) => p.keyPoints.length > 0 || p.technologies.length > 0 || p.valuesOrCulture.length > 0 || p.notable.length > 0)
+      .map((p) => ({
+        ...(p.keyPoints.length > 0 && { keyPoints: p.keyPoints }),
+        ...(p.technologies.length > 0 && { technologies: p.technologies }),
+        ...(p.valuesOrCulture.length > 0 && { valuesOrCulture: p.valuesOrCulture }),
+        ...(p.notable.length > 0 && { notable: p.notable }),
+      }));
+
     const userPrompt = `COMPANY RESEARCH (from their website):
 ${JSON.stringify({ ...companyResearchRaw, subPages: undefined })}
+${subPagesSummary.length > 0 ? `\nADDITIONAL CONTEXT (from job description and sub-pages — always use this to enrich culture, tech stack, and company signals):\n${JSON.stringify(subPagesSummary)}` : ""}
 
 COMPANY ADDRESS (extracted from website): ${companyResearchRaw.address ?? "Not found"}
 CONTACT INFO FROM JOB POSTING: ${companyResearchRaw.contactFromJobPosting ? JSON.stringify(companyResearchRaw.contactFromJobPosting) : "Not found"}

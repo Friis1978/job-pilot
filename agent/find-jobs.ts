@@ -173,6 +173,36 @@ function normalizeAdzunaJob(job: AdzunaJob): NormalizedJob {
   };
 }
 
+async function summarizeDescription(description: string, openai: OpenAI): Promise<string | null> {
+  if (!description || description.length < 150) return null;
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.3,
+      max_tokens: 700,
+      messages: [
+        {
+          role: "system",
+          content: `Summarize this job description as exactly 8–10 bullet points. Each bullet must be a full, informative sentence — not a fragment. Cover all of these areas (one or two bullets each):
+1. What the company does and its context
+2. What the role is and who it reports to
+3. Key day-to-day responsibilities (2–3 bullets)
+4. Must-have qualifications or experience
+5. Required technical skills or tools
+6. Nice-to-have or preferred skills
+7. What the company offers (culture, benefits, team)
+
+Return only the bullet points, each on its own line starting with "•". No intro, no headers, no trailing text.`,
+        },
+        { role: "user", content: description.slice(0, 5000) },
+      ],
+    });
+    return response.choices[0]?.message?.content?.trim() ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function scoreJob(
   job: NormalizedJob,
   profile: Profile,
@@ -447,7 +477,12 @@ export async function findJobs(
     }
 
     if (jobsWithUrl.length > 0) {
-      const jobRecords = jobsWithUrl.map((r) => ({
+      // Generate short summaries in parallel — gpt-4o-mini, fast and cheap
+      const summaries = await Promise.all(
+        jobsWithUrl.map((r) => summarizeDescription(r.job.description, openai)),
+      );
+
+      const jobRecords = jobsWithUrl.map((r, i) => ({
         user_id: userId,
         run_id: runId,
         source: "search",
@@ -459,6 +494,7 @@ export async function findJobs(
         salary: r.job.salary ?? null,
         job_type: r.job.job_type ?? "fulltime",
         about_role: r.job.description,
+        description_summary: summaries[i] ?? null,
         match_score: r.matchScore,
         match_reason: r.matchReason,
         matched_skills: r.matchedSkills,

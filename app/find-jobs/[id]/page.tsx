@@ -48,6 +48,7 @@ type Job = {
   matched_skills: string[] | null;
   missing_skills: string[] | null;
   company_research: Record<string, unknown> | null;
+  description_summary: string | null;
   cover_letter: string | null;
   status: string;
   external_apply_url: string | null;
@@ -258,27 +259,45 @@ export default async function JobDetailsPage({
           )}
 
           {/* Job Description */}
-          {job.about_role && (
+          {(job.description_summary || job.about_role) && (
             <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center gap-2 mb-4">
-                <DocIcon className="w-5 h-5 text-text-muted shrink-0" />
-                <h2 className="text-base font-semibold text-text-primary">
-                  Job Description
-                </h2>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <DocIcon className="w-5 h-5 text-text-muted shrink-0" />
+                  <h2 className="text-base font-semibold text-text-primary">
+                    Job Description
+                  </h2>
+                </div>
+                {job.external_apply_url && (
+                  <a
+                    href={job.external_apply_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-sm text-accent hover:text-accent-dark transition-colors shrink-0"
+                  >
+                    Full posting
+                    <ExternalLinkIcon className="w-3.5 h-3.5" />
+                  </a>
+                )}
               </div>
-              <p className="text-sm text-text-primary leading-relaxed">
-                {job.about_role}
-              </p>
-              {job.external_apply_url && (
-                <a
-                  href={job.external_apply_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-4 flex items-center gap-1.5 text-sm text-accent hover:text-accent-dark transition-colors w-fit"
-                >
-                  View full description
-                  <ExternalLinkIcon className="w-3.5 h-3.5" />
-                </a>
+              {job.description_summary ? (
+                <ul className="flex flex-col gap-2">
+                  {job.description_summary
+                    .split("\n")
+                    .map((line) => line.trim())
+                    .filter(Boolean)
+                    .map((line, i) => {
+                      const text = line.replace(/^[•\-\*]\s*/, "");
+                      return (
+                        <li key={i} className="flex items-start gap-2 text-sm text-text-primary leading-relaxed">
+                          <span className="mt-2 w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+                          {text}
+                        </li>
+                      );
+                    })}
+                </ul>
+              ) : (
+                <p className="text-sm text-text-primary leading-relaxed">{job.about_role}</p>
               )}
             </div>
           )}
