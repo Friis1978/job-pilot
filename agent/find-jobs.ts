@@ -82,6 +82,7 @@ type FindJobsResult = {
   success: boolean;
   jobsFound?: number;
   jobsSaved?: number;
+  jobsSkipped?: number;
   error?: string;
 };
 

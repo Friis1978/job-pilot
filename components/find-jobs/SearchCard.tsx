@@ -27,7 +27,6 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
     if (!jobTitle.trim() || loading) return;
 
     setLoading(true);
-    setResult(null);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30_000);
