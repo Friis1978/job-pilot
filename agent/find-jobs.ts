@@ -457,6 +457,7 @@ export async function findJobs(
       success: true,
       jobsFound: allJobs.length,
       jobsSaved: jobsWithUrl.length,
+      jobsSkipped: qualifyingJobs.length - jobsWithUrl.length,
     };
   } catch (err) {
     console.error("[agent/find-jobs]", err);

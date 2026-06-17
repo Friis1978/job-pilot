@@ -53,7 +53,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     revalidatePath("/dashboard");
     revalidatePath("/find-jobs");
     return NextResponse.json({
-      data: { jobsFound: result.jobsFound, jobsSaved: result.jobsSaved },
+      data: { jobsFound: result.jobsFound, jobsSaved: result.jobsSaved, jobsSkipped: result.jobsSkipped },
     });
   } catch (err) {
     console.error("[api/agent/find]", err);

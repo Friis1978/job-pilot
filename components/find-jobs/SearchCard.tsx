@@ -17,10 +17,6 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
   const [location, setLocation] = useState(defaultLocation);
   const [minScore, setMinScore] = useState(70);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{
-    jobsFound: number;
-    jobsSaved: number;
-  } | null>(null);
 
   // URL tab state
   const [importUrl, setImportUrl] = useState("");
@@ -56,7 +52,18 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
         return;
       }
 
-      setResult(json.data);
+      const { jobsSaved, jobsSkipped } = json.data as { jobsFound: number; jobsSaved: number; jobsSkipped: number };
+
+      if (jobsSaved > 0) {
+        toast(`Found ${jobsSaved} matching job${jobsSaved === 1 ? "" : "s"}.`, "success");
+      } else {
+        toast("No matching jobs found. Try a different title or lower the minimum match score.", "info");
+      }
+
+      if (jobsSkipped > 0) {
+        toast(`${jobsSkipped} job${jobsSkipped === 1 ? " was" : "s were"} skipped — no direct apply link available.`, "warning");
+      }
+
       router.refresh();
     } catch (err) {
       clearTimeout(timeoutId);
@@ -113,7 +120,7 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
       {/* Tab switcher */}
       <div className="flex gap-0 border-b border-border mb-5">
         <button
-          onClick={() => { setTab("search"); setResult(null); }}
+          onClick={() => setTab("search")}
           className={`px-4 pb-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
             tab === "search"
               ? "border-accent text-accent"
@@ -251,14 +258,6 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
             </button>
           </div>
 
-          {result && (
-            <div className="flex items-center gap-3 rounded-xl bg-success-lightest px-4 py-3">
-              <SparkleIcon className="w-5 h-5 text-success shrink-0" />
-              <span className="text-sm font-medium text-success-foreground">
-                Found {result.jobsFound} jobs and saved {result.jobsSaved} strong matches.
-              </span>
-            </div>
-          )}
 
           {recentSearches.length > 0 && (
             <div className="flex flex-col gap-2">
