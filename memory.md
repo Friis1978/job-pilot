@@ -1,54 +1,81 @@
-# Memory — Personal Projects Resume + PDF Layout Fixes
+# Memory — Cover Letter Intelligence Upgrade
 
 Last updated: 2026-06-17
 
 ## What was built
 
-### Personal Projects in Resume PDF
-- **`app/api/resume/generate/route.ts`** — `personalProjects` added to `profileInput` so GPT can mention them in the summary. Summary rule updated to name one notable project. `computeSkillYears` now includes personal projects as second arg. `max_tokens` bumped to 1800. `PersonalProject` imported from `@/types`.
-- **`app/api/resume/ResumePDF.tsx`** — New Personal Projects section after Work Experience. Uses `projectDesc` style (no `flex: 1`) to fix react-pdf height calculation bug. Skills filtered to ≤25 chars, max 8 shown (one row). Full description shown (no truncation). Links rendered with `Link` component from react-pdf — `LIVE`, `GITHUB`, `VIDEO` labels in small caps with clickable accent-colored URLs.
+### Cover letter generation overhaul (`agent/generate-cover-letter.ts`)
 
-### GitHub & Video URL fields on Personal Projects
-- **`types/index.ts`** — `PersonalProject` type now has `githubUrl?: string` and `videoUrl?: string`. `ProfileFormInput.personalProjects` array type updated to include both.
-- **`components/profile/ProfileForm.tsx`** — `PersonalProjectEntry` type updated. `profileToFormData` maps new fields. `addProject` initializes both to `""`. Single URL input replaced with 3-column grid: Live URL · GitHub · Video. Description textarea changed from `resize-none` to `resize-y`.
-- **`agent/generate-cover-letter.ts`** — Projects text now appends `GitHub:` and `Video:` URLs alongside `Live:`. New system prompt rule: if project has a live URL or GitHub URL, reference it inline in the letter body.
+**Profile fields added:**
+- `linkedin_url` and `portfolio_url` now fetched from DB and passed to the user message
 
-### DB updates (direct SQL)
-- Job Pilot description in `personal_projects[0]` restored to original full text after being accidentally shortened.
-- Bandfolio description in `personal_projects[1]` shortened to 290-char resume-appropriate version: "Multi-tenant CMS for musicians and bands, built entirely through a 4-phase AI-orchestrated CI/CD pipeline..."
+**User message restructured:**
+- "What Drives This Candidate" is now its own labelled block (was buried at end of a long string)
+- `match_reason` added as "Why this job fits the candidate" — was fetched but never passed to GPT
+- LinkedIn and Portfolio URLs appended after the drives block
+
+**`coreRules` rewritten into three sections (COMPANY & JOB FIT / WHAT DRIVES THE CANDIDATE / EXPERIENCE & SKILLS):**
+- Motivation: find where it overlaps with company values — make the connection explicit, not implied
+- Energy tasks: cross-reference with what the role requires day-to-day — show candidate will enjoy the work
+- Career vision: connect to where the company is going — shows deliberate choice, not spray-and-pray
+- Key achievement: used as concrete evidence for the letter's strongest claim
+- Company research: show genuine understanding of their world, not name-dropping
+- Match reason: the spine of the letter narrative
+
+**System prompt architecture:**
+- Both paths (custom instructions + default) now share `coreRules`
+- Custom instructions = style guide (HOW to write)
+- Profile data = substance (WHAT to write about)
+- Both always apply — instructions no longer override profile context
+
+### Personal Projects in Resume PDF (`app/api/resume/ResumePDF.tsx`)
+- `Link` component imported from react-pdf
+- LIVE / GITHUB / VIDEO labels in small-caps with clickable accent-colored URLs
+- `projectDesc` style (no `flex: 1`) — fixes react-pdf height miscalculation bug
+- Full description shown (no truncation)
+- Skills filtered ≤25 chars, max 8 per row
+
+### GitHub & Video URL fields (`types/index.ts`, `ProfileForm.tsx`, `generate-cover-letter.ts`)
+- `PersonalProject` type: `githubUrl?: string`, `videoUrl?: string`
+- Profile form: 3-column URL grid (Live · GitHub · Video), description textarea is resizable
+- Cover letter: GitHub and Video URLs passed as project context
+
+### Resume generate route (`app/api/resume/generate/route.ts`)
+- `personalProjects` added to `profileInput`
+- Summary rule: mention one notable project by name
+- `computeSkillYears` includes personal projects
+- `max_tokens` bumped to 1800
 
 ## Decisions made
 
-- **`projectDesc` style, not `bulletText`** — The react-pdf height calculation bug on wrapping Text nodes was caused by `bulletText` having `flex: 1`. Outside a `flexDirection: "row"` container, `flex: 1` expands the text vertically, making react-pdf think the block is taller than it is and placing the next block too early (overlap). Fix: dedicated `projectDesc` style with no `flex` property.
-- **Skills filter for PDF**: show only skills ≤25 chars, max 8 — prevents long multi-word skills like "Component architecture (custom + PrimeVue + Tailwind composition)" from blowing out the row height.
-- **Full description in PDF**: no truncation now that the height bug is fixed. If the description overflows a page, react-pdf handles it naturally.
-- **Links use `Link` component**: react-pdf's `Link` makes URLs clickable in PDF viewers. Labels shown as small-caps muted text, URL as accent-colored link text.
+- **`coreRules` as shared block**: both the custom-instructions path and the default path include the same content rules — avoids duplication and ensures profile context is always used regardless of which path fires
+- **"What Drives This Candidate" as labelled section**: buried at end of string = easier for GPT to overlook; explicit heading = treated as structured data
+- **`match_reason` in user message**: was already fetched from DB but never passed — now the model sees exactly why the scoring engine flagged this job as a match
+- **`projectDesc` style**: `bulletText` with `flex: 1` outside a row container causes react-pdf to miscalculate block height and overlap content. `projectDesc` has no flex — fixed the root cause
 
 ## Problems solved
 
-- **react-pdf height miscalculation on personal projects**: Root cause was `flex: 1` on `bulletText` style used outside a row container. Fixed by using `projectDesc` (no flex). All previous fixes (truncation, skills chunking) were treating symptoms — this was the actual bug.
-- **Cached resume served after direct SQL update**: After updating `personal_projects` via raw SQL, `updated_at` doesn't auto-bump (no trigger). Fixed by running `UPDATE profiles SET updated_at = NOW()` explicitly after every direct DB edit.
+- **Cover letter instructions overriding profile context**: old prompt said "overrides all default rules" — personal projects, motivation, energy, career vision were being ignored. Fixed by making instructions = style guide, coreRules = always-on content rules
+- **Motivation/energy not cross-referenced with company**: data was passed but instruction was passive ("let them shape the letter"). Rewritten to explicitly tell the model to find the overlap between candidate drives and company culture/role requirements
+- **react-pdf height overlap in Personal Projects**: root cause was `flex: 1` on `bulletText` used outside a `flexDirection: row` container
 
 ## Current state
 
-- Personal Projects section in resume PDF: fully functional, full descriptions, clickable links (Live/GitHub/Video), skills shown.
-- GitHub + Video URL fields: in the profile form, saved to DB, shown in PDF and cover letter.
-- Description textarea: resizable by dragging.
-- Cover letter agent: references project URLs inline when present.
-- Bandfolio `personal_projects[1]` description is the shortened version in DB — the profile form will show this shortened version. User may want to expand it back to the full long version in their profile for cover letter use (the PDF will show whatever is in the description field).
+- Cover letter generation: fully rebuilt — uses all profile fields, cross-references motivation/energy/vision with company research and job requirements, references project URLs inline
+- Personal Projects in PDF: renders correctly with clickable links, full descriptions
+- GitHub + Video URL fields: in form, saved to DB, used in PDF and cover letter
+- `match_reason` now flows into cover letter generation
+- `linkedin_url` and `portfolio_url` now flow into cover letter generation
 
 ## Next session starts with
 
-Verify the resume PDF renders correctly with the new Personal Projects section — check that:
-1. Full descriptions show without overlap
-2. Links (Live/GitHub/Video) are clickable
-3. Skills row doesn't overflow
-
-Then add GitHub/Video URLs for both projects in the profile form and save.
+Test a cover letter generation end-to-end:
+1. Pick a job that has company research
+2. Generate cover letter — verify motivation/energy/career vision are reflected and cross-referenced with company culture
+3. Verify project URL appears inline in the letter body
 
 ## Open questions
 
-- Does the jobviewtrack Referer fix actually resolve to employer URLs in production? (unconfirmed from previous session)
-- Has the auth fix (refresh token from Set-Cookie header) been confirmed after a full login cycle? (unconfirmed from previous session)
-- Bandfolio description in DB is the shortened resume version — should the full long description be stored separately for cover letter use, or is the shortened version acceptable for both?
-- `console.log` may still exist in `agent/research-company.ts` from a previous session — check and remove if present.
+- Does the jobviewtrack Referer fix resolve to employer URLs in production? (unconfirmed)
+- Has the auth fix (refresh token from Set-Cookie) been confirmed after a full login cycle? (unconfirmed)
+- `console.log` may still exist in `agent/research-company.ts` — check and remove

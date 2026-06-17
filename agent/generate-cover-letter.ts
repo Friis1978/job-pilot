@@ -46,7 +46,7 @@ export async function generateCoverLetter(
     insforge.database
       .from("profiles")
       .select(
-        "full_name, current_title, years_experience, skills, work_experience, personal_projects, cover_letter_tone, cover_letter_instructions, motivation, proud_achievement, energy_tasks, company_type_preference, career_vision",
+        "full_name, current_title, years_experience, skills, work_experience, personal_projects, cover_letter_tone, cover_letter_instructions, motivation, proud_achievement, energy_tasks, company_type_preference, career_vision, linkedin_url, portfolio_url",
       )
       .eq("id", userId)
       .single(),
@@ -119,12 +119,24 @@ export async function generateCoverLetter(
 
     const coreRules = `
 Content rules — apply regardless of any other instructions:
-- Use the match reason to understand exactly why this candidate fits this role — build the narrative around it
-- Use the company research to show you understand what this company actually does, what challenges they face, and what kind of person would succeed there — then connect that directly to the candidate's background. Do not just name-drop the company; show you understand their world
-- Draw on ALL of the candidate's work history — matched skills are a hint, not the limit. Older roles can contain highly relevant experience
+
+COMPANY & JOB FIT:
+- Use the match reason to understand exactly why this candidate fits this role — that is the spine of the letter
+- Use the company research to show genuine understanding: what does this company actually do, what problems are they solving, what kind of person thrives there — then connect it directly to the candidate. Don't name-drop; demonstrate that you understand their world
+- If the research reveals culture signals (pace, values, mission, team structure), use those to calibrate tone and emphasis
+
+WHAT DRIVES THE CANDIDATE:
+- If motivation is provided: find where it overlaps with what this company does or values — make that connection explicit in the letter, not just implied. "I care about X" only lands if you show the company also cares about X
+- If energy tasks are provided: cross-reference with what the role actually requires day-to-day — show the candidate will genuinely enjoy this work, not just be qualified for it. "I thrive doing X, and this role is fundamentally about X" is more convincing than any skills list
+- If career vision is provided: connect it to where this company is going — show this role is a deliberate step, not a random application
+- If a key achievement is provided: use it as concrete evidence for the most important claim in the letter
+
+EXPERIENCE & SKILLS:
+- Draw on ALL work history — matched skills are a hint, not the limit. Older roles often contain the most relevant experience
 - Where the candidate has years of experience for a skill relevant to this role, include the number naturally (e.g. "5 years of React")
 - If personal projects are listed, weave in at least one that's relevant — mention it by name and include its live URL or GitHub URL inline ("you can see this at https://...") — real links turn claims into proof
-- If motivation, key achievement, energy tasks, or career vision are provided, let them shape the letter — these reveal who the candidate genuinely is, not just what they've done
+
+FINISHING:
 - Acknowledge gap skills briefly — one sentence max, frame as adjacent strength or fast ramp
 - Close with a direct, confident call to action — not "I hope to hear from you"
 ${companyTypePreference.length > 0 ? `- The candidate prefers ${companyTypePreference.join(" / ")} environments — reflect language and values that resonate with that culture\n` : ""}- 3–4 paragraphs, no longer
@@ -175,7 +187,9 @@ Current title: ${profile.current_title ?? "Not provided"}
 Experience: ${profile.years_experience ?? 0} years
 All skills: ${(profile.skills as string[] | null)?.join(", ") ?? "Not provided"}${skillYearsStr ? `\nSkill experience (years): ${skillYearsStr}` : ""}
 Full work history:
-${recentWork || "Not provided"}${projectsText ? `\n\nPersonal projects:\n${projectsText}` : ""}${(profile.motivation as string | null) ? `\n\nMotivation: ${profile.motivation}` : ""}${(profile.proud_achievement as string | null) ? `\nKey achievement: ${profile.proud_achievement}` : ""}${(profile.energy_tasks as string | null) ? `\nWhat energizes them: ${profile.energy_tasks}` : ""}${(profile.career_vision as string | null) ? `\nCareer vision: ${profile.career_vision}` : ""}`,
+${recentWork || "Not provided"}${projectsText ? `\n\nPersonal projects:\n${projectsText}` : ""}
+
+WHAT DRIVES THIS CANDIDATE:${(profile.motivation as string | null) ? `\nMotivation: ${profile.motivation}` : ""}${(profile.proud_achievement as string | null) ? `\nKey achievement: ${profile.proud_achievement}` : ""}${(profile.energy_tasks as string | null) ? `\nWhat gives them energy: ${profile.energy_tasks}` : ""}${(profile.career_vision as string | null) ? `\nCareer vision: ${profile.career_vision}` : ""}${(profile.linkedin_url as string | null) ? `\n\nLinkedIn: ${profile.linkedin_url}` : ""}${(profile.portfolio_url as string | null) ? `\nPortfolio: ${profile.portfolio_url}` : ""}`,
         },
         ...(extraInstructions?.trim() ? [{
           role: "user" as const,
