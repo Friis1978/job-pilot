@@ -11,14 +11,54 @@ import type { Profile, AdzunaJob, NormalizedJob, ScoredJob } from "@/types";
 
 type ScoringResult = ScoredJob & { job: NormalizedJob };
 
+const AGGREGATOR_DOMAINS = [
+  "careerjet", "jooble", "jobviewtrack", "glassdoor", "adzuna",
+  "linkedin", "indeed", "jobindex", "stepstone", "monster",
+];
+
+// jobviewtrack.com requires the Careerjet Referer to redirect to the employer page.
+// Without it, the server bounces back to the Careerjet listing. We make a dedicated
+// GET request with the correct Referer and capture the final URL before enrichment.
+async function resolveTrackingUrl(url: string): Promise<string> {
+  if (!url.includes("jobviewtrack")) return url;
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "da-DK,da;q=0.9,en-US,en;q=0.5",
+        "Referer": "https://www.careerjet.dk/",
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return url;
+    const finalHost = new URL(res.url).hostname;
+    // Only accept the resolved URL if it landed on an employer page
+    if (!AGGREGATOR_DOMAINS.some((d) => finalHost.includes(d))) {
+      return res.url;
+    }
+  } catch {
+    // Resolution failed — keep original
+  }
+  return url;
+}
+
 // Follow the job URL redirect and extract the full description from the employer's own page.
 // Jooble and Careerjet only return short snippets; the real posting often has contact persons,
 // "About us" sections, and requirements that are critical for scoring and research.
-// Always follows the redirect to resolve tracking URLs (e.g. jobviewtrack.com) to the real
-// employer page — even when the description is already long enough to skip enrichment.
 async function enrichJobDescription(job: NormalizedJob): Promise<NormalizedJob> {
+  // Resolve tracking/redirect URLs before enrichment so the saved URL is permanent
+  const resolvedUrl = await resolveTrackingUrl(job.url);
+  const improved: NormalizedJob = resolvedUrl !== job.url ? { ...job, url: resolvedUrl } : { ...job };
+
+  // Skip description enrichment if already has enough content
+  if (job.description.length > 300) {
+    return improved;
+  }
+
   try {
-    const res = await fetch(job.url, {
+    const res = await fetch(improved.url, {
       redirect: "follow",
       headers: {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -28,26 +68,17 @@ async function enrichJobDescription(job: NormalizedJob): Promise<NormalizedJob> 
       signal: AbortSignal.timeout(8000),
     });
 
-    if (!res.ok) return job;
+    if (!res.ok) return improved;
 
-    // Skip if we're still on a job aggregator or tracking domain
     const finalHost = new URL(res.url).hostname;
-    const AGGREGATOR_DOMAINS = [
-      "careerjet", "jooble", "jobviewtrack", "glassdoor", "adzuna",
-      "linkedin", "indeed", "jobindex", "stepstone", "monster",
-    ];
     const isAggregator = AGGREGATOR_DOMAINS.some((d) => finalHost.includes(d));
 
-    const improved: NormalizedJob = { ...job };
-    // Always capture the resolved employer URL — replaces tracking/redirect links
-    if (res.url !== job.url && !isAggregator) {
+    // Capture any further redirect that happened during description fetch
+    if (res.url !== improved.url && !isAggregator) {
       improved.url = res.url;
     }
 
-    // Skip description enrichment if already has enough content or landed on aggregator
-    if (job.description.length > 300 || isAggregator) {
-      return improved;
-    }
+    if (isAggregator) return improved;
 
     const html = await res.text();
 
@@ -74,7 +105,7 @@ async function enrichJobDescription(job: NormalizedJob): Promise<NormalizedJob> 
     }
     return improved;
   } catch {
-    return job; // Enrichment failed — keep original snippet
+    return improved; // Enrichment failed — keep resolved URL but original snippet
   }
 }
 
@@ -388,15 +419,12 @@ export async function findJobs(
       (r): r is ScoringResult => r !== null && r.matchScore >= minScore,
     );
 
-    // jobviewtrack.com URLs are short-lived redirect trackers — they 502 after a week.
-    // Jooble and Careerjet links are permanent listing pages and are kept as-is.
-    const jobsWithUrl = qualifyingJobs.filter(
-      (r) => r.job.url && !r.job.url.includes("jobviewtrack"),
-    );
+    // Only skip jobs with no URL at all — all other links (including aggregator/tracking
+    // links like jobviewtrack.com) are kept. enrichJobDescription already tries to resolve
+    // them to the employer URL; if that fails, the aggregator link itself still works.
+    const jobsWithUrl = qualifyingJobs.filter((r) => !!r.job.url);
 
-    const skipped = qualifyingJobs.filter(
-      (r) => !r.job.url || r.job.url.includes("jobviewtrack"),
-    );
+    const skipped = qualifyingJobs.filter((r) => !r.job.url);
 
     if (skipped.length > 0) {
       await insforge.database.from("skipped_jobs").insert(
@@ -408,7 +436,7 @@ export async function findJobs(
           location: r.job.location,
           url: r.job.url || null,
           source: r.job.source,
-          reason: !r.job.url ? "empty_url" : "jobviewtrack_url",
+          reason: "empty_url",
           match_score: r.matchScore,
         })),
       );
