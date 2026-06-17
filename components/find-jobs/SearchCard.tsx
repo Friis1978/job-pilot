@@ -52,7 +52,7 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
       const json = await res.json();
 
       if (!res.ok || json.error) {
-        toast(json.error ?? "Something went wrong. Please try again.");
+        toast(json.error ?? "Something went wrong. Please try again.", "error");
         return;
       }
 
@@ -61,9 +61,9 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
     } catch (err) {
       clearTimeout(timeoutId);
       if (err instanceof Error && err.name === "AbortError") {
-        toast("Search timed out after 30 seconds. Please try again.");
+        toast("Search timed out after 30 seconds. Please try again.", "error");
       } else {
-        toast("Something went wrong. Please try again.");
+        toast("Something went wrong. Please try again.", "error");
       }
     } finally {
       setLoading(false);
@@ -89,7 +89,7 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
       const json = await res.json();
 
       if (!res.ok || json.error) {
-        toast(json.error ?? "Import failed. Please try again.");
+        toast(json.error ?? "Import failed. Please try again.", "error");
         return;
       }
 
@@ -99,9 +99,9 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
     } catch (err) {
       clearTimeout(timeoutId);
       if (err instanceof Error && err.name === "AbortError") {
-        toast("Import timed out. Please try again.");
+        toast("Import timed out. Please try again.", "error");
       } else {
-        toast("Something went wrong. Please try again.");
+        toast("Something went wrong. Please try again.", "error");
       }
     } finally {
       setImporting(false);

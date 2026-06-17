@@ -48,7 +48,7 @@ export function BulkOpsProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       if ((json.total ?? 0) === 0) {
-        toast("No jobs to research.", "success");
+        toast("No jobs to research.", "info");
       } else {
         const parts = [`Researched ${json.researched} of ${json.total} jobs`];
         if (json.failed) parts.push(`${json.failed} failed`);

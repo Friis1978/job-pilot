@@ -3,6 +3,7 @@
 import { useState, useRef, type DragEvent, type ChangeEvent } from "react";
 import { insforge } from "@/lib/insforge-client";
 import { updateResumeUrl } from "@/actions/profile";
+import { toast } from "@/lib/toast";
 import type { ProfileFormInput } from "@/types";
 
 type Props = {
@@ -19,23 +20,19 @@ export function ResumeUpload({ initialResumeUrl, userId, onExtract, embedded = f
   );
   const [isOpen, setIsOpen] = useState(!initialResumeUrl);
   const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
-  const [extractError, setExtractError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
     if (file.type !== "application/pdf") {
-      setUploadError("Only PDF files are supported.");
+      toast("Only PDF files are supported.", "error");
       return;
     }
     setUploading(true);
-    setUploadError(null);
-    setExtractError(null);
 
     try {
       if (!userId) {
-        setUploadError("Not authenticated.");
+        toast("Not authenticated.", "error");
         setUploading(false);
         return;
       }
@@ -51,14 +48,14 @@ export function ResumeUpload({ initialResumeUrl, userId, onExtract, embedded = f
 
       if (error || !data) {
         console.error("[ResumeUpload] upload error", error);
-        setUploadError("Upload failed. Please try again.");
+        toast("Upload failed. Please try again.", "error");
         setUploading(false);
         return;
       }
 
       const result = await updateResumeUrl(data.url);
       if (!result.success) {
-        setUploadError("Uploaded but failed to save URL. Please try again.");
+        toast("Uploaded but failed to save URL. Please try again.", "error");
         setUploading(false);
         return;
       }
@@ -67,7 +64,7 @@ export function ResumeUpload({ initialResumeUrl, userId, onExtract, embedded = f
       setIsOpen(true);
     } catch (err) {
       console.error("[ResumeUpload] unexpected error", err);
-      setUploadError("Something went wrong. Please try again.");
+      toast("Something went wrong. Please try again.", "error");
     } finally {
       setUploading(false);
     }
@@ -75,14 +72,13 @@ export function ResumeUpload({ initialResumeUrl, userId, onExtract, embedded = f
 
   async function handleExtract() {
     setExtracting(true);
-    setExtractError(null);
 
     try {
       const response = await fetch("/api/resume/extract", { method: "POST" });
       const json = await response.json() as { data?: Partial<ProfileFormInput>; error?: string };
 
       if (!response.ok || json.error) {
-        setExtractError(json.error ?? "Extraction failed. Please try again.");
+        toast(json.error ?? "Extraction failed. Please try again.", "error");
         return;
       }
 
@@ -91,7 +87,7 @@ export function ResumeUpload({ initialResumeUrl, userId, onExtract, embedded = f
       }
     } catch (err) {
       console.error("[ResumeUpload] extract error", err);
-      setExtractError("Something went wrong. Please try again.");
+      toast("Something went wrong. Please try again.", "error");
     } finally {
       setExtracting(false);
     }
@@ -175,10 +171,6 @@ export function ResumeUpload({ initialResumeUrl, userId, onExtract, embedded = f
         </button>
       </div>
 
-      {uploadError && (
-        <p className="mt-2 text-xs text-error">{uploadError}</p>
-      )}
-
       {fileName && (
         <div className="mt-3 pt-3 border-t border-border flex items-center justify-between gap-4 flex-wrap">
           <p className="text-xs text-text-muted">
@@ -215,9 +207,6 @@ export function ResumeUpload({ initialResumeUrl, userId, onExtract, embedded = f
         </div>
       )}
 
-      {extractError && (
-        <p className="mt-2 text-xs text-error">{extractError}</p>
-      )}
     </div>
   );
 

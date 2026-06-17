@@ -18,7 +18,7 @@ export function TailoredResumeButton({ jobId, companyName, hasResearch }: Props)
       const res = await fetch(`/api/jobs/${jobId}/tailored-resume`, { method: "POST" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        toast((body as { error?: string }).error ?? "Failed to generate resume. Please try again.");
+        toast((body as { error?: string }).error ?? "Failed to generate resume. Please try again.", "error");
         return;
       }
       const blob = await res.blob();
@@ -31,7 +31,7 @@ export function TailoredResumeButton({ jobId, companyName, hasResearch }: Props)
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
-      toast("Failed to generate resume. Please try again.");
+      toast("Failed to generate resume. Please try again.", "error");
     } finally {
       setLoading(false);
     }

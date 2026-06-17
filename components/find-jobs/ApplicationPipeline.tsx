@@ -41,7 +41,7 @@ export function ApplicationPipeline({ jobId, status: initialStatus }: Props) {
       router.refresh();
     } catch {
       setStatus(prev);
-      toast("Failed to update status. Please try again.");
+      toast("Failed to update status. Please try again.", "error");
     } finally {
       setSaving(false);
     }

@@ -95,7 +95,7 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Pro
       const res = await fetch(`/api/jobs/${jobId}/cover-letter${params}`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        toast((body as { error?: string }).error ?? "Download failed. Please try again.");
+        toast((body as { error?: string }).error ?? "Download failed. Please try again.", "error");
         return;
       }
       const blob = await res.blob();

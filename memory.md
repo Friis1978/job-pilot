@@ -1,55 +1,58 @@
-# Memory — Resume PDF Rendering + UI Polish
+# Memory — Auth Fix, Toast Audit, Job Import Rule
 
-Last updated: 2026-06-16
+Last updated: 2026-06-17
 
 ## What was built
 
-**`app/api/resume/ResumePDF.tsx`** — fixed overlapping skills text (two separate bugs):
-1. Added `skillsRowText` style (no `flex: 1`) for use in chunked row Text nodes — `flex: 1` on multiple Text siblings in a column View causes them all to render at the same Y position in react-pdf
-2. Applied `skillsRowText` to both the `skillGroups` chunked rows AND the flat skills chunked rows
-3. `skillGroups` path: inner `<View style={{ flex: 1 }}>` wraps chunked rows — this is correct; the fix was removing `flex: 1` from the Text children inside it
+### Auth fix (critical)
+- **`app/auth/callback/route.ts`** — Fixed persistent logout. InsForge OAuth exchange returns the refresh token via `Set-Cookie` header, NOT in the JSON body. Previous code read `data.refreshToken` (always `undefined`). Fix: parse token from header with regex `insforge_refresh_token=([^;]+)`, pass `extractedRefreshToken` to `setAuthCookies`. Also corrected `refreshToken.maxAge` from 30 days to 7 days to match InsForge's JWT TTL.
+- **`proxy.ts`** — Removed temporary debug `console.log` statements. Cleaned up unused `error` and `refreshed` destructure vars.
 
-**`components/find-jobs/TailoredResumeButton.tsx`** — two changes this session:
-- Layout: button now sits to the RIGHT of the description text (parent page uses `flex items-start gap-4`)
-- Style: changed from big `bg-accent px-4 py-2 text-sm` → small `bg-accent text-accent-foreground px-3 py-1.5 text-xs` (matching cover letter header buttons in size and Apply button in color)
+### Job import rule
+- **`agent/find-jobs.ts`** — Jobs from tracking domains (`jobviewtrack`, `careerjet`, `jooble`) are now skipped entirely (not saved with null URL). Changed from `resolvedUrl()` returning null to filtering out those jobs before insert. `jobsWithUrl` replaces `qualifyingJobs` throughout the save/PostHog/return block.
+- Rule: jobs must always have a valid `external_apply_url` — never import without one.
 
-**`components/find-jobs/CoverLetterSection.tsx`** — Regenerate button changed from grey (`bg-surface-secondary border border-border text-text-secondary`) to accent (`bg-accent text-accent-foreground hover:bg-accent-dark`)
-
-**`app/find-jobs/[id]/page.tsx`** — Tailored Resume section: wrapped `<p>` and `<TailoredResumeButton>` in `flex items-start gap-4` so button sits to the right of the text
-
-**DB** — nulled `resume_generated_at` for user (friis1978@gmail.com) to bust the cached broken PDF and force regeneration with fixed code
+### Toast system overhaul
+- **`lib/toast.ts`** — Added `"info"` type
+- **`components/ui/Toaster.tsx`** — Added `"info"` type with blue `text-info-foreground` styling and InfoIcon SVG
+- **`components/find-jobs/ApplicationPipeline.tsx`** — Added `"error"` type to status update failure toast
+- **`components/find-jobs/StatusBadge.tsx`** — Added `"error"` type
+- **`components/find-jobs/JobsTable.tsx`** — Added `"error"` type to delete failure
+- **`components/find-jobs/CoverLetterSection.tsx`** — Added `"error"` to download failure toast
+- **`components/find-jobs/SearchCard.tsx`** — Added `"error"` to all 6 error toasts (search/import failures, timeouts)
+- **`components/find-jobs/TailoredResumeButton.tsx`** — Added `"error"` to both failure toasts
+- **`components/BulkOpsProvider.tsx`** — Changed "No jobs to research" from `"success"` to `"info"`
+- **`components/profile/ResumeUpload.tsx`** — Removed `uploadError`/`extractError` state + inline `<p>` displays; all errors now use `toast(..., "error")`
+- **`components/profile/ProfileForm.tsx`** — Removed `saveError`/`generateResumeError` state + inline displays; all errors use `toast(..., "error")`; sticky footer condition no longer depends on `saveError`
+- **`app/auth/login/page.tsx`** — Removed `error` state + inline `<p>`; OAuth failure uses `toast(..., "error")`
 
 ## Decisions made
 
-- **`skillsRowText` style (no flex)**: react-pdf crashes when multiple `Text` nodes with `flex: 1` share a column container — they all stack at Y=0. `skillsText` (with `flex: 1`) is kept only for the single-text horizontal layout case; chunked rows use `skillsRowText`.
-- **Accent color for primary action buttons**: TailoredResumeButton, Regenerate, and Generate Cover Letter all use `bg-accent` — consistent with Apply Now button.
-- **TailoredResumeButton is small (px-3 py-1.5 text-xs)**: matches the cover letter header button sizing, not the old full-width large button.
+- **Refresh token source**: InsForge puts refresh token in `Set-Cookie` header on the exchange endpoint, not JSON body. This is permanent — always extract from header in callback.
+- **Job URL is required**: Jobs must not be imported if `external_apply_url` cannot be extracted. Jobs from tracking domains are skipped, not saved with null URL.
+- **Info toast type**: Added `"info"` for neutral/informational messages (e.g. "No jobs to research") that are neither success nor error.
+- **Toasts over inline errors**: All async operation errors use toasts, not inline state. Form validation inline hints remain inline as field-level feedback.
 
 ## Problems solved
 
-- **Skills overlapping in PDF**: All caused by `flex: 1` on `Text` nodes in column containers in react-pdf. Fixed by using `skillsRowText` (no flex) for chunked rows.
-- **Cached broken PDF served after code fix**: Nulled `resume_generated_at` in DB so next download triggers regeneration.
-- **Normal resume (skillGroups path) and tailored resume (flat skills path) both had the same bug**: Fixed both in same edit.
+- **Persistent logout**: Root cause was refresh token never stored. InsForge exchange response JSON keys were `["accessToken", "user", "csrfToken"]` — no `refreshToken`. Fix: parse from `Set-Cookie` header.
+- **`middleware.ts` conflict**: Next.js 16 uses `proxy.ts` as middleware. Creating `middleware.ts` causes startup error "Both middleware file and proxy file detected." Never create `middleware.ts`.
+- **Toast type default**: Default toast type is `"success"` — many error toasts were missing explicit type and showing green. All now have explicit types.
 
 ## Current state
 
-- All TypeScript compiles clean
-- Resume PDF renders correctly (both normal and tailored)
-- TailoredResumeButton: small, accent-colored, right-aligned next to text
-- CoverLetterSection: Regenerate button is now accent-colored
-- User should re-upload cover letter instructions via Profile → "Load .md file" from `/Users/rfh/Desktop/CLAUDE-Cover-Letter-Instructions.md` (DB may have reconstructed version, not exact file)
-- Contact extraction (Torben Åstradsson + Mashiah Moltrup-Ryom on F&P / Emply job) not yet verified
-- Diagnostic `console.log` still in `agent/research-company.ts` — remove once contacts confirmed
-- Air Apps Lisbon job still shows 90% — user needs to trigger "Rescore All"
+- Auth fix is in place but not yet verified by a fresh login. User must log out and back in to confirm the refresh token is now stored and sessions last beyond 5 minutes.
+- All toast calls have correct explicit types across the entire app.
+- Job import now requires a valid URL — tracking domain jobs are discarded.
+- Cover letter history table exists — old versions are archived before overwrite.
+- `SessionKeepAlive` component pings `/api/auth/refresh` every 3 minutes as a keepalive (backup to proxy refresh).
 
 ## Next session starts with
 
-1. User re-uploads cover letter instructions via Profile "Load .md file" button
-2. Verify F&P / Emply job contact extraction (Torben Åstradsson + Mashiah Moltrup-Ryom)
-3. If confirmed, remove diagnostic `console.log` from `agent/research-company.ts`
-4. Trigger "Rescore All" and verify Air Apps Lisbon drops to ≤35
+Ask user to confirm auth fix worked — log out, log back in, wait 6+ minutes, verify no logout. If confirmed working, the persistent logout bug is closed.
 
 ## Open questions
 
-- Does HTTP fetch of the Emply source_url return full SSR HTML with contacts?
-- Is the cover letter instructions content in DB exact or reconstructed?
+- Has the auth fix been confirmed working after a full login cycle?
+- No UI exists to browse cover letter history — could add a "history" dropdown to the cover letter section if the user wants it.
+- Diagnostic `console.log` may still exist in `agent/research-company.ts` from a previous session — check and remove if present.

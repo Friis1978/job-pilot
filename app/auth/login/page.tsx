@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { insforge } from "@/lib/insforge-client";
+import { toast } from "@/lib/toast";
 import posthog from "posthog-js";
 
 function GoogleIcon() {
@@ -53,11 +54,9 @@ function ShieldIcon() {
 
 export default function LoginPage() {
   const [loading, setLoading] = useState<"google" | "github" | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   async function handleOAuth(provider: "google" | "github") {
     setLoading(provider);
-    setError(null);
 
     posthog.capture("oauth_login_clicked", { provider });
 
@@ -67,7 +66,7 @@ export default function LoginPage() {
     });
 
     if (error || !data?.url) {
-      setError("Authentication failed. Please try again.");
+      toast("Authentication failed. Please try again.", "error");
       setLoading(null);
       return;
     }
@@ -154,9 +153,6 @@ export default function LoginPage() {
             </button>
           </div>
 
-          {error && (
-            <p className="mt-4 text-sm text-center text-error">{error}</p>
-          )}
         </div>
 
       </div>

@@ -52,7 +52,7 @@ export function StatusBadge({ jobId, status }: Props) {
       router.refresh();
     } catch {
       setCurrent(prev); // rollback
-      toast("Failed to update status. Please try again.");
+      toast("Failed to update status. Please try again.", "error");
     } finally {
       setSaving(false);
     }

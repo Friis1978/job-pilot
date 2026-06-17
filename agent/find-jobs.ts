@@ -387,19 +387,19 @@ export async function findJobs(
       (r): r is ScoringResult => r !== null && r.matchScore >= minScore,
     );
 
-    // Tracking/aggregator URLs (jobviewtrack.com, etc.) expire and break — store null
-    // rather than a URL that will 502 in a week. Title+company dedup still works.
+    // Skip jobs from tracking/aggregator domains — their URLs expire and can't be used to apply.
     const TRACKING_DOMAINS = ["jobviewtrack", "careerjet", "jooble"];
-    const resolvedUrl = (url: string) =>
-      TRACKING_DOMAINS.some((d) => url.includes(d)) ? null : url;
+    const jobsWithUrl = qualifyingJobs.filter(
+      (r) => r.job.url && !TRACKING_DOMAINS.some((d) => r.job.url.includes(d)),
+    );
 
-    if (qualifyingJobs.length > 0) {
-      const jobRecords = qualifyingJobs.map((r) => ({
+    if (jobsWithUrl.length > 0) {
+      const jobRecords = jobsWithUrl.map((r) => ({
         user_id: userId,
         run_id: runId,
         source: "search",
-        source_url: resolvedUrl(r.job.url),
-        external_apply_url: resolvedUrl(r.job.url),
+        source_url: r.job.url,
+        external_apply_url: r.job.url,
         title: r.job.title,
         company: r.job.company,
         location: normalizeLocationToEnglish(r.job.location),
@@ -432,7 +432,7 @@ export async function findJobs(
         };
       }
 
-      qualifyingJobs.forEach((r) => {
+      jobsWithUrl.forEach((r) => {
         posthog.capture({
           distinctId: userId,
           event: "job_found",
@@ -447,7 +447,7 @@ export async function findJobs(
 
     await insforge.database
       .from("agent_runs")
-      .update({ status: "complete", jobs_found: qualifyingJobs.length })
+      .update({ status: "complete", jobs_found: jobsWithUrl.length })
       .eq("id", runId)
       .eq("user_id", userId);
 
@@ -456,7 +456,7 @@ export async function findJobs(
     return {
       success: true,
       jobsFound: allJobs.length,
-      jobsSaved: qualifyingJobs.length,
+      jobsSaved: jobsWithUrl.length,
     };
   } catch (err) {
     console.error("[agent/find-jobs]", err);

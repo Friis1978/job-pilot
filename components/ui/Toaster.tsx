@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from "react";
 
-type ToastItem = { id: number; message: string; type: "error" | "success" | "warning" };
+type ToastItem = { id: number; message: string; type: "error" | "success" | "warning" | "info" };
 
 export function Toaster() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   useEffect(() => {
     function handler(e: Event) {
-      const { message, type } = (e as CustomEvent<{ message: string; type: "error" | "success" | "warning" }>).detail;
+      const { message, type } = (e as CustomEvent<{ message: string; type: "error" | "success" | "warning" | "info" }>).detail;
       const id = Date.now();
       setToasts((prev) => [...prev, { id, message, type }]);
       setTimeout(
@@ -33,6 +33,8 @@ export function Toaster() {
               ? "bg-surface border-error text-error"
               : t.type === "warning"
               ? "bg-surface border-warning text-warning"
+              : t.type === "info"
+              ? "bg-surface border-info text-info-foreground"
               : "bg-surface border-success text-success-foreground"
           }`}
         >
@@ -40,6 +42,8 @@ export function Toaster() {
             <ErrorIcon className="w-4 h-4 shrink-0 mt-0.5" />
           ) : t.type === "warning" ? (
             <WarningIcon className="w-4 h-4 shrink-0 mt-0.5" />
+          ) : t.type === "info" ? (
+            <InfoIcon className="w-4 h-4 shrink-0 mt-0.5" />
           ) : (
             <CheckIcon className="w-4 h-4 shrink-0 mt-0.5" />
           )}
@@ -47,6 +51,18 @@ export function Toaster() {
         </div>
       ))}
     </div>
+  );
+}
+
+function InfoIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
+      <path
+        fillRule="evenodd"
+        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zm-1 9a.75.75 0 01-.75-.75V10a.75.75 0 011.5 0v4.25A.75.75 0 0110 15z"
+        clipRule="evenodd"
+      />
+    </svg>
   );
 }
 

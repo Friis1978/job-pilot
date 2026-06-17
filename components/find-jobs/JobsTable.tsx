@@ -111,7 +111,7 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
       if (!res.ok) throw new Error();
       router.refresh();
     } catch {
-      toast("Failed to delete job. Please try again.");
+      toast("Failed to delete job. Please try again.", "error");
     } finally {
       setDeletingId(null);
     }

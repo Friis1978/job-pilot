@@ -213,12 +213,10 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
     () => extractedFormData != null,
   );
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(initialData?.avatar_url ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [generatingResume, setGeneratingResume] = useState(false);
-  const [generateResumeError, setGenerateResumeError] = useState<string | null>(null);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const workExperienceEndRef = useRef<HTMLDivElement>(null);
@@ -250,7 +248,6 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
       workExperience: parsed.workExperience.map((r) => ({ ...r, skillInput: "" })),
     });
     setRoleErrors({});
-    setSaveError(null);
     setSaveSuccess(false);
   }
 
@@ -420,12 +417,11 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
 
   async function handleGenerateResume() {
     setGeneratingResume(true);
-    setGenerateResumeError(null);
     try {
       const response = await fetch("/api/resume/generate", { method: "POST" });
       if (!response.ok) {
         const json = await response.json() as { error?: string };
-        setGenerateResumeError(json.error ?? "Generation failed. Please try again.");
+        toast(json.error ?? "Generation failed. Please try again.", "error");
         return;
       }
       // Route streams PDF bytes directly — create a local object URL for download
@@ -440,7 +436,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
       document.body.removeChild(a);
       URL.revokeObjectURL(objectUrl);
     } catch {
-      setGenerateResumeError("Something went wrong. Please try again.");
+      toast("Something went wrong. Please try again.", "error");
     } finally {
       setGeneratingResume(false);
     }
@@ -479,9 +475,6 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
               </>
             )}
           </button>
-          {generateResumeError && (
-            <p className="text-xs text-error">{generateResumeError}</p>
-          )}
         </div>
       </div>
 
@@ -523,8 +516,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
 
           setRoleErrors({});
           setSaving(true);
-          setSaveError(null);
-          setSaveSuccess(false);
+                setSaveSuccess(false);
           const result = await saveProfile({
             ...data,
             workExperience: data.workExperience.map(
@@ -538,7 +530,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
             setHasUnreviewedExtraction(false);
             toast("Profile saved successfully.", "success");
           } else {
-            setSaveError(result.error ?? "Something went wrong. Please try again.");
+            toast(result.error ?? "Something went wrong. Please try again.", "error");
           }
         }}
         className="mt-6 flex flex-col gap-0"
@@ -1272,7 +1264,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
         </SectionAccordion>
 
         {/* Sticky save footer */}
-        {(hasUnsavedChanges || saving || Object.keys(roleErrors).length > 0 || !!saveError) && (
+        {(hasUnsavedChanges || saving || Object.keys(roleErrors).length > 0) && (
         <div className="sticky bottom-0 bg-surface border-t border-border px-6 py-4 -mx-6 mt-6 flex flex-col gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
           {hasUnsavedChanges && !saveSuccess && (() => {
             const fields = computeChangedFields(data, savedSnapshot);
@@ -1318,9 +1310,6 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
             );
           })()}
 
-          {saveError && (
-            <p className="text-sm text-error text-center">{saveError}</p>
-          )}
 
           <div className="flex gap-3">
             {hasUnsavedChanges && !saving && (
