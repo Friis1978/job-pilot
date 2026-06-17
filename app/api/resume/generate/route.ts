@@ -5,7 +5,7 @@ import { createElement, type ReactElement } from "react";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { computeSkillYears, computeTotalYearsExperience } from "@/lib/utils";
 import { ResumePDF } from "../ResumePDF";
-import type { Profile } from "@/types";
+import type { Profile, PersonalProject } from "@/types";
 import type { DocumentProps } from "@react-pdf/renderer";
 
 const SYSTEM_PROMPT = `You are a professional resume writer. Given a candidate's profile data, return ONLY valid JSON with this exact shape:
@@ -28,7 +28,7 @@ const SYSTEM_PROMPT = `You are a professional resume writer. Given a candidate's
 }
 
 Rules:
-- summary: 2-3 sentences, third-person present tense, no first-person "I"
+- summary: 2-3 sentences, third-person present tense, no first-person "I". If personalProjects are provided, briefly mention one notable project by name
 - skillGroups: categorize ALL skills from the input into labelled groups. Use exactly these short labels. Order groups as follows:
   1. "Frameworks" — UI frameworks, backend frameworks, ORMs, component libraries (e.g. React, Next.js, Express, Django, Prisma)
   2. "Languages" — programming and markup languages (e.g. TypeScript, Python, SQL, HTML, CSS)
@@ -124,13 +124,14 @@ export async function POST(): Promise<NextResponse> {
       skills: profile.skills,
       workExperience: profile.work_experience,
       education: profile.education,
+      personalProjects: profile.personal_projects,
     };
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       response_format: { type: "json_object" },
       temperature: 0.7,
-      max_tokens: 1500,
+      max_tokens: 1800,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {
@@ -194,8 +195,8 @@ export async function POST(): Promise<NextResponse> {
       skills: (profile.work_experience ?? [])[i]?.skills ?? [],
     }));
 
-    // Compute years of experience per skill from work history
-    const skillYears = computeSkillYears(profile.work_experience);
+    // Compute years of experience per skill from work history + personal projects
+    const skillYears = computeSkillYears(profile.work_experience, profile.personal_projects as PersonalProject[] | null);
 
     // Render PDF buffer
     // Cast required: renderToBuffer expects ReactElement<DocumentProps>, but our wrapper

@@ -99,7 +99,9 @@ export async function generateCoverLetter(
           const dateRange = p.startDate ? [p.startDate, p.currentlyWorking ? "present" : p.endDate].filter(Boolean).join("–") : null;
           const parts = [`${p.name}${dateRange ? ` (${dateRange})` : ""}: ${p.description}`];
           if (p.skills.length > 0) parts.push(`Skills: ${p.skills.join(", ")}`);
-          if (p.url) parts.push(`URL: ${p.url}`);
+          if (p.url) parts.push(`Live: ${p.url}`);
+          if (p.githubUrl) parts.push(`GitHub: ${p.githubUrl}`);
+          if (p.videoUrl) parts.push(`Video: ${p.videoUrl}`);
           return parts.join(" — ");
         })
         .join("\n")
@@ -136,6 +138,7 @@ Rules:
 - Draw on ALL skills listed under "All skills" and "Full work history" — the "Matched skills" list is a hint, not a limit
 - Where the candidate has years of experience for a skill relevant to this role, include the specific number naturally in the letter (e.g. "5 years of React" or "3 years building with TypeScript") — use the skill experience data provided
 - Connect specific past work to what this role actually requires, drawing from the full work history including older roles
+- If the candidate has personal projects with a live URL or GitHub URL, reference at least one project by name and include its URL inline — e.g. "you can see this at https://..." — real links turn claims into proof
 - If company research is provided, reference one concrete specific detail (not generic praise)
 - Acknowledge skill gaps honestly and briefly — one sentence max, frame as adjacent strength or quick ramp
 - Close with a direct, confident call to action — not "I hope to hear from you"

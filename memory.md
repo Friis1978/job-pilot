@@ -1,71 +1,54 @@
-# Memory — Profile Enrichment: What Drives You + Personal Projects
+# Memory — Personal Projects Resume + PDF Layout Fixes
 
 Last updated: 2026-06-17
 
 ## What was built
 
-### jobviewtrack URL resolution (continued from last session)
-- **`agent/find-jobs.ts`** — New `resolveTrackingUrl` function sends `Referer: https://www.careerjet.dk/` when following jobviewtrack URLs. Called before `enrichJobDescription`. If resolution succeeds, the employer URL replaces the tracking URL in the saved job. `AGGREGATOR_DOMAINS` moved to module level, shared by both functions.
+### Personal Projects in Resume PDF
+- **`app/api/resume/generate/route.ts`** — `personalProjects` added to `profileInput` so GPT can mention them in the summary. Summary rule updated to name one notable project. `computeSkillYears` now includes personal projects as second arg. `max_tokens` bumped to 1800. `PersonalProject` imported from `@/types`.
+- **`app/api/resume/ResumePDF.tsx`** — New Personal Projects section after Work Experience. Uses `projectDesc` style (no `flex: 1`) to fix react-pdf height calculation bug. Skills filtered to ≤25 chars, max 8 shown (one row). Full description shown (no truncation). Links rendered with `Link` component from react-pdf — `LIVE`, `GITHUB`, `VIDEO` labels in small caps with clickable accent-colored URLs.
 
-### "What Drives You" profile section
-New DB columns added to `profiles`: `motivation`, `proud_achievement`, `energy_tasks`, `company_type_preference` (text[]), `career_vision`
+### GitHub & Video URL fields on Personal Projects
+- **`types/index.ts`** — `PersonalProject` type now has `githubUrl?: string` and `videoUrl?: string`. `ProfileFormInput.personalProjects` array type updated to include both.
+- **`components/profile/ProfileForm.tsx`** — `PersonalProjectEntry` type updated. `profileToFormData` maps new fields. `addProject` initializes both to `""`. Single URL input replaced with 3-column grid: Live URL · GitHub · Video. Description textarea changed from `resize-none` to `resize-y`.
+- **`agent/generate-cover-letter.ts`** — Projects text now appends `GitHub:` and `Video:` URLs alongside `Live:`. New system prompt rule: if project has a live URL or GitHub URL, reference it inline in the letter body.
 
-- **`types/index.ts`** — Added all 5 fields to `Profile` and `ProfileFormInput`
-- **`actions/profile.ts`** — All 5 fields mapped and saved
-- **`components/profile/ProfileForm.tsx`** — New `SectionAccordion` section "What Drives You" (between Job Preferences and Cover Letter Instructions):
-  - Motivation (textarea)
-  - Key Achievement (textarea)
-  - What Gives You Energy (textarea)
-  - Preferred Company Type (toggle pill multi-select: Startup, Scale-up, Established corporation, Agency/consultancy, Public sector, Non-profit)
-  - Career Vision (textarea)
-- **`agent/generate-cover-letter.ts`** — All 5 fields passed into candidate context; company type preference adds a rule to the system prompt
-
-### Personal Projects section
-New DB column: `personal_projects JSONB` on `profiles`
-
-- **`types/index.ts`** — New `PersonalProject` type: `{ name, description, url?, skills[], startDate?, endDate?, currentlyWorking? }`. Added to `Profile` and `ProfileFormInput`
-- **`actions/profile.ts`** — `personal_projects` saved as JSONB
-- **`components/profile/ProfileForm.tsx`** — New "Personal Projects" section (between Work Experience and Education):
-  - Per-project accordion (chevron toggle, opens by default when added)
-  - Fields: Project Name, From (month), To (month) + "Still active" checkbox, Description, URL, Skills Used
-  - Skills use chip UI with "from your profile" suggestions; rendered in accent color
-  - Accordion header shows name + date range
-- **`lib/utils.ts`** — `computeSkillYears` now accepts optional `extraPeriods` second arg so personal project skill durations are counted alongside work experience
-- **`agent/find-jobs.ts`** — Personal projects passed to `computeSkillYears` in scoring context; project names + skills appended to candidate context
-- **`agent/generate-cover-letter.ts`** — Personal projects included in candidate context with date range, description, and skills; also passed to `computeSkillYears` for skill years tracking
+### DB updates (direct SQL)
+- Job Pilot description in `personal_projects[0]` restored to original full text after being accidentally shortened.
+- Bandfolio description in `personal_projects[1]` shortened to 290-char resume-appropriate version: "Multi-tenant CMS for musicians and bands, built entirely through a 4-phase AI-orchestrated CI/CD pipeline..."
 
 ## Decisions made
 
-- **`PersonalProject` shape mirrors `WorkExperience`** for date fields (`startDate`, `endDate`, `currentlyWorking`) — this lets `computeSkillYears` accept both types via a shared `SkillPeriod` interface, no duplication.
-- **Personal project skills are self-assessed** — no validation against work history; trust the user's own judgment on what skills they used.
-- **`computeSkillYears` extended, not duplicated** — added optional `extraPeriods` parameter typed as `SkillPeriod[]` (duck-typed; accepts anything with the right shape). All callers still work without changes.
-- **Refresh token source**: InsForge puts refresh token in `Set-Cookie` header on the exchange endpoint, not JSON body — always extract from header in `app/auth/callback/route.ts`.
-- **`proxy.ts` not `middleware.ts`**: Next.js 16 uses `proxy.ts`. Never create `middleware.ts` — causes startup conflict.
-- **Toast types**: success = save success, error = failures, warning = partial success, info = neutral outcomes.
+- **`projectDesc` style, not `bulletText`** — The react-pdf height calculation bug on wrapping Text nodes was caused by `bulletText` having `flex: 1`. Outside a `flexDirection: "row"` container, `flex: 1` expands the text vertically, making react-pdf think the block is taller than it is and placing the next block too early (overlap). Fix: dedicated `projectDesc` style with no `flex` property.
+- **Skills filter for PDF**: show only skills ≤25 chars, max 8 — prevents long multi-word skills like "Component architecture (custom + PrimeVue + Tailwind composition)" from blowing out the row height.
+- **Full description in PDF**: no truncation now that the height bug is fixed. If the description overflows a page, react-pdf handles it naturally.
+- **Links use `Link` component**: react-pdf's `Link` makes URLs clickable in PDF viewers. Labels shown as small-caps muted text, URL as accent-colored link text.
 
 ## Problems solved
 
-- **`personalProjects` declared after use in generate-cover-letter.ts**: `personalProjects` variable was referenced in `computeSkillYears` call before its `const` declaration. Fixed by moving declaration above `skillYears`.
-- **Stale `p.year` reference**: After removing `year` from `PersonalProject`, the cover letter agent still referenced `p.year`. Fixed by computing `dateRange` from `startDate`/`endDate`/`currentlyWorking`.
-- **jobviewtrack not resolving**: Required `Referer: https://www.careerjet.dk/` header — without it the server bounces back to Careerjet. Fixed with dedicated `resolveTrackingUrl`.
-- **Persistent logout**: InsForge returns refresh token only via `Set-Cookie` header. Fixed in `app/auth/callback/route.ts`.
+- **react-pdf height miscalculation on personal projects**: Root cause was `flex: 1` on `bulletText` style used outside a row container. Fixed by using `projectDesc` (no flex). All previous fixes (truncation, skills chunking) were treating symptoms — this was the actual bug.
+- **Cached resume served after direct SQL update**: After updating `personal_projects` via raw SQL, `updated_at` doesn't auto-bump (no trigger). Fixed by running `UPDATE profiles SET updated_at = NOW()` explicitly after every direct DB edit.
 
 ## Current state
 
-- All "What Drives You" fields save and flow into cover letter generation.
-- Personal Projects section fully functional: add/remove/edit projects with dates, skills, description, URL.
-- Project skill years tracked through `computeSkillYears` and shown in job scoring and cover letters.
-- Auth fix in place — not yet confirmed by a full login cycle in production.
-- jobviewtrack Referer fix in place — not yet confirmed in production (needs a real Danish job search).
+- Personal Projects section in resume PDF: fully functional, full descriptions, clickable links (Live/GitHub/Video), skills shown.
+- GitHub + Video URL fields: in the profile form, saved to DB, shown in PDF and cover letter.
+- Description textarea: resizable by dragging.
+- Cover letter agent: references project URLs inline when present.
+- Bandfolio `personal_projects[1]` description is the shortened version in DB — the profile form will show this shortened version. User may want to expand it back to the full long version in their profile for cover letter use (the PDF will show whatever is in the description field).
 
 ## Next session starts with
 
-Test both unconfirmed fixes in production:
-1. Run a Danish job search (e.g. "frontend udvikler" Copenhagen) — check imported jobs' `external_apply_url` in DB. Should be employer domain, not `jobviewtrack.com`.
-2. Log out, log back in, wait 6+ minutes — confirm session persists (auth fix).
+Verify the resume PDF renders correctly with the new Personal Projects section — check that:
+1. Full descriptions show without overlap
+2. Links (Live/GitHub/Video) are clickable
+3. Skills row doesn't overflow
+
+Then add GitHub/Video URLs for both projects in the profile form and save.
 
 ## Open questions
 
-- Does the jobviewtrack Referer fix actually resolve to employer URLs in production?
-- Has the auth fix been confirmed working after a full login cycle?
+- Does the jobviewtrack Referer fix actually resolve to employer URLs in production? (unconfirmed from previous session)
+- Has the auth fix (refresh token from Set-Cookie header) been confirmed after a full login cycle? (unconfirmed from previous session)
+- Bandfolio description in DB is the shortened resume version — should the full long description be stored separately for cover letter use, or is the shortened version acceptable for both?
 - `console.log` may still exist in `agent/research-company.ts` from a previous session — check and remove if present.

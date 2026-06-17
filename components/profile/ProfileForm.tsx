@@ -24,6 +24,8 @@ type PersonalProjectEntry = {
   name: string;
   description: string;
   url: string;
+  githubUrl: string;
+  videoUrl: string;
   skills: string[];
   startDate: string;
   endDate: string;
@@ -197,6 +199,8 @@ function profileToFormData(p: Profile | null | undefined): FormData {
       name: proj.name ?? "",
       description: proj.description ?? "",
       url: proj.url ?? "",
+      githubUrl: proj.githubUrl ?? "",
+      videoUrl: proj.videoUrl ?? "",
       skills: proj.skills ?? [],
       startDate: proj.startDate ?? "",
       endDate: proj.endDate ?? "",
@@ -434,7 +438,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
       ...prev,
       personalProjects: [
         ...prev.personalProjects,
-        { id: newId, name: "", description: "", url: "", skills: [], startDate: "", endDate: "", currentlyWorking: false, skillInput: "" },
+        { id: newId, name: "", description: "", url: "", githubUrl: "", videoUrl: "", skills: [], startDate: "", endDate: "", currentlyWorking: false, skillInput: "" },
       ],
     }));
     setOpenProjects((prev) => new Set([...prev, newId]));
@@ -1299,19 +1303,41 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                         onChange={(e) => updateProject(proj.id, "description", e.target.value)}
                         placeholder="What did you build? What does it do? What problems did it solve?"
                         rows={3}
-                        className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-none"
+                        className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-y"
                       />
                     </div>
 
-                    <div>
-                      <label className={labelClass}>URL (Optional)</label>
-                      <input
-                        type="url"
-                        value={proj.url}
-                        onChange={(e) => updateProject(proj.id, "url", e.target.value)}
-                        placeholder="https://github.com/you/project"
-                        className={inputClass}
-                      />
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className={labelClass}>Live URL (Optional)</label>
+                        <input
+                          type="url"
+                          value={proj.url}
+                          onChange={(e) => updateProject(proj.id, "url", e.target.value)}
+                          placeholder="https://myproject.com"
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>GitHub (Optional)</label>
+                        <input
+                          type="url"
+                          value={proj.githubUrl}
+                          onChange={(e) => updateProject(proj.id, "githubUrl", e.target.value)}
+                          placeholder="https://github.com/you/repo"
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Video (Optional)</label>
+                        <input
+                          type="url"
+                          value={proj.videoUrl}
+                          onChange={(e) => updateProject(proj.id, "videoUrl", e.target.value)}
+                          placeholder="https://youtube.com/watch?v=..."
+                          className={inputClass}
+                        />
+                      </div>
                     </div>
 
                     <div>

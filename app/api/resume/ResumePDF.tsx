@@ -4,6 +4,7 @@ import {
   Text,
   View,
   StyleSheet,
+  Link,
 } from "@react-pdf/renderer";
 import type { Profile } from "@/types";
 
@@ -172,6 +173,31 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: MUTED,
   },
+  // Personal projects
+  projectDesc: {
+    fontSize: 9,
+    color: TEXT,
+    lineHeight: 1.5,
+  },
+  projectLinks: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 3,
+    gap: 10,
+  },
+  projectLink: {
+    fontSize: 8,
+    color: ACCENT,
+    textDecoration: "none",
+  },
+  projectLinkLabel: {
+    fontSize: 7,
+    color: MUTED,
+    fontFamily: "Helvetica-Bold",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+    marginRight: 2,
+  },
 });
 
 function formatDateRange(
@@ -315,6 +341,63 @@ export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
                 ))}
               </View>
             ))}
+          </View>
+        ) : null}
+
+        {/* Personal Projects */}
+        {(profile.personal_projects ?? []).length > 0 ? (
+          <View>
+            <Text style={styles.sectionLabel}>Personal Projects</Text>
+            <View style={styles.divider} />
+            {(profile.personal_projects ?? []).map((project, i) => {
+              const desc = project.description;
+              // Show max 8 short skills (≤25 chars) — long multi-word skills blow out row height
+              const shortSkills = (project.skills ?? [])
+                .filter((s) => s.length <= 25)
+                .slice(0, 8);
+              return (
+                <View key={i} style={styles.roleBlock} wrap={false}>
+                  <View style={styles.roleRow}>
+                    <Text style={styles.roleCompany}>{project.name}</Text>
+                    {(project.startDate || project.endDate || project.currentlyWorking) ? (
+                      <Text style={styles.roleDates}>
+                        {formatDateRange(
+                          project.startDate ?? "",
+                          project.endDate ?? "",
+                          project.currentlyWorking ?? false,
+                        )}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {shortSkills.length > 0 ? (
+                    <Text style={styles.roleSkills}>{shortSkills.join("  ·  ")}</Text>
+                  ) : null}
+                  <Text style={styles.projectDesc}>{desc}</Text>
+                  {(project.url || project.githubUrl || project.videoUrl) ? (
+                    <View style={styles.projectLinks}>
+                      {project.url ? (
+                        <View style={{ flexDirection: "row", alignItems: "center" }}>
+                          <Text style={styles.projectLinkLabel}>Live </Text>
+                          <Link src={project.url} style={styles.projectLink}>{project.url}</Link>
+                        </View>
+                      ) : null}
+                      {project.githubUrl ? (
+                        <View style={{ flexDirection: "row", alignItems: "center" }}>
+                          <Text style={styles.projectLinkLabel}>GitHub </Text>
+                          <Link src={project.githubUrl} style={styles.projectLink}>{project.githubUrl}</Link>
+                        </View>
+                      ) : null}
+                      {project.videoUrl ? (
+                        <View style={{ flexDirection: "row", alignItems: "center" }}>
+                          <Text style={styles.projectLinkLabel}>Video </Text>
+                          <Link src={project.videoUrl} style={styles.projectLink}>{project.videoUrl}</Link>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
           </View>
         ) : null}
 

@@ -2,6 +2,8 @@ export type PersonalProject = {
   name: string;
   description: string;
   url?: string;
+  githubUrl?: string;
+  videoUrl?: string;
   skills: string[];
   startDate?: string;
   endDate?: string;
@@ -137,7 +139,7 @@ export type ProfileFormInput = {
   preferredLocations: string;
   coverLetterTone: string;
   coverLetterInstructions: string;
-  personalProjects: { name: string; description: string; url: string; skills: string[]; startDate: string; endDate: string; currentlyWorking: boolean }[];
+  personalProjects: { name: string; description: string; url: string; githubUrl: string; videoUrl: string; skills: string[]; startDate: string; endDate: string; currentlyWorking: boolean }[];
   motivation: string;
   proudAchievement: string;
   energyTasks: string;
