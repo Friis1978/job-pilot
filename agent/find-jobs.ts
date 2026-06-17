@@ -394,6 +394,26 @@ export async function findJobs(
       (r) => r.job.url && !r.job.url.includes("jobviewtrack"),
     );
 
+    const skipped = qualifyingJobs.filter(
+      (r) => !r.job.url || r.job.url.includes("jobviewtrack"),
+    );
+
+    if (skipped.length > 0) {
+      await insforge.database.from("skipped_jobs").insert(
+        skipped.map((r) => ({
+          user_id: userId,
+          run_id: runId,
+          title: r.job.title,
+          company: r.job.company,
+          location: r.job.location,
+          url: r.job.url || null,
+          source: r.job.source,
+          reason: !r.job.url ? "empty_url" : "jobviewtrack_url",
+          match_score: r.matchScore,
+        })),
+      );
+    }
+
     if (jobsWithUrl.length > 0) {
       const jobRecords = jobsWithUrl.map((r) => ({
         user_id: userId,
