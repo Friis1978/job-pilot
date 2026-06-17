@@ -80,13 +80,18 @@ export async function GET(request: NextRequest) {
       sameSite: "lax",
     });
 
+    // InsForge returns the refresh token via Set-Cookie header, not in the JSON body.
+    const setCookieHeader = res.headers.get("set-cookie");
+    const refreshTokenMatch = setCookieHeader?.match(/insforge_refresh_token=([^;]+)/);
+    const extractedRefreshToken = refreshTokenMatch?.[1];
+
     setAuthCookies(
       response.cookies,
-      { accessToken: data.accessToken, refreshToken: data.refreshToken },
+      { accessToken: data.accessToken, refreshToken: extractedRefreshToken },
       {
         options: {
-          accessToken: { maxAge: 60 * 60 * 24 * 7 },   // 7 days
-          refreshToken: { maxAge: 60 * 60 * 24 * 30 },  // 30 days
+          accessToken: { maxAge: 60 * 60 * 24 * 7 },  // 7 days
+          refreshToken: { maxAge: 60 * 60 * 24 * 7 }, // match InsForge's 7-day JWT TTL
         },
       },
     );
