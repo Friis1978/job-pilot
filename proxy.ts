@@ -32,7 +32,7 @@ export async function proxy(request: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     responseCookies: tempResponse.cookies as any,
     // Refresh 2 minutes before expiry so normal page loads keep the token fresh.
-    refreshLeewaySeconds: 120,
+    refreshLeewaySeconds: 180,
     options: {
       accessToken: { maxAge: 60 * 60 * 24 * 7 },   // 7 days
       refreshToken: { maxAge: 60 * 60 * 24 * 30 },  // 30 days
