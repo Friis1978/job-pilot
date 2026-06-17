@@ -1,81 +1,51 @@
-# Memory — Cover Letter Intelligence Upgrade
+# Memory — Careerjet/Aggregator Job Enrichment & Research Agent Fixes
 
 Last updated: 2026-06-17
 
 ## What was built
 
-### Cover letter generation overhaul (`agent/generate-cover-letter.ts`)
+**`agent/find-jobs.ts`** — Three changes:
+1. `enrichJobDescription`: now always enriches aggregator-sourced jobs regardless of description length. Previously skipped if `description.length > 300`, so Careerjet snippets were never enriched.
+2. Removed `.slice(0, 6000)` truncation — full employer page text stored in `about_role` so contact sections at the bottom are never cut off.
+3. Added `browserEnrichJobs` function + Browserbase/Stagehand imports. After HTTP enrichment runs in parallel, aggregator jobs with descriptions still < 1000 chars are visited in one shared real browser session (bypasses Cloudflare). Up to 5 jobs per search run. Uses `timeoutMs: 25000` per page.
 
-**Profile fields added:**
-- `linkedin_url` and `portfolio_url` now fetched from DB and passed to the user message
+**`agent/research-company.ts`** — Two changes:
+1. DDG job search query: extracts brand from "X søger" prefix, uses unquoted core title terms + `kontakt jobbank jobindex karriere` suffix instead of exact-match quoted full title.
+2. Contact/address preservation: if new research run finds nothing for `contactInfo`, `recruiterContact`, or `companyAddress`, existing saved values are kept rather than wiped.
 
-**User message restructured:**
-- "What Drives This Candidate" is now its own labelled block (was buried at end of a long string)
-- `match_reason` added as "Why this job fits the candidate" — was fetched but never passed to GPT
-- LinkedIn and Portfolio URLs appended after the drives block
+**`agent/import-job-from-url.ts`** — Added optional `pastedText?` parameter. When provided (length > 200), skips all HTTP fetching and uses the pasted text directly.
 
-**`coreRules` rewritten into three sections (COMPANY & JOB FIT / WHAT DRIVES THE CANDIDATE / EXPERIENCE & SKILLS):**
-- Motivation: find where it overlaps with company values — make the connection explicit, not implied
-- Energy tasks: cross-reference with what the role requires day-to-day — show candidate will enjoy the work
-- Career vision: connect to where the company is going — shows deliberate choice, not spray-and-pray
-- Key achievement: used as concrete evidence for the letter's strongest claim
-- Company research: show genuine understanding of their world, not name-dropping
-- Match reason: the spine of the letter narrative
+**`app/api/agent/import-url/route.ts`** — Added `text` field parsing, passes it as `pastedText` to `importJobFromUrl`.
 
-**System prompt architecture:**
-- Both paths (custom instructions + default) now share `coreRules`
-- Custom instructions = style guide (HOW to write)
-- Profile data = substance (WHAT to write about)
-- Both always apply — instructions no longer override profile context
-
-### Personal Projects in Resume PDF (`app/api/resume/ResumePDF.tsx`)
-- `Link` component imported from react-pdf
-- LIVE / GITHUB / VIDEO labels in small-caps with clickable accent-colored URLs
-- `projectDesc` style (no `flex: 1`) — fixes react-pdf height miscalculation bug
-- Full description shown (no truncation)
-- Skills filtered ≤25 chars, max 8 per row
-
-### GitHub & Video URL fields (`types/index.ts`, `ProfileForm.tsx`, `generate-cover-letter.ts`)
-- `PersonalProject` type: `githubUrl?: string`, `videoUrl?: string`
-- Profile form: 3-column URL grid (Live · GitHub · Video), description textarea is resizable
-- Cover letter: GitHub and Video URLs passed as project context
-
-### Resume generate route (`app/api/resume/generate/route.ts`)
-- `personalProjects` added to `profileInput`
-- Summary rule: mention one notable project by name
-- `computeSkillYears` includes personal projects
-- `max_tokens` bumped to 1800
+**`components/find-jobs/SearchCard.tsx`** — Added `importText` state + optional textarea below URL input in the "Add from URL" tab. Sends `text` field in POST body only if > 200 chars.
 
 ## Decisions made
 
-- **`coreRules` as shared block**: both the custom-instructions path and the default path include the same content rules — avoids duplication and ensures profile context is always used regardless of which path fires
-- **"What Drives This Candidate" as labelled section**: buried at end of string = easier for GPT to overlook; explicit heading = treated as structured data
-- **`match_reason` in user message**: was already fetched from DB but never passed — now the model sees exactly why the scoring engine flagged this job as a match
-- **`projectDesc` style**: `bulletText` with `flex: 1` outside a row container causes react-pdf to miscalculate block height and overlap content. `projectDesc` has no flex — fixed the root cause
+- **Browserbase for Careerjet**: Plain HTTP always fails Cloudflare Turnstile on Careerjet. One shared session per Find Jobs run — no per-job session overhead.
+- **`timeoutMs` not `timeout`**: Stagehand's `page.goto` uses `timeoutMs`. Consistent with `research-company.ts`.
+- **Max 5 browser jobs per run**: Caps Browserbase usage to avoid excessive session time and cost.
+- **Pasted text for URL import**: User pastes job text when a page is Cloudflare-blocked. Browserbase reserved for automated Find Jobs flow.
 
 ## Problems solved
 
-- **Cover letter instructions overriding profile context**: old prompt said "overrides all default rules" — personal projects, motivation, energy, career vision were being ignored. Fixed by making instructions = style guide, coreRules = always-on content rules
-- **Motivation/energy not cross-referenced with company**: data was passed but instruction was passive ("let them shape the letter"). Rewritten to explicitly tell the model to find the overlap between candidate drives and company culture/role requirements
-- **react-pdf height overlap in Personal Projects**: root cause was `flex: 1` on `bulletText` used outside a `flexDirection: row` container
+- **Careerjet snippets not enriched**: Root cause was `description.length > 300` skip — Careerjet snippets are ~300-500 chars so they passed the threshold but had no contact info. Fixed with `isFromAggregator` check.
+- **Research agent wiping contacts**: Re-running "Research Company" overwrote manually-set contacts. Fixed with preservation logic.
+- **DDG bot challenge in plain HTTP**: DuckDuckGo returns a bot challenge to plain fetch. Works correctly inside Browserbase — not a bug.
 
 ## Current state
 
-- Cover letter generation: fully rebuilt — uses all profile fields, cross-references motivation/energy/vision with company research and job requirements, references project URLs inline
-- Personal Projects in PDF: renders correctly with clickable links, full descriptions
-- GitHub + Video URL fields: in form, saved to DB, used in PDF and cover letter
-- `match_reason` now flows into cover letter generation
-- `linkedin_url` and `portfolio_url` now flow into cover letter generation
+- `browserEnrichJobs` is wired in but **not yet tested** in production — needs a real Find Jobs run with Careerjet results to confirm Cloudflare bypass works.
+- Research agent contact preservation is in place.
+- Pasted text for URL import is live.
 
 ## Next session starts with
 
-Test a cover letter generation end-to-end:
-1. Pick a job that has company research
-2. Generate cover letter — verify motivation/energy/career vision are reflected and cross-referenced with company culture
-3. Verify project URL appears inline in the letter body
+Test `browserEnrichJobs` by running a Find Jobs search for a Danish location (e.g. Copenhagen) that produces Careerjet results — check that saved `about_role` contains contact sections. If Cloudflare still blocks, check Browserbase session screenshots.
 
 ## Open questions
 
-- Does the jobviewtrack Referer fix resolve to employer URLs in production? (unconfirmed)
-- Has the auth fix (refresh token from Set-Cookie) been confirmed after a full login cycle? (unconfirmed)
-- `console.log` may still exist in `agent/research-company.ts` — check and remove
+- Does Browserbase's Chromium actually pass Careerjet's Cloudflare Turnstile, or does it get a "Verify you are human" page? (Turnstile may require user interaction.)
+- For `jobviewtrack.com` URLs that redirect back to Careerjet: the browser will visit a jobviewtrack URL — will it follow through to Careerjet and pass Cloudflare? Needs verification.
+- Should `browserEnrichJobs` guard on `BROWSERBASE_PROJECT_ID` env var to avoid crashes in environments without it configured?
+- Does the jobviewtrack Referer fix resolve to employer URLs in production? (unconfirmed from prior sessions)
+- Has the auth fix (refresh token from Set-Cookie) been confirmed after a full login cycle? (unconfirmed from prior sessions)

@@ -14,12 +14,13 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const url = typeof body?.url === "string" ? body.url.trim() : "";
+    const pastedText = typeof body?.text === "string" ? body.text.trim() : undefined;
 
     if (!url || !url.startsWith("http")) {
       return NextResponse.json({ error: "A valid URL is required." }, { status: 400 });
     }
 
-    const result = await importJobFromUrl(user.id, url);
+    const result = await importJobFromUrl(user.id, url, pastedText);
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });

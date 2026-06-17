@@ -20,6 +20,7 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
 
   // URL tab state
   const [importUrl, setImportUrl] = useState("");
+  const [importText, setImportText] = useState("");
   const [importing, setImporting] = useState(false);
   const [importSuccess, setImportSuccess] = useState(false);
 
@@ -88,7 +89,10 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
       const res = await fetch("/api/agent/import-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: importUrl.trim() }),
+        body: JSON.stringify({
+          url: importUrl.trim(),
+          ...(importText.trim().length > 200 ? { text: importText.trim() } : {}),
+        }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -101,6 +105,7 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
 
       setImportSuccess(true);
       setImportUrl("");
+      setImportText("");
       router.refresh();
     } catch (err) {
       clearTimeout(timeoutId);
@@ -174,8 +179,20 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
               {importing ? "Importing..." : "Import Job"}
             </button>
           </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+              Job Text <span className="normal-case font-normal text-text-muted">(optional — paste full text if the page is login-protected)</span>
+            </label>
+            <textarea
+              placeholder="Paste the full job description here if the URL is behind Cloudflare or requires login..."
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              rows={4}
+              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent resize-y"
+            />
+          </div>
           <p className="text-xs text-text-muted">
-            Works with most job boards and company career pages. LinkedIn requires login and cannot be imported automatically.
+            Works with most job boards and company career pages. For Cloudflare-protected pages, paste the job text above.
           </p>
           {importSuccess && (
             <div className="flex items-center gap-3 rounded-xl bg-success-lightest px-4 py-3">

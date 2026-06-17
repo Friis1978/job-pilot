@@ -295,6 +295,7 @@ export async function researchCompany(
       matched_skills: string[] | null;
       missing_skills: string[] | null;
       source_url: string | null;
+      company_research: Record<string, unknown> | null;
     };
 
     // Load profile
@@ -628,6 +629,169 @@ Only include contacts explicitly named in the text. Distinguish internal contact
       await stagehand.init();
       const page = stagehand.context.activePage()!;
 
+      // Helper: extract text from a page and process it with GPT-4o, updating companyResearchRaw
+      const extractPageForJobPosting = async (pageText: string): Promise<boolean> => {
+        if (!pageText || pageText.length < 300) return false;
+        try {
+          const res = await openai.chat.completions.create({
+            model: "gpt-4o",
+            response_format: { type: "json_object" },
+            temperature: 0,
+            max_tokens: 1000,
+            messages: [
+              {
+                role: "system",
+                content: `Extract from this job posting page. May be in any language (Danish, English, etc.).
+Return ONLY valid JSON:
+{
+  "contactName": "<hiring manager or HR contact full name — or null>",
+  "contactTitle": "<their job title — or null>",
+  "contactEmail": "<email address — or null>",
+  "contactPhone": "<phone number — or null>",
+  "recruiterName": "<external recruiter name — or null>",
+  "recruiterTitle": "<recruiter title — or null>",
+  "recruiterEmail": "<recruiter email — or null>",
+  "recruiterPhone": "<recruiter phone — or null>",
+  "recruiterCompany": "<recruiting agency name — or null>",
+  "culturePoints": ["<sentences from About us / Om os / company description sections>"],
+  "fullJobText": "<the complete job description: all responsibilities, requirements, about the company — NOT a summary>"
+}
+Only extract contacts explicitly named in the text.`,
+              },
+              { role: "user", content: pageText.slice(0, 12000) },
+            ],
+          });
+          const raw = res.choices[0]?.message?.content;
+          if (!raw) return false;
+          const parsed = JSON.parse(raw) as {
+            contactName?: string | null; contactTitle?: string | null;
+            contactEmail?: string | null; contactPhone?: string | null;
+            recruiterName?: string | null; recruiterTitle?: string | null;
+            recruiterEmail?: string | null; recruiterPhone?: string | null;
+            recruiterCompany?: string | null;
+            culturePoints?: string[]; fullJobText?: string | null;
+          };
+          if (parsed.contactName || parsed.contactEmail || parsed.contactPhone) {
+            const ex = companyResearchRaw.contactFromJobPosting;
+            companyResearchRaw.contactFromJobPosting = {
+              name: ex?.name ?? parsed.contactName ?? null,
+              title: ex?.title ?? parsed.contactTitle ?? null,
+              email: ex?.email ?? parsed.contactEmail ?? null,
+              phone: ex?.phone ?? parsed.contactPhone ?? null,
+            };
+          }
+          if (parsed.recruiterName || parsed.recruiterEmail) {
+            const ex = companyResearchRaw.recruiterContact;
+            companyResearchRaw.recruiterContact = {
+              name: ex?.name ?? parsed.recruiterName ?? null,
+              title: ex?.title ?? parsed.recruiterTitle ?? null,
+              email: ex?.email ?? parsed.recruiterEmail ?? null,
+              phone: ex?.phone ?? parsed.recruiterPhone ?? null,
+              company: ex?.company ?? parsed.recruiterCompany ?? null,
+            };
+          }
+          if (parsed.culturePoints?.length) {
+            companyResearchRaw.subPages.push({
+              keyPoints: [], technologies: [],
+              valuesOrCulture: parsed.culturePoints,
+              notable: [], address: null,
+            });
+          }
+          if (parsed.fullJobText && parsed.fullJobText.length > (job.about_role?.length ?? 0) + 200) {
+            console.log(`[research-company] found fuller JD: ${parsed.fullJobText.length} chars (was ${job.about_role?.length ?? 0})`);
+            job.about_role = parsed.fullJobText;
+            await insforge.database.from("jobs").update({ about_role: parsed.fullJobText }).eq("id", jobId).eq("user_id", userId);
+          }
+          const foundContact = !!(parsed.contactName || parsed.contactEmail);
+          console.log(`[research-company] job page extract: contact=${parsed.contactName ?? "none"}, email=${parsed.contactEmail ?? "none"}, jdLen=${parsed.fullJobText?.length ?? 0}`);
+          return foundContact;
+        } catch {
+          return false;
+        }
+      };
+
+      // ── DuckDuckGo: find original job posting ──────────────────────────────
+      // Searches for the job posting on indexed pages (Jobbank.dk, company careers
+      // page, etc.) to find the full description and contact person. This bypasses
+      // Cloudflare-protected source URLs entirely.
+      let contactFoundViaSearch = false;
+
+      const PREFER_JOB_BOARDS = ["jobbank.dk", "jobindex.dk", "karriere.dk", "thehub.io", "linkedin.com"];
+      const SKIP_JOB_SEARCH = ["careerjet", "jooble", "jobviewtrack", "stepstone", "adzuna", "facebook.com", "twitter.com", "youtube.com"];
+
+      const extractDdgLinks = async (): Promise<string[]> => {
+        const links = await page.evaluate(() =>
+          Array.from(document.querySelectorAll(".result__a"))
+            .slice(0, 8)
+            .map((a) => {
+              const href = (a as HTMLAnchorElement).href ?? "";
+              const m = href.match(/[?&]uddg=([^&]+)/);
+              return m ? decodeURIComponent(m[1]) : href;
+            })
+            .filter((u) => u.startsWith("http"))
+        ) as string[];
+        return [
+          ...links.filter((u) => PREFER_JOB_BOARDS.some((d) => u.includes(d))),
+          ...links.filter((u) => !PREFER_JOB_BOARDS.some((d) => u.includes(d)) && !SKIP_JOB_SEARCH.some((d) => u.includes(d))),
+        ];
+      };
+
+      try {
+        // Extract brand alias from "YouSee søger …" pattern — brand in title often differs
+        // from the stored company name (e.g. "YouSee" vs "Nuuday")
+        const brandMatch = job.title.match(/^([\w\s]{2,30}?)\s+søger\b/i);
+        const titleBrand = brandMatch ? brandMatch[1].trim() : null;
+
+        // Extract meaningful technical keywords from the core job title
+        // (strip the "BrandName søger" prefix and common function words)
+        const TITLE_STOP_WORDS = new Set(["søger", "senior", "junior", "lead", "and", "for", "med", "til", "ved", "hos"]);
+        const coreTitleTerms = job.title
+          .replace(/^[\w\s]+?\s+søger\s*/i, "")
+          .replace(/["""()/\\]/g, " ")
+          .split(/[\s/]+/)
+          .filter((w) => w.length > 3 && !TITLE_STOP_WORDS.has(w.toLowerCase()))
+          .slice(0, 4);
+
+        // Include brand alias so we match both "Nuuday" and "YouSee" on job boards
+        const companyTerms = [job.company];
+        if (titleBrand && titleBrand.toLowerCase() !== job.company.toLowerCase()) {
+          companyTerms.push(titleBrand);
+        }
+
+        const jobSearchQuery = `${companyTerms.join(" ")} ${coreTitleTerms.join(" ")} kontakt jobbank jobindex karriere`;
+        console.log(`[research-company] job posting DDG query: ${jobSearchQuery}`);
+        await page.goto(
+          `https://html.duckduckgo.com/html/?q=${encodeURIComponent(jobSearchQuery)}&kl=dk-da`,
+          { waitUntil: "load", timeoutMs: 15000 },
+        );
+        let sortedLinks = await extractDdgLinks();
+
+        // Fallback: if first search returned nothing, try simpler company + job query
+        if (sortedLinks.length === 0) {
+          const fallbackQuery = `"${job.company}" job kontakt stillingsbeskrivelse`;
+          console.log(`[research-company] job posting DDG fallback: ${fallbackQuery}`);
+          await page.goto(
+            `https://html.duckduckgo.com/html/?q=${encodeURIComponent(fallbackQuery)}&kl=dk-da`,
+            { waitUntil: "load", timeoutMs: 15000 },
+          );
+          sortedLinks = await extractDdgLinks();
+        }
+
+        console.log(`[research-company] job posting DDG found ${sortedLinks.length} candidates`);
+        for (const url of sortedLinks.slice(0, 3)) {
+          try {
+            await page.goto(url, { waitUntil: "networkidle", timeoutMs: 20000 });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const text = (await page.evaluate(() => (document as any).body.innerText)) as string;
+            console.log(`[research-company] visiting DDG result: ${url} (${text?.length ?? 0} chars)`);
+            const found = await extractPageForJobPosting(text);
+            if (found) { contactFoundViaSearch = true; break; }
+          } catch { /* try next */ }
+        }
+      } catch (jobSearchErr) {
+        console.error("[research-company] job posting DDG search failed", jobSearchErr);
+      }
+
       // Job posting contact extraction — runs first, uses real browser to handle JS-rendered ATS pages
       if (job.source_url) {
         try {
@@ -650,98 +814,18 @@ Only include contacts explicitly named in the text. Distinguish internal contact
 
           // ── Pre-click-through extraction ─────────────────────────────────────
           // Job boards (Careerjet, Jobbank, etc.) show the FULL job description
-          // on their own page. Extract it NOW, before navigating away to the
-          // employer's site. This is the most reliable source for contact info
-          // and the complete JD when about_role was truncated at import time.
+          // on their own page. Extract it NOW before navigating away.
           try {
             const preClickUrl = page.url();
             const onJobBoardPreClick = JOB_BOARD_CLICKTHROUGH_DOMAINS.some((d) => preClickUrl.includes(d));
-            if (onJobBoardPreClick) {
+            if (onJobBoardPreClick && !contactFoundViaSearch) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const boardText = (await page.evaluate(() => (document as any).body.innerText)) as string;
-              console.log(`[research-company] job board pre-click text: ${boardText?.length ?? 0} chars from ${preClickUrl}`);
-              if (boardText && boardText.length > 300) {
-                const boardExtract = await openai.chat.completions.create({
-                  model: "gpt-4o",
-                  response_format: { type: "json_object" },
-                  temperature: 0,
-                  max_tokens: 1000,
-                  messages: [
-                    {
-                      role: "system",
-                      content: `Extract from this job board page. The text may be in any language (Danish, Swedish, English, etc.).
-Return ONLY valid JSON:
-{
-  "contactName": "<full name of an internal hiring contact at the employer — or null>",
-  "contactTitle": "<their job title — or null>",
-  "contactEmail": "<email address — or null>",
-  "contactPhone": "<phone number — or null>",
-  "recruiterName": "<external recruiter full name — or null>",
-  "recruiterTitle": "<recruiter title — or null>",
-  "recruiterEmail": "<recruiter email — or null>",
-  "recruiterPhone": "<recruiter phone — or null>",
-  "recruiterCompany": "<recruiting agency name — or null>",
-  "culturePoints": ["<sentences from About us / Om os / company description sections>"],
-  "fullJobText": "<the complete job description: all responsibilities, requirements, company description — NOT a summary, the actual text>"
-}
-Only extract contacts explicitly named. fullJobText should be the raw job description text, not a summary.`,
-                    },
-                    { role: "user", content: boardText.slice(0, 12000) },
-                  ],
-                });
-                const boardRaw = boardExtract.choices[0]?.message?.content;
-                if (boardRaw) {
-                  const board = JSON.parse(boardRaw) as {
-                    contactName?: string | null; contactTitle?: string | null;
-                    contactEmail?: string | null; contactPhone?: string | null;
-                    recruiterName?: string | null; recruiterTitle?: string | null;
-                    recruiterEmail?: string | null; recruiterPhone?: string | null;
-                    recruiterCompany?: string | null;
-                    culturePoints?: string[];
-                    fullJobText?: string | null;
-                  };
-                  if (board.contactName || board.contactEmail || board.contactPhone) {
-                    const ex = companyResearchRaw.contactFromJobPosting;
-                    companyResearchRaw.contactFromJobPosting = {
-                      name: ex?.name ?? board.contactName ?? null,
-                      title: ex?.title ?? board.contactTitle ?? null,
-                      email: ex?.email ?? board.contactEmail ?? null,
-                      phone: ex?.phone ?? board.contactPhone ?? null,
-                    };
-                  }
-                  if (board.recruiterName || board.recruiterEmail) {
-                    const ex = companyResearchRaw.recruiterContact;
-                    companyResearchRaw.recruiterContact = {
-                      name: ex?.name ?? board.recruiterName ?? null,
-                      title: ex?.title ?? board.recruiterTitle ?? null,
-                      email: ex?.email ?? board.recruiterEmail ?? null,
-                      phone: ex?.phone ?? board.recruiterPhone ?? null,
-                      company: ex?.company ?? board.recruiterCompany ?? null,
-                    };
-                  }
-                  if (board.culturePoints?.length) {
-                    companyResearchRaw.subPages.push({
-                      keyPoints: [], technologies: [],
-                      valuesOrCulture: board.culturePoints,
-                      notable: [], address: null,
-                    });
-                  }
-                  // Update about_role if we found a substantially fuller description
-                  if (board.fullJobText && board.fullJobText.length > (job.about_role?.length ?? 0) + 200) {
-                    console.log(`[research-company] job board has fuller JD: ${board.fullJobText.length} chars (was ${job.about_role?.length ?? 0})`);
-                    job.about_role = board.fullJobText;
-                    await insforge.database
-                      .from("jobs")
-                      .update({ about_role: board.fullJobText })
-                      .eq("id", jobId)
-                      .eq("user_id", userId);
-                  }
-                  console.log(`[research-company] pre-click extracted: contact=${board.contactName ?? "none"}, fullJD=${board.fullJobText?.length ?? 0} chars`);
-                }
-              }
+              console.log(`[research-company] job board pre-click: ${boardText?.length ?? 0} chars from ${preClickUrl}`);
+              await extractPageForJobPosting(boardText);
             }
           } catch (preClickErr) {
-            console.error("[research-company] pre-click-through extraction failed", preClickErr);
+            console.error("[research-company] pre-click extraction failed", preClickErr);
           }
 
           try {
@@ -801,98 +885,13 @@ Only extract contacts explicitly named. fullJobText should be the raw job descri
             }
           }
 
-          // Primary contact extraction: read the full rendered page text via body.innerText.
-          // This runs BEFORE Stagehand's screenshot-based extract() so it has higher priority.
-          // Stagehand only sees the visible viewport — contacts on Danish job postings
-          // (e.g. "Interesseret? Vi samarbejder med Right People Group…", sidebar contact)
-          // often appear below the fold and are missed by screenshot extraction.
+          // Primary contact extraction — read full rendered page text
           console.log(`[research-company] navigated to source_url, current URL: ${page.url()}`);
           try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const pageText = (await page.evaluate(() => (document as any).body.innerText)) as string;
             console.log(`[research-company] body.innerText length: ${pageText?.length ?? 0}`);
-            if (pageText && pageText.length > 10) {
-              console.log(`[research-company] innerText tail (last 800 chars): ${pageText.slice(-800)}`);
-            }
-
-            if (pageText && pageText.length > 200) {
-              const pageExtractResponse = await openai.chat.completions.create({
-                model: "gpt-4o",
-                response_format: { type: "json_object" },
-                temperature: 0,
-                max_tokens: 900,
-                messages: [
-                  {
-                    role: "system",
-                    content: `Extract from this job posting page. The text may be in any language (Danish, Swedish, English, etc.). Read the entire text — contact info often appears at the end.
-Return ONLY valid JSON:
-{
-  "contactName": "<full name of an internal hiring contact at the employer company — or null>",
-  "contactTitle": "<their job title — or null>",
-  "contactEmail": "<their email address — or null>",
-  "contactPhone": "<their phone number — or null>",
-  "recruiterName": "<full name of an external recruiter at a staffing/recruitment agency — or null>",
-  "recruiterTitle": "<recruiter job title — or null>",
-  "recruiterEmail": "<recruiter email address — or null>",
-  "recruiterPhone": "<recruiter phone number — or null>",
-  "recruiterCompany": "<name of the recruitment/staffing agency — or null>",
-  "culturePoints": ["<up to 3 sentences from 'Hvem er vi?', 'Om os', 'About us', or similar company identity sections>"]
-}
-Only include contacts explicitly named in the text. Distinguish internal contacts (work at hiring company) from recruiters (work at agency).`,
-                  },
-                  { role: "user", content: pageText.slice(0, 10000) },
-                ],
-              });
-
-              const pageRaw = pageExtractResponse.choices[0]?.message?.content;
-              console.log(`[research-company] page text GPT-4o raw: ${pageRaw?.slice(0, 500)}`);
-              if (pageRaw) {
-                const pageParsed = JSON.parse(pageRaw) as {
-                  contactName?: string | null;
-                  contactTitle?: string | null;
-                  contactEmail?: string | null;
-                  contactPhone?: string | null;
-                  recruiterName?: string | null;
-                  recruiterTitle?: string | null;
-                  recruiterEmail?: string | null;
-                  recruiterPhone?: string | null;
-                  recruiterCompany?: string | null;
-                  culturePoints?: string[];
-                };
-
-                if (pageParsed.contactName || pageParsed.contactEmail || pageParsed.contactPhone) {
-                  const existing = companyResearchRaw.contactFromJobPosting;
-                  companyResearchRaw.contactFromJobPosting = {
-                    name: existing?.name ?? pageParsed.contactName ?? null,
-                    title: existing?.title ?? pageParsed.contactTitle ?? null,
-                    email: existing?.email ?? pageParsed.contactEmail ?? null,
-                    phone: existing?.phone ?? pageParsed.contactPhone ?? null,
-                  };
-                }
-
-                if (pageParsed.recruiterName || pageParsed.recruiterEmail || pageParsed.recruiterPhone) {
-                  const existing = companyResearchRaw.recruiterContact;
-                  companyResearchRaw.recruiterContact = {
-                    name: existing?.name ?? pageParsed.recruiterName ?? null,
-                    title: existing?.title ?? pageParsed.recruiterTitle ?? null,
-                    email: existing?.email ?? pageParsed.recruiterEmail ?? null,
-                    phone: existing?.phone ?? pageParsed.recruiterPhone ?? null,
-                    company: existing?.company ?? pageParsed.recruiterCompany ?? null,
-                  };
-                }
-
-                const culturePoints = pageParsed.culturePoints ?? [];
-                if (culturePoints.length > 0) {
-                  companyResearchRaw.subPages.push({
-                    keyPoints: [],
-                    technologies: [],
-                    valuesOrCulture: culturePoints,
-                    notable: [],
-                    address: null,
-                  });
-                }
-              }
-            }
+            await extractPageForJobPosting(pageText);
           } catch (pageTextErr) {
             console.error("[agent/research-company] page text extraction failed", pageTextErr);
           }
@@ -1408,6 +1407,26 @@ Work history: ${JSON.stringify((profile.work_experience ?? []).slice(0, 3))}`;
       dossier = JSON.parse(response.choices[0].message.content!);
       // Override sources with actual scraped URLs — GPT-4o tends to hallucinate these
       dossier.sources = [...new Set(companyResearchRaw.sourceUrls.filter(Boolean))];
+
+      // Preserve existing contact info and address if this run found nothing new.
+      // Research runs on Cloudflare-protected jobs often can't access the source page,
+      // so previously saved (or manually entered) contacts must not be wiped.
+      const existing = job.company_research;
+      if (existing) {
+        const existingContact = existing.contactInfo as { name?: string | null; email?: string | null } | null;
+        const newContact = dossier.contactInfo as { name?: string | null; email?: string | null } | null;
+        if (!newContact?.name && !newContact?.email && (existingContact?.name || existingContact?.email)) {
+          dossier.contactInfo = existingContact;
+        }
+        const existingRecruiter = existing.recruiterContact as { name?: string | null } | null;
+        const newRecruiter = dossier.recruiterContact as { name?: string | null } | null;
+        if (!newRecruiter?.name && existingRecruiter?.name) {
+          dossier.recruiterContact = existingRecruiter;
+        }
+        if (!dossier.companyAddress && existing.companyAddress) {
+          dossier.companyAddress = existing.companyAddress;
+        }
+      }
     } catch (synthesisErr) {
       console.error(
         "[agent/research-company] synthesis failed",

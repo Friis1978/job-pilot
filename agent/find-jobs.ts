@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { Stagehand } from "@browserbasehq/stagehand";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { searchJobs } from "@/lib/adzuna";
@@ -6,6 +7,7 @@ import { searchJobsSweden } from "@/lib/jobtech";
 import { searchJobsJooble } from "@/lib/jooble";
 import { searchJobsCareerjet } from "@/lib/careerjet";
 import { searchJobsGlassdoor } from "@/lib/glassdoor";
+import { browserbase } from "@/lib/browserbase";
 import { MATCH_THRESHOLD, stripHtml, computeSkillYears, getLocationAliases, normalizeLocationToEnglish } from "@/lib/utils";
 import type { Profile, AdzunaJob, NormalizedJob, ScoredJob, PersonalProject } from "@/types";
 
@@ -52,8 +54,11 @@ async function enrichJobDescription(job: NormalizedJob): Promise<NormalizedJob> 
   const resolvedUrl = await resolveTrackingUrl(job.url);
   const improved: NormalizedJob = resolvedUrl !== job.url ? { ...job, url: resolvedUrl } : { ...job };
 
-  // Skip description enrichment if already has enough content
-  if (job.description.length > 300) {
+  // Always try to enrich jobs from aggregators (Careerjet, Jooble, jobviewtrack) —
+  // their descriptions are snippets that miss contact sections, requirements, and culture.
+  // For non-aggregator sources, skip if already has enough content.
+  const isFromAggregator = AGGREGATOR_DOMAINS.some((d) => job.url.includes(d));
+  if (!isFromAggregator && job.description.length > 300) {
     return improved;
   }
 
@@ -97,9 +102,9 @@ async function enrichJobDescription(job: NormalizedJob): Promise<NormalizedJob> 
       .replace(/&lt;/g, "<")
       .replace(/&gt;/g, ">")
       .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 6000);
+      .trim();
 
+    // Use the full text — no truncation so contact sections at the bottom are never lost
     if (text.length > job.description.length + 200) {
       improved.description = text;
     }
@@ -107,6 +112,68 @@ async function enrichJobDescription(job: NormalizedJob): Promise<NormalizedJob> 
   } catch {
     return improved; // Enrichment failed — keep resolved URL but original snippet
   }
+}
+
+/**
+ * For aggregator jobs that still have short descriptions after HTTP enrichment
+ * (e.g. Careerjet is Cloudflare-protected), open a single real browser session
+ * via Browserbase and visit each URL sequentially to extract the full page text.
+ * Returns a map of job.id → full text for jobs that were successfully enriched.
+ */
+async function browserEnrichJobs(jobs: NormalizedJob[]): Promise<Map<string, string>> {
+  const toEnrich = jobs.filter(
+    (j) =>
+      AGGREGATOR_DOMAINS.some((d) => j.url.includes(d)) &&
+      j.description.length < 1000,
+  );
+  if (toEnrich.length === 0) return new Map();
+
+  const results = new Map<string, string>();
+  let stagehand: Stagehand | null = null;
+  let sessionId: string | null = null;
+  try {
+    const session = await browserbase.sessions.create({
+      projectId: process.env.BROWSERBASE_PROJECT_ID!,
+      timeout: 180,
+    });
+    sessionId = session.id;
+    stagehand = new Stagehand({
+      env: "BROWSERBASE",
+      apiKey: process.env.BROWSERBASE_API_KEY!,
+      projectId: process.env.BROWSERBASE_PROJECT_ID!,
+      browserbaseSessionID: sessionId,
+      model: { modelName: "gpt-4o", apiKey: process.env.OPENAI_API_KEY! },
+      disablePino: true,
+    });
+    await stagehand.init();
+    const page = stagehand.context.activePage()!;
+
+    for (const job of toEnrich.slice(0, 5)) {
+      try {
+        await page.goto(job.url, { waitUntil: "networkidle", timeoutMs: 25000 });
+        const innerText = await page.evaluate(() => document.body.innerText);
+        const text = (typeof innerText === "string" ? innerText : "")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (text.length > job.description.length + 200) {
+          results.set(job.id, text);
+        }
+      } catch {
+        // Skip this job if browser navigation fails — try the next one
+      }
+    }
+  } catch (err) {
+    console.error("[agent/find-jobs] browser enrichment failed:", err);
+  } finally {
+    if (stagehand) {
+      await stagehand.close().catch(() => null);
+    } else if (sessionId) {
+      await browserbase.sessions
+        .update(sessionId, { status: "REQUEST_RELEASE" })
+        .catch(() => null);
+    }
+  }
+  return results;
 }
 
 type FindJobsResult = {
@@ -443,6 +510,16 @@ export async function findJobs(
     // Enrich short-snippet jobs (Jooble, Careerjet) by following the redirect URL
     // and fetching the full description from the employer's own page, in parallel.
     const enrichedJobs = await Promise.all(newJobs.map(enrichJobDescription));
+
+    // Fallback: for aggregator jobs still blocked by Cloudflare after HTTP enrichment,
+    // use a real browser session (Browserbase) to render the page and get the full text.
+    const browserEnriched = await browserEnrichJobs(enrichedJobs);
+    if (browserEnriched.size > 0) {
+      for (const job of enrichedJobs) {
+        const text = browserEnriched.get(job.id);
+        if (text) job.description = text;
+      }
+    }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const scoringResults = await Promise.all(

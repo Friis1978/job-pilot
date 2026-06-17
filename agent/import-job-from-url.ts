@@ -135,7 +135,7 @@ async function fetchLinkedInJob(jobId: string): Promise<string | null> {
   }
 }
 
-export async function importJobFromUrl(userId: string, url: string): Promise<Result> {
+export async function importJobFromUrl(userId: string, url: string, pastedText?: string): Promise<Result> {
   const insforge = await createInsforgeServer();
   const posthog = getPostHogClient();
 
@@ -172,10 +172,14 @@ export async function importJobFromUrl(userId: string, url: string): Promise<Res
     return { success: false, error: "This job is already in your list." };
   }
 
-  // Fetch the page — LinkedIn needs its guest API; other sites use direct fetch
+  // Fetch the page — LinkedIn needs its guest API; other sites use direct fetch.
+  // If the caller already has the full job text (e.g. pasted by the user from a
+  // Cloudflare-protected page), skip the fetch entirely.
   let rawText: string;
   try {
-    if (linkedInJobId) {
+    if (pastedText && pastedText.trim().length > 200) {
+      rawText = pastedText.trim();
+    } else if (linkedInJobId) {
       const text = await fetchLinkedInJob(linkedInJobId);
       if (!text) {
         await posthog.shutdown();
