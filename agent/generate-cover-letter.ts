@@ -118,9 +118,16 @@ export async function generateCoverLetter(
 
 
     const systemPrompt = customInstructions
-      ? `You are an expert cover letter writer. The candidate has provided a personal instruction set below — follow it precisely. It overrides all default rules.
+      ? `You are an expert cover letter writer. The candidate's instruction set below governs voice, structure, and style. Follow it for HOW to write the letter.
 
 Job description language: ${language} — write the letter in ${language} unless the instructions say otherwise.
+
+Regardless of the instructions, ALWAYS draw on the full candidate context in the user message to make the letter specific and personal:
+- Reference relevant work experience and concrete achievements
+- If personal projects are listed, weave in at least one — mention it by name and include its live URL or GitHub URL inline if available ("you can see this at https://...") — real links turn claims into proof
+- If motivation, key achievement, energy, or career vision are provided, let them shape the letter's tone and emphasis — these reveal who the candidate actually is
+${companyTypePreference.length > 0 ? `- The candidate prefers ${companyTypePreference.join(" / ")} environments — reflect language and values that resonate with that culture\n` : ""}
+The instructions are the style guide. The profile data is the substance. Both must be present.
 
 CANDIDATE'S COVER LETTER INSTRUCTIONS:
 ${customInstructions}`
