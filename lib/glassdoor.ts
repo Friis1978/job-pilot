@@ -59,30 +59,32 @@ export async function searchJobsGlassdoor(
   const data: GlassdoorResponse = await response.json();
   const listings = data?.data?.jobListings ?? [];
 
-  return listings.map((item, i) => {
-    const header = item.jobview.header;
-    const job = item.jobview.job;
+  return listings
+    .filter((item) => !!item.jobview.header.jobViewUrl)
+    .map((item, i) => {
+      const header = item.jobview.header;
+      const job = item.jobview.job;
 
-    const salary = header.payPeriodAdjustedPay?.p50
-      ? `~$${Math.round(header.payPeriodAdjustedPay.p50 / 1000)}k`
-      : null;
+      const salary = header.payPeriodAdjustedPay?.p50
+        ? `~$${Math.round(header.payPeriodAdjustedPay.p50 / 1000)}k`
+        : null;
 
-    const description = job.description
-      ? stripHtml(job.description)
-      : (header.indeedJobAttribute?.extractedJobAttributes
-          ?.map((a) => a.value)
-          .join("\n") ?? "");
+      const description = job.description
+        ? stripHtml(job.description)
+        : (header.indeedJobAttribute?.extractedJobAttributes
+            ?.map((a) => a.value)
+            .join("\n") ?? "");
 
-    return {
-      id: `glassdoor-${job.listingId ?? i}-${Date.now()}`,
-      title: job.jobTitleText ?? header.normalizedJobTitle ?? "Unknown",
-      company: header.employer?.name ?? "Unknown",
-      location: header.locationName ?? location,
-      description,
-      url: header.jobViewUrl ?? "",
-      salary,
-      job_type: null,
-      source: "glassdoor" as const,
-    };
-  });
+      return {
+        id: `glassdoor-${job.listingId ?? i}-${Date.now()}`,
+        title: job.jobTitleText ?? header.normalizedJobTitle ?? "Unknown",
+        company: header.employer?.name ?? "Unknown",
+        location: header.locationName ?? location,
+        description,
+        url: header.jobViewUrl!,
+        salary,
+        job_type: null,
+        source: "glassdoor" as const,
+      };
+    });
 }
