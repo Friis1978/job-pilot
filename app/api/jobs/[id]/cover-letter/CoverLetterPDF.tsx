@@ -173,7 +173,7 @@ type InlineToken =
   | { kind: "link"; text: string; url: string };
 
 // Order matters: bold-italic before bold before italic
-const INLINE_RE = /\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|\[(.+?)\]\((.+?)\)/g;
+const INLINE_RE = /\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|\[(.+?)\]\s*\(([^)]+)\)/g;
 
 function parseInline(text: string): InlineToken[] {
   const tokens: InlineToken[] = [];
@@ -192,7 +192,7 @@ function parseInline(text: string): InlineToken[] {
   return tokens;
 }
 
-function renderInline(tokens: InlineToken[], baseStyle: object) {
+function renderInline(tokens: InlineToken[]) {
   return tokens.map((tok, i) => {
     if (tok.kind === "bold")
       return <Text key={i} style={{ fontFamily: "Times-Bold" }}>{tok.text}</Text>;
@@ -329,18 +329,18 @@ export function CoverLetterPDF({
         {/* Cover letter body */}
         {blocks.map((block, i) => {
           if (block.kind === "h1")
-            return <Text key={i} style={styles.h1}>{renderInline(block.tokens, styles.h1)}</Text>;
+            return <Text key={i} style={styles.h1}>{renderInline(block.tokens)}</Text>;
           if (block.kind === "h2")
-            return <Text key={i} style={styles.h2}>{renderInline(block.tokens, styles.h2)}</Text>;
+            return <Text key={i} style={styles.h2}>{renderInline(block.tokens)}</Text>;
           if (block.kind === "h3")
-            return <Text key={i} style={styles.h3}>{renderInline(block.tokens, styles.h3)}</Text>;
+            return <Text key={i} style={styles.h3}>{renderInline(block.tokens)}</Text>;
           if (block.kind === "bullet")
             return (
               <View key={i} style={{ marginBottom: 8 }}>
                 {block.items.map((item, j) => (
                   <View key={j} style={styles.bulletRow}>
                     <Text style={styles.bulletDot}>•</Text>
-                    <Text style={styles.bulletText}>{renderInline(item, styles.bulletText)}</Text>
+                    <Text style={styles.bulletText}>{renderInline(item)}</Text>
                   </View>
                 ))}
               </View>
@@ -348,7 +348,7 @@ export function CoverLetterPDF({
           // paragraph
           return (
             <Text key={i} style={styles.paragraph}>
-              {renderInline(block.tokens, styles.paragraph)}
+              {renderInline(block.tokens)}
             </Text>
           );
         })}
