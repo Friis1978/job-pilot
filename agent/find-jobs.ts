@@ -105,7 +105,7 @@ function detectSources(location: string): {
       loc,
     )
   ) {
-    return { sources: ["careerjet", "jooble", "glassdoor"], adzunaCountry: "dk" };
+    return { sources: ["adzuna", "careerjet", "jooble", "glassdoor"], adzunaCountry: "dk" };
   }
   if (
     /\buk\b|united kingdom|england|scotland|wales|london|manchester|birmingham/.test(

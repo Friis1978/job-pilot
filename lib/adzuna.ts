@@ -9,7 +9,6 @@ export async function searchJobs(
     app_id: process.env.ADZUNA_APP_ID!,
     app_key: process.env.ADZUNA_APP_KEY!,
     what: jobTitle,
-    category: "it-jobs",
     results_per_page: "10",
     "content-type": "application/json",
   });
