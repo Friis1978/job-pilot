@@ -245,7 +245,7 @@ CANDIDATE:
 Current title: ${profile.current_title ?? "Not specified"}
 Experience: ${profile.years_experience ?? 0} years, ${profile.experience_level ?? "Not specified"}
 Skills: ${profile.skills?.join(", ") ?? "Not specified"}${(() => {
-              const sy = computeSkillYears(profile.work_experience);
+              const sy = computeSkillYears(profile.work_experience, profile.personal_projects as PersonalProject[] | null);
               const entries = Object.entries(sy).sort((a, b) => b[1] - a[1]);
               return entries.length > 0
                 ? `\nSkill experience (years): ${entries.map(([s, y]) => `${s} ${y}yr`).join(", ")}`

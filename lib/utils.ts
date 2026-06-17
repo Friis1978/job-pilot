@@ -94,23 +94,32 @@ export function computeTotalYearsExperience(
   );
 }
 
+type SkillPeriod = {
+  startDate?: string;
+  endDate?: string;
+  currentlyWorking?: boolean;
+  skills?: string[];
+};
+
 export function computeSkillYears(
   workExperience: WorkExperience[] | null | undefined,
+  extraPeriods?: SkillPeriod[] | null,
 ): Record<string, number> {
   const skillYears: Record<string, number> = {};
-  for (const role of workExperience ?? []) {
-    if (!role.skills?.length) continue;
-    const start = role.startDate ? new Date(role.startDate + "-01") : null;
+  const all: SkillPeriod[] = [...(workExperience ?? []), ...(extraPeriods ?? [])];
+  for (const entry of all) {
+    if (!entry.skills?.length) continue;
+    const start = entry.startDate ? new Date(entry.startDate + "-01") : null;
     if (!start || isNaN(start.getTime())) continue;
-    const end = role.currentlyWorking
+    const end = entry.currentlyWorking
       ? new Date()
-      : role.endDate
-        ? new Date(role.endDate + "-01")
+      : entry.endDate
+        ? new Date(entry.endDate + "-01")
         : null;
     if (!end || isNaN(end.getTime())) continue;
     const years =
       Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
-    for (const skill of role.skills) {
+    for (const skill of entry.skills) {
       skillYears[skill] = (skillYears[skill] ?? 0) + years;
     }
   }

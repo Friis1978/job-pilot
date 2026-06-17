@@ -25,7 +25,9 @@ type PersonalProjectEntry = {
   description: string;
   url: string;
   skills: string[];
-  year: string;
+  startDate: string;
+  endDate: string;
+  currentlyWorking: boolean;
   skillInput: string;
 };
 
@@ -196,7 +198,9 @@ function profileToFormData(p: Profile | null | undefined): FormData {
       description: proj.description ?? "",
       url: proj.url ?? "",
       skills: proj.skills ?? [],
-      year: proj.year ?? "",
+      startDate: proj.startDate ?? "",
+      endDate: proj.endDate ?? "",
+      currentlyWorking: proj.currentlyWorking ?? false,
       skillInput: "",
     })),
     highestDegree: edu?.degree ?? "",
@@ -261,6 +265,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
   const [shouldScrollToRole, setShouldScrollToRole] = useState(false);
   const [roleErrors, setRoleErrors] = useState<Record<string, Set<string>>>({});
   const [openRoles, setOpenRoles] = useState<Set<string>>(new Set());
+  const [openProjects, setOpenProjects] = useState<Set<string>>(new Set());
   const [skillDupeError, setSkillDupeError] = useState(false);
   const [industryDupeError, setIndustryDupeError] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState(() => snapshot(data));
@@ -429,13 +434,15 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
       ...prev,
       personalProjects: [
         ...prev.personalProjects,
-        { id: newId, name: "", description: "", url: "", skills: [], year: "", skillInput: "" },
+        { id: newId, name: "", description: "", url: "", skills: [], startDate: "", endDate: "", currentlyWorking: false, skillInput: "" },
       ],
     }));
+    setOpenProjects((prev) => new Set([...prev, newId]));
   }
 
   function removeProject(id: string) {
     setField("personalProjects", data.personalProjects.filter((p) => p.id !== id));
+    setOpenProjects((prev) => { const next = new Set(prev); next.delete(id); return next; });
   }
 
   function updateProject(id: string, field: keyof PersonalProjectEntry, value: string) {
@@ -1184,19 +1191,45 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
 
           <div className="flex flex-col gap-2">
             {data.personalProjects.map((proj, index) => {
+              const isOpen = openProjects.has(proj.id);
               return (
                 <div
                   key={proj.id}
                   className="border border-border rounded-xl overflow-hidden"
                 >
-                  {/* Header */}
+                  {/* Accordion header */}
                   <div className="flex items-center hover:bg-surface-secondary transition-colors">
-                    <div className="flex-1 px-4 py-3 min-w-0">
-                      <p className="text-sm font-medium text-text-primary truncate">
-                        {proj.name || `Project ${index + 1}`}
-                      </p>
-                      {proj.year && <p className="text-xs text-text-muted">{proj.year}</p>}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setOpenProjects((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(proj.id)) next.delete(proj.id);
+                        else next.add(proj.id);
+                        return next;
+                      })}
+                      className="flex-1 flex items-center gap-3 px-4 py-3 text-left min-w-0"
+                    >
+                      <svg
+                        width="16" height="16" viewBox="0 0 16 16" fill="none"
+                        stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
+                        className={`shrink-0 text-text-muted transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}
+                      >
+                        <path d="M6 4l4 4-4 4" />
+                      </svg>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-text-primary truncate">
+                          {proj.name || `Project ${index + 1}`}
+                        </p>
+                        {(proj.startDate || proj.currentlyWorking) && (
+                          <p className="text-xs text-text-muted">
+                            {[
+                              proj.startDate ? fmtMonthYear(proj.startDate) : null,
+                              proj.currentlyWorking ? "Present" : proj.endDate ? fmtMonthYear(proj.endDate) : null,
+                            ].filter(Boolean).join(" – ")}
+                          </p>
+                        )}
+                      </div>
+                    </button>
                     <button
                       type="button"
                       onClick={() => removeProject(proj.id)}
@@ -1206,28 +1239,56 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                     </button>
                   </div>
 
-                  {/* Body */}
-                  <div className="px-4 pb-4 flex flex-col gap-4 border-t border-border pt-4">
+                  {/* Accordion body */}
+                  {isOpen && <div className="px-4 pb-4 flex flex-col gap-4 border-t border-border pt-4">
+                    <div>
+                      <label className={labelClass}>Project Name</label>
+                      <input
+                        type="text"
+                        value={proj.name}
+                        onChange={(e) => updateProject(proj.id, "name", e.target.value)}
+                        placeholder="Job Pilot, AI Resume Builder..."
+                        className={inputClass}
+                      />
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className={labelClass}>Project Name</label>
+                        <label className={labelClass}>From</label>
                         <input
-                          type="text"
-                          value={proj.name}
-                          onChange={(e) => updateProject(proj.id, "name", e.target.value)}
-                          placeholder="Job Pilot, AI Resume Builder..."
+                          type="month"
+                          value={proj.startDate}
+                          onChange={(e) => updateProject(proj.id, "startDate", e.target.value)}
                           className={inputClass}
                         />
                       </div>
                       <div>
-                        <label className={labelClass}>Year (Optional)</label>
-                        <input
-                          type="text"
-                          value={proj.year}
-                          onChange={(e) => updateProject(proj.id, "year", e.target.value)}
-                          placeholder="2024"
-                          className={inputClass}
-                        />
+                        <label className={labelClass}>To</label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="month"
+                            value={proj.endDate}
+                            disabled={proj.currentlyWorking}
+                            onChange={(e) => updateProject(proj.id, "endDate", e.target.value)}
+                            className={`flex-1 px-3 py-2 border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors border-border disabled:bg-surface-secondary disabled:text-text-muted`}
+                          />
+                          <label className="flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0">
+                            <input
+                              type="checkbox"
+                              checked={proj.currentlyWorking}
+                              onChange={(e) => {
+                                setField(
+                                  "personalProjects",
+                                  data.personalProjects.map((p) =>
+                                    p.id === proj.id ? { ...p, currentlyWorking: e.target.checked } : p,
+                                  ),
+                                );
+                              }}
+                              className="w-4 h-4 rounded border-border accent-accent"
+                            />
+                            <span className="text-xs text-text-secondary">Still active</span>
+                          </label>
+                        </div>
                       </div>
                     </div>
 
@@ -1319,7 +1380,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                         </div>
                       )}
                     </div>
-                  </div>
+                  </div>}
                 </div>
               );
             })}

@@ -85,18 +85,19 @@ export async function generateCoverLetter(
     })
     .join("\n\n");
 
-  const skillYears = computeSkillYears(workExp);
+  const personalProjects = (profile.personal_projects as PersonalProject[] | null) ?? [];
+  const skillYears = computeSkillYears(workExp, personalProjects);
   const skillYearsStr = Object.entries(skillYears)
     .sort((a, b) => b[1] - a[1])
     .map(([s, y]) => `${s} ${y}yr`)
     .join(", ");
 
   const companyTypePreference = (profile.company_type_preference as string[] | null) ?? [];
-  const personalProjects = (profile.personal_projects as PersonalProject[] | null) ?? [];
   const projectsText = personalProjects.length > 0
     ? personalProjects
         .map((p) => {
-          const parts = [`${p.name}${p.year ? ` (${p.year})` : ""}: ${p.description}`];
+          const dateRange = p.startDate ? [p.startDate, p.currentlyWorking ? "present" : p.endDate].filter(Boolean).join("–") : null;
+          const parts = [`${p.name}${dateRange ? ` (${dateRange})` : ""}: ${p.description}`];
           if (p.skills.length > 0) parts.push(`Skills: ${p.skills.join(", ")}`);
           if (p.url) parts.push(`URL: ${p.url}`);
           return parts.join(" — ");

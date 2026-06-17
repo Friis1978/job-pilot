@@ -3,7 +3,9 @@ export type PersonalProject = {
   description: string;
   url?: string;
   skills: string[];
-  year?: string;
+  startDate?: string;
+  endDate?: string;
+  currentlyWorking?: boolean;
 };
 
 export type WorkExperience = {
@@ -135,7 +137,7 @@ export type ProfileFormInput = {
   preferredLocations: string;
   coverLetterTone: string;
   coverLetterInstructions: string;
-  personalProjects: { name: string; description: string; url: string; skills: string[]; year: string }[];
+  personalProjects: { name: string; description: string; url: string; skills: string[]; startDate: string; endDate: string; currentlyWorking: boolean }[];
   motivation: string;
   proudAchievement: string;
   energyTasks: string;
