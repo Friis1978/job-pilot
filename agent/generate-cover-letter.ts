@@ -169,6 +169,19 @@ ${recentWork || "Not provided"}`,
       return { success: false, error: "Generation failed. Please try again." };
     }
 
+    // Archive existing cover letter before overwriting
+    const { data: existingJob } = await insforge.database
+      .from("jobs")
+      .select("cover_letter")
+      .eq("id", jobId)
+      .eq("user_id", userId)
+      .single();
+    if (existingJob?.cover_letter) {
+      await insforge.database
+        .from("cover_letter_history")
+        .insert([{ job_id: jobId, user_id: userId, text: existingJob.cover_letter, source: "generated" }]);
+    }
+
     const { error: updateError } = await insforge.database
       .from("jobs")
       .update({ cover_letter: coverLetter })

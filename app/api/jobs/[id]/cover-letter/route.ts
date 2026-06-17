@@ -116,6 +116,19 @@ export async function PATCH(
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
+    // Archive existing cover letter before overwriting
+    const { data: existingJob } = await insforge.database
+      .from("jobs")
+      .select("cover_letter")
+      .eq("id", jobId)
+      .eq("user_id", authData.user.id)
+      .single();
+    if (existingJob?.cover_letter) {
+      await insforge.database
+        .from("cover_letter_history")
+        .insert([{ job_id: jobId, user_id: authData.user.id, text: existingJob.cover_letter, source: "edited" }]);
+    }
+
     const { error } = await insforge.database
       .from("jobs")
       .update({ cover_letter: text })

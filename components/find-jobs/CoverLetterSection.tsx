@@ -30,7 +30,7 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Pro
       });
       const json = await res.json();
       if (!res.ok || json.error) {
-        toast(json.error ?? "Generation failed. Please try again.");
+        toast(json.error ?? "Generation failed. Please try again.", "error");
         return;
       }
       // Fetch the updated cover letter
@@ -43,7 +43,7 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Pro
         window.location.reload();
       }
     } catch {
-      toast("Generation failed. Please try again.");
+      toast("Generation failed. Please try again.", "error");
     } finally {
       setGenerating(false);
     }
@@ -58,13 +58,14 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Pro
         body: JSON.stringify({ text: editText }),
       });
       if (!res.ok) {
-        toast("Failed to save. Please try again.");
+        toast("Failed to save. Please try again.", "error");
         return;
       }
       setCoverLetter(editText);
       setEditing(false);
+      toast("Cover letter saved.", "success");
     } catch {
-      toast("Failed to save. Please try again.");
+      toast("Failed to save. Please try again.", "error");
     } finally {
       setSaving(false);
     }
@@ -107,7 +108,7 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Pro
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
-      toast("Download failed. Please try again.");
+      toast("Download failed. Please try again.", "error");
     } finally {
       setDownloading(false);
     }
@@ -167,7 +168,10 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Pro
               {downloading ? "Downloading..." : "Download PDF"}
             </button>
             <button
-              onClick={handleGenerate}
+              onClick={() => {
+                if (!window.confirm("Regenerate will overwrite your current cover letter. Continue?")) return;
+                handleGenerate();
+              }}
               disabled={generating}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-accent-foreground rounded-lg text-xs font-medium hover:bg-accent-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
