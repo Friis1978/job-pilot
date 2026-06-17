@@ -19,6 +19,16 @@ type WorkExperienceEntry = {
   skillInput: string;
 };
 
+type PersonalProjectEntry = {
+  id: string;
+  name: string;
+  description: string;
+  url: string;
+  skills: string[];
+  year: string;
+  skillInput: string;
+};
+
 type FormData = {
   fullName: string;
   email: string;
@@ -33,6 +43,7 @@ type FormData = {
   industries: string[];
   industryInput: string;
   workExperience: WorkExperienceEntry[];
+  personalProjects: PersonalProjectEntry[];
   highestDegree: string;
   fieldOfStudy: string;
   institution: string;
@@ -43,6 +54,11 @@ type FormData = {
   preferredLocations: string;
   coverLetterTone: string;
   coverLetterInstructions: string;
+  motivation: string;
+  proudAchievement: string;
+  energyTasks: string;
+  companyTypePreference: string[];
+  careerVision: string;
 };
 
 const CHANGE_LABELS: Partial<Record<keyof FormData, string>> = {
@@ -56,12 +72,18 @@ const CHANGE_LABELS: Partial<Record<keyof FormData, string>> = {
   portfolioUrl:       "Portfolio URL",
   skills:             "Skills",
   industries:         "Industries",
+  personalProjects:   "Personal Projects",
   jobTitlesSeeking:   "Job Titles Seeking",
   remotePreference:   "Remote Preference",
   salaryExpectation:  "Salary Expectation",
   preferredLocations: "Preferred Locations",
   coverLetterTone:    "Cover Letter Tone",
   coverLetterInstructions: "Cover Letter Instructions",
+  motivation:         "Motivation",
+  proudAchievement:   "Key Achievement",
+  energyTasks:        "Energy Tasks",
+  companyTypePreference: "Company Type",
+  careerVision:       "Career Vision",
 };
 
 const EDUCATION_FIELDS: (keyof FormData)[] = ["highestDegree", "fieldOfStudy", "institution", "graduationYear"];
@@ -135,10 +157,12 @@ function profileToFormData(p: Profile | null | undefined): FormData {
       linkedinUrl: "", portfolioUrl: "",
       currentTitle: "", experienceLevel: "",
       skills: [], skillInput: "", industries: [], industryInput: "",
-      workExperience: [], highestDegree: "", fieldOfStudy: "",
+      workExperience: [], personalProjects: [], highestDegree: "", fieldOfStudy: "",
       institution: "", graduationYear: "", jobTitlesSeeking: "",
       remotePreference: "", salaryExpectation: "", preferredLocations: "",
       coverLetterTone: "", coverLetterInstructions: "",
+      motivation: "", proudAchievement: "", energyTasks: "",
+      companyTypePreference: [], careerVision: "",
     };
   }
   const edu = p.education as { degree?: string; field?: string; institution?: string; year?: string } | null;
@@ -166,6 +190,15 @@ function profileToFormData(p: Profile | null | undefined): FormData {
       skills: r.skills ?? [],
       skillInput: "",
     })),
+    personalProjects: (p.personal_projects ?? []).map((proj) => ({
+      id: crypto.randomUUID(),
+      name: proj.name ?? "",
+      description: proj.description ?? "",
+      url: proj.url ?? "",
+      skills: proj.skills ?? [],
+      year: proj.year ?? "",
+      skillInput: "",
+    })),
     highestDegree: edu?.degree ?? "",
     fieldOfStudy: edu?.field ?? "",
     institution: edu?.institution ?? "",
@@ -176,6 +209,11 @@ function profileToFormData(p: Profile | null | undefined): FormData {
     preferredLocations: (p.preferred_locations ?? []).join(", "),
     coverLetterTone: p.cover_letter_tone ?? "",
     coverLetterInstructions: p.cover_letter_instructions ?? "",
+    motivation: p.motivation ?? "",
+    proudAchievement: p.proud_achievement ?? "",
+    energyTasks: p.energy_tasks ?? "",
+    companyTypePreference: p.company_type_preference ?? [],
+    careerVision: p.career_vision ?? "",
   };
 }
 
@@ -233,6 +271,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
       skillInput: undefined,
       industryInput: undefined,
       workExperience: d.workExperience.map(({ skillInput: _si, ...r }) => r),
+      personalProjects: d.personalProjects.map(({ skillInput: _si, ...r }) => r),
     });
   }
 
@@ -246,6 +285,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
       skillInput: "",
       industryInput: "",
       workExperience: parsed.workExperience.map((r) => ({ ...r, skillInput: "" })),
+      personalProjects: parsed.personalProjects.map((p) => ({ ...p, skillInput: "" })),
     });
     setRoleErrors({});
     setSaveSuccess(false);
@@ -380,6 +420,60 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
     setField(
       "workExperience",
       data.workExperience.map((r) => (r.id === id ? { ...r, [field]: value } : r)),
+    );
+  }
+
+  function addProject() {
+    const newId = crypto.randomUUID();
+    setData((prev) => ({
+      ...prev,
+      personalProjects: [
+        ...prev.personalProjects,
+        { id: newId, name: "", description: "", url: "", skills: [], year: "", skillInput: "" },
+      ],
+    }));
+  }
+
+  function removeProject(id: string) {
+    setField("personalProjects", data.personalProjects.filter((p) => p.id !== id));
+  }
+
+  function updateProject(id: string, field: keyof PersonalProjectEntry, value: string) {
+    setField(
+      "personalProjects",
+      data.personalProjects.map((p) => (p.id === id ? { ...p, [field]: value } : p)),
+    );
+  }
+
+  function addProjectSkill(projectId: string) {
+    setField(
+      "personalProjects",
+      data.personalProjects.map((p) => {
+        if (p.id !== projectId) return p;
+        const trimmed = p.skillInput.trim();
+        if (!trimmed || p.skills.includes(trimmed)) return { ...p, skillInput: "" };
+        return { ...p, skills: [...p.skills, trimmed], skillInput: "" };
+      }),
+    );
+  }
+
+  function removeProjectSkill(projectId: string, skill: string) {
+    setField(
+      "personalProjects",
+      data.personalProjects.map((p) =>
+        p.id === projectId ? { ...p, skills: p.skills.filter((s) => s !== skill) } : p,
+      ),
+    );
+  }
+
+  function addProjectSkillDirect(projectId: string, skill: string) {
+    setField(
+      "personalProjects",
+      data.personalProjects.map((p) =>
+        p.id === projectId && !p.skills.includes(skill)
+          ? { ...p, skills: [...p.skills, skill] }
+          : p,
+      ),
     );
   }
 
@@ -521,6 +615,9 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
             ...data,
             workExperience: data.workExperience.map(
               ({ skillInput: _si, ...r }) => r,
+            ),
+            personalProjects: data.personalProjects.map(
+              ({ id: _id, skillInput: _si, ...r }) => r,
             ),
           });
           setSaving(false);
@@ -1062,6 +1159,173 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
           </div>
         </div>
 
+        {/* Personal Projects */}
+        <div className="pt-6 border-t border-border mt-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">Personal Projects</h3>
+              <p className="text-xs text-text-muted mt-0.5">Side projects, AI tools, open-source work — skills here count toward your profile.</p>
+            </div>
+            <button
+              type="button"
+              onClick={addProject}
+              className="flex items-center gap-1.5 text-sm font-medium text-accent hover:text-accent-dark transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              Add project
+            </button>
+          </div>
+
+          {data.personalProjects.length === 0 && (
+            <p className="text-sm text-text-muted">No personal projects added yet.</p>
+          )}
+
+          <div className="flex flex-col gap-2">
+            {data.personalProjects.map((proj, index) => {
+              return (
+                <div
+                  key={proj.id}
+                  className="border border-border rounded-xl overflow-hidden"
+                >
+                  {/* Header */}
+                  <div className="flex items-center hover:bg-surface-secondary transition-colors">
+                    <div className="flex-1 px-4 py-3 min-w-0">
+                      <p className="text-sm font-medium text-text-primary truncate">
+                        {proj.name || `Project ${index + 1}`}
+                      </p>
+                      {proj.year && <p className="text-xs text-text-muted">{proj.year}</p>}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeProject(proj.id)}
+                      className="shrink-0 text-xs text-text-muted hover:text-error transition-colors px-4 py-3"
+                    >
+                      Remove
+                    </button>
+                  </div>
+
+                  {/* Body */}
+                  <div className="px-4 pb-4 flex flex-col gap-4 border-t border-border pt-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelClass}>Project Name</label>
+                        <input
+                          type="text"
+                          value={proj.name}
+                          onChange={(e) => updateProject(proj.id, "name", e.target.value)}
+                          placeholder="Job Pilot, AI Resume Builder..."
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Year (Optional)</label>
+                        <input
+                          type="text"
+                          value={proj.year}
+                          onChange={(e) => updateProject(proj.id, "year", e.target.value)}
+                          placeholder="2024"
+                          className={inputClass}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className={labelClass}>Description</label>
+                      <textarea
+                        value={proj.description}
+                        onChange={(e) => updateProject(proj.id, "description", e.target.value)}
+                        placeholder="What did you build? What does it do? What problems did it solve?"
+                        rows={3}
+                        className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className={labelClass}>URL (Optional)</label>
+                      <input
+                        type="url"
+                        value={proj.url}
+                        onChange={(e) => updateProject(proj.id, "url", e.target.value)}
+                        placeholder="https://github.com/you/project"
+                        className={inputClass}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={labelClass}>Skills Used</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={proj.skillInput}
+                          onChange={(e) => updateProject(proj.id, "skillInput", e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              addProjectSkill(proj.id);
+                            }
+                          }}
+                          placeholder="Add a skill used in this project"
+                          className={inputClass}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => addProjectSkill(proj.id)}
+                          className="shrink-0 px-4 py-2 border border-border rounded-lg text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors"
+                        >
+                          Add
+                        </button>
+                      </div>
+                      {proj.skills.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {proj.skills.map((skill) => (
+                            <span
+                              key={skill}
+                              className="flex items-center gap-1.5 px-3 py-1 bg-accent/10 border border-accent/30 rounded-full text-xs font-medium text-accent"
+                            >
+                              {skill}
+                              <button
+                                type="button"
+                                onClick={() => removeProjectSkill(proj.id, skill)}
+                                className="text-accent/60 hover:text-accent transition-colors"
+                                aria-label={`Remove ${skill}`}
+                              >
+                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                </svg>
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {data.skills.filter((s) => !proj.skills.includes(s)).length > 0 && (
+                        <div className="mt-2.5">
+                          <p className="text-xs text-text-muted mb-1.5">From your profile:</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {data.skills
+                              .filter((s) => !proj.skills.includes(s))
+                              .map((skill) => (
+                                <button
+                                  key={skill}
+                                  type="button"
+                                  onClick={() => addProjectSkillDirect(proj.id, skill)}
+                                  className="px-2.5 py-0.5 border border-dashed border-border rounded-full text-xs text-text-secondary hover:border-accent hover:text-accent transition-colors"
+                                >
+                                  + {skill}
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Education */}
         <SectionAccordion title="Education">
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -1213,6 +1477,89 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
             </div>
           </div>
         </div>
+        </SectionAccordion>
+
+        {/* What Drives You */}
+        <SectionAccordion title="What Drives You">
+          <div className="flex flex-col gap-5">
+            <p className="text-xs text-text-secondary -mt-1">
+              These fields help generate more personal cover letters and find better job matches. All optional.
+            </p>
+
+            <div>
+              <label className={labelClass}>Motivation</label>
+              <textarea
+                value={data.motivation}
+                onChange={(e) => setField("motivation", e.target.value)}
+                placeholder="What motivates you in your work? What kind of impact do you want to create?"
+                rows={3}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-none"
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>Key Achievement</label>
+              <textarea
+                value={data.proudAchievement}
+                onChange={(e) => setField("proudAchievement", e.target.value)}
+                placeholder="Describe a result or achievement you're proud of — what was the situation, what did you do, and what happened?"
+                rows={3}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-none"
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>What Gives You Energy</label>
+              <textarea
+                value={data.energyTasks}
+                onChange={(e) => setField("energyTasks", e.target.value)}
+                placeholder="What kinds of tasks, problems, or situations energize you most at work?"
+                rows={3}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-none"
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>Preferred Company Type</label>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {(["Startup", "Scale-up", "Established corporation", "Agency / consultancy", "Public sector", "Non-profit"] as const).map((type) => {
+                  const selected = data.companyTypePreference.includes(type);
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() =>
+                        setField(
+                          "companyTypePreference",
+                          selected
+                            ? data.companyTypePreference.filter((t) => t !== type)
+                            : [...data.companyTypePreference, type],
+                        )
+                      }
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                        selected
+                          ? "bg-accent/10 border-accent/40 text-accent"
+                          : "bg-surface-secondary border-border text-text-secondary hover:border-accent/40 hover:text-text-primary"
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className={labelClass}>Career Vision</label>
+              <textarea
+                value={data.careerVision}
+                onChange={(e) => setField("careerVision", e.target.value)}
+                placeholder="Where do you want to be professionally in 2-3 years? What are you growing toward?"
+                rows={2}
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-none"
+              />
+            </div>
+          </div>
         </SectionAccordion>
 
         {/* Cover Letter Instructions */}

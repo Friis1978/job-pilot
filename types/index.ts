@@ -1,3 +1,11 @@
+export type PersonalProject = {
+  name: string;
+  description: string;
+  url?: string;
+  skills: string[];
+  year?: string;
+};
+
 export type WorkExperience = {
   company: string;
   title: string;
@@ -34,6 +42,12 @@ export type Profile = {
   salary_expectation: string | null;
   cover_letter_tone: string | null;
   cover_letter_instructions: string | null;
+  personal_projects: PersonalProject[] | null;
+  motivation: string | null;
+  proud_achievement: string | null;
+  energy_tasks: string | null;
+  company_type_preference: string[] | null;
+  career_vision: string | null;
   linkedin_url: string | null;
   portfolio_url: string | null;
   resume_pdf_url: string | null;
@@ -121,4 +135,10 @@ export type ProfileFormInput = {
   preferredLocations: string;
   coverLetterTone: string;
   coverLetterInstructions: string;
+  personalProjects: { name: string; description: string; url: string; skills: string[]; year: string }[];
+  motivation: string;
+  proudAchievement: string;
+  energyTasks: string;
+  companyTypePreference: string[];
+  careerVision: string;
 };

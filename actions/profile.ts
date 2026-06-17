@@ -82,6 +82,12 @@ export async function saveProfile(
       salary_expectation: input.salaryExpectation || null,
       cover_letter_tone: input.coverLetterTone || null,
       cover_letter_instructions: input.coverLetterInstructions || null,
+      personal_projects: input.personalProjects.length > 0 ? input.personalProjects : null,
+      motivation: input.motivation || null,
+      proud_achievement: input.proudAchievement || null,
+      energy_tasks: input.energyTasks || null,
+      company_type_preference: input.companyTypePreference.length > 0 ? input.companyTypePreference : null,
+      career_vision: input.careerVision || null,
       linkedin_url: input.linkedinUrl || null,
       portfolio_url: input.portfolioUrl || null,
     };

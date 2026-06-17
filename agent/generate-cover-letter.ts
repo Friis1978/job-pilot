@@ -3,7 +3,7 @@ import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { computeSkillYears } from "@/lib/utils";
 import { detectLanguage } from "@/lib/detect-language";
-import type { WorkExperience } from "@/types";
+import type { WorkExperience, PersonalProject } from "@/types";
 
 const LANGUAGE_NAMES: Record<string, string> = {
   da: "Danish",
@@ -46,7 +46,7 @@ export async function generateCoverLetter(
     insforge.database
       .from("profiles")
       .select(
-        "full_name, current_title, years_experience, skills, work_experience, cover_letter_tone, cover_letter_instructions",
+        "full_name, current_title, years_experience, skills, work_experience, personal_projects, cover_letter_tone, cover_letter_instructions, motivation, proud_achievement, energy_tasks, company_type_preference, career_vision",
       )
       .eq("id", userId)
       .single(),
@@ -91,6 +91,19 @@ export async function generateCoverLetter(
     .map(([s, y]) => `${s} ${y}yr`)
     .join(", ");
 
+  const companyTypePreference = (profile.company_type_preference as string[] | null) ?? [];
+  const personalProjects = (profile.personal_projects as PersonalProject[] | null) ?? [];
+  const projectsText = personalProjects.length > 0
+    ? personalProjects
+        .map((p) => {
+          const parts = [`${p.name}${p.year ? ` (${p.year})` : ""}: ${p.description}`];
+          if (p.skills.length > 0) parts.push(`Skills: ${p.skills.join(", ")}`);
+          if (p.url) parts.push(`URL: ${p.url}`);
+          return parts.join(" — ");
+        })
+        .join("\n")
+    : "";
+
   const companyContext = job.company_research
     ? `COMPANY RESEARCH:\n${JSON.stringify(job.company_research, null, 2)}`
     : "";
@@ -125,7 +138,7 @@ Rules:
 - If company research is provided, reference one concrete specific detail (not generic praise)
 - Acknowledge skill gaps honestly and briefly — one sentence max, frame as adjacent strength or quick ramp
 - Close with a direct, confident call to action — not "I hope to hear from you"
-- 3–4 paragraphs, no longer
+${companyTypePreference.length > 0 ? `- The candidate prefers ${companyTypePreference.join(" / ")} environments — where relevant, reflect language and values that resonate with that culture\n` : ""}- 3–4 paragraphs, no longer
 - Do NOT include subject line, date, address block, or signature — just the letter body
 - Write in first person as the candidate`;
 
@@ -154,7 +167,7 @@ Current title: ${profile.current_title ?? "Not provided"}
 Experience: ${profile.years_experience ?? 0} years
 All skills: ${(profile.skills as string[] | null)?.join(", ") ?? "Not provided"}${skillYearsStr ? `\nSkill experience (years): ${skillYearsStr}` : ""}
 Full work history:
-${recentWork || "Not provided"}`,
+${recentWork || "Not provided"}${projectsText ? `\n\nPersonal projects:\n${projectsText}` : ""}${(profile.motivation as string | null) ? `\n\nMotivation: ${profile.motivation}` : ""}${(profile.proud_achievement as string | null) ? `\nKey achievement: ${profile.proud_achievement}` : ""}${(profile.energy_tasks as string | null) ? `\nWhat energizes them: ${profile.energy_tasks}` : ""}${(profile.career_vision as string | null) ? `\nCareer vision: ${profile.career_vision}` : ""}`,
         },
         ...(extraInstructions?.trim() ? [{
           role: "user" as const,

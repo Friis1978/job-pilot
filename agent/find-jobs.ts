@@ -7,7 +7,7 @@ import { searchJobsJooble } from "@/lib/jooble";
 import { searchJobsCareerjet } from "@/lib/careerjet";
 import { searchJobsGlassdoor } from "@/lib/glassdoor";
 import { MATCH_THRESHOLD, stripHtml, computeSkillYears, getLocationAliases, normalizeLocationToEnglish } from "@/lib/utils";
-import type { Profile, AdzunaJob, NormalizedJob, ScoredJob } from "@/types";
+import type { Profile, AdzunaJob, NormalizedJob, ScoredJob, PersonalProject } from "@/types";
 
 type ScoringResult = ScoredJob & { job: NormalizedJob };
 
@@ -255,7 +255,11 @@ Recent work: ${JSON.stringify(
             profile.work_experience
               ?.slice(0, 2)
               .map((w) => ({ title: w.title, company: w.company })) ?? [],
-          )}`,
+          )}${(() => {
+              const projects = (profile.personal_projects as PersonalProject[] | null) ?? [];
+              if (!projects.length) return "";
+              return `\nPersonal projects: ${projects.map((p) => `${p.name}${p.skills.length ? ` (${p.skills.join(", ")})` : ""}`).join("; ")}`;
+            })()}`,
         },
       ],
     });
