@@ -121,6 +121,10 @@ async function enrichJobDescription(job: NormalizedJob): Promise<NormalizedJob> 
  * Returns a map of job.id → full text for jobs that were successfully enriched.
  */
 async function browserEnrichJobs(jobs: NormalizedJob[]): Promise<Map<string, string>> {
+  if (!process.env.BROWSERBASE_PROJECT_ID || !process.env.BROWSERBASE_API_KEY) {
+    return new Map();
+  }
+
   const toEnrich = jobs.filter(
     (j) =>
       AGGREGATOR_DOMAINS.some((d) => j.url.includes(d)) &&
@@ -133,14 +137,14 @@ async function browserEnrichJobs(jobs: NormalizedJob[]): Promise<Map<string, str
   let sessionId: string | null = null;
   try {
     const session = await browserbase.sessions.create({
-      projectId: process.env.BROWSERBASE_PROJECT_ID!,
+      projectId: process.env.BROWSERBASE_PROJECT_ID,
       timeout: 180,
     });
     sessionId = session.id;
     stagehand = new Stagehand({
       env: "BROWSERBASE",
-      apiKey: process.env.BROWSERBASE_API_KEY!,
-      projectId: process.env.BROWSERBASE_PROJECT_ID!,
+      apiKey: process.env.BROWSERBASE_API_KEY,
+      projectId: process.env.BROWSERBASE_PROJECT_ID,
       browserbaseSessionID: sessionId,
       model: { modelName: "gpt-4o", apiKey: process.env.OPENAI_API_KEY! },
       disablePino: true,
@@ -150,8 +154,16 @@ async function browserEnrichJobs(jobs: NormalizedJob[]): Promise<Map<string, str
 
     for (const job of toEnrich.slice(0, 5)) {
       try {
-        await page.goto(job.url, { waitUntil: "networkidle", timeoutMs: 25000 });
-        const innerText = await page.evaluate(() => document.body.innerText);
+        // Use "load" instead of "networkidle" — Careerjet loads tracking scripts
+        // that keep the network busy and can cause networkidle to time out.
+        await page.goto(job.url, { waitUntil: "load", timeoutMs: 25000 });
+        const innerText = await page.evaluate(() => {
+          // Prefer the main content area to exclude nav, footer, and similar-jobs noise
+          const main = document.querySelector<HTMLElement>(
+            "main, [role='main'], article",
+          );
+          return (main ?? document.body).innerText;
+        });
         const text = (typeof innerText === "string" ? innerText : "")
           .replace(/\s+/g, " ")
           .trim();

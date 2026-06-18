@@ -435,16 +435,18 @@ Only return a URL you are confident about — do not guess. Return JSON: { "url"
       sourceUrls: [homepageUrl],
     };
 
-    // Pre-process the stored job description to extract contact persons and company
-    // culture/identity sections ("Hvem er vi?", "Om os", "About us", etc.) before
-    // any browser research. The DB text is the authoritative source for this info.
+    // Pre-process the stored job description to extract contact persons, address,
+    // and company culture sections before any browser research. When about_role
+    // contains the full job text (enriched via Browserbase), this is the most
+    // reliable source — no browser needed for contacts/address on aggregator jobs.
+    let contactFoundFromJobDescription = false;
     if (job.about_role) {
       try {
         const jdExtractResponse = await openai.chat.completions.create({
           model: "gpt-4o",
           response_format: { type: "json_object" },
           temperature: 0,
-          max_tokens: 900,
+          max_tokens: 1000,
           messages: [
             {
               role: "system",
@@ -460,6 +462,7 @@ Return ONLY valid JSON:
   "recruiterEmail": "<recruiter email address — or null>",
   "recruiterPhone": "<recruiter phone number — or null>",
   "recruiterCompany": "<name of the recruitment/staffing agency — or null>",
+  "companyAddress": "<full postal address of the hiring company if explicitly stated (e.g. street, city) — or null>",
   "culturePoints": ["<sentences from sections like 'Hvem er vi?', 'Om os', 'About us', 'Vi er', 'Our culture' that describe the company identity, team size, values, or working environment>"]
 }
 Only extract contacts explicitly named in the text. Distinguish carefully: internal contacts work for the hiring company; recruiters work for an agency hired to fill the role.`,
@@ -480,6 +483,7 @@ Only extract contacts explicitly named in the text. Distinguish carefully: inter
             recruiterEmail?: string | null;
             recruiterPhone?: string | null;
             recruiterCompany?: string | null;
+            companyAddress?: string | null;
             culturePoints?: string[];
           };
 
@@ -490,6 +494,7 @@ Only extract contacts explicitly named in the text. Distinguish carefully: inter
               email: jdParsed.contactEmail ?? null,
               phone: jdParsed.contactPhone ?? null,
             };
+            contactFoundFromJobDescription = true;
           }
 
           if (jdParsed.recruiterName || jdParsed.recruiterEmail || jdParsed.recruiterPhone) {
@@ -500,6 +505,11 @@ Only extract contacts explicitly named in the text. Distinguish carefully: inter
               phone: jdParsed.recruiterPhone ?? null,
               company: jdParsed.recruiterCompany ?? null,
             };
+            contactFoundFromJobDescription = true;
+          }
+
+          if (jdParsed.companyAddress) {
+            companyResearchRaw.address = jdParsed.companyAddress;
           }
 
           const culturePoints = jdParsed.culturePoints ?? [];
@@ -792,8 +802,15 @@ Only extract contacts explicitly named in the text.`,
         console.error("[research-company] job posting DDG search failed", jobSearchErr);
       }
 
-      // Job posting contact extraction — runs first, uses real browser to handle JS-rendered ATS pages
-      if (job.source_url) {
+      // Job posting contact extraction — runs first, uses real browser to handle JS-rendered ATS pages.
+      // Skip for aggregator source URLs (Careerjet, jobviewtrack) when contacts and address were
+      // already extracted from about_role — the full job text is more reliable than re-scraping
+      // the job board page, and avoids an unnecessary Browserbase page load.
+      const isAggregatorSourceUrl = ["careerjet", "jobviewtrack", "jooble", "adzuna", "glassdoor"].some(
+        (d) => (job.source_url ?? "").includes(d),
+      );
+      const skipSourceUrlBrowser = contactFoundFromJobDescription && isAggregatorSourceUrl && !!companyResearchRaw.address;
+      if (job.source_url && !skipSourceUrlBrowser) {
         try {
           try {
             await page.goto(job.source_url, { waitUntil: "networkidle", timeoutMs: 25000 });
