@@ -252,7 +252,7 @@ function normalizeAdzunaJob(job: AdzunaJob): NormalizedJob {
   };
 }
 
-async function summarizeDescription(description: string, openai: OpenAI): Promise<string | null> {
+export async function summarizeDescription(description: string, openai: OpenAI): Promise<string | null> {
   if (!description || description.length < 150) return null;
   try {
     const response = await openai.chat.completions.create({

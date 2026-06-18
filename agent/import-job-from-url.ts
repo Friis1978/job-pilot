@@ -4,7 +4,7 @@ import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { stripHtml, normalizeLocationToEnglish } from "@/lib/utils";
 import { browserbase } from "@/lib/browserbase";
-import { scoreJob } from "@/agent/find-jobs";
+import { scoreJob, summarizeDescription } from "@/agent/find-jobs";
 import type { Profile, NormalizedJob } from "@/types";
 
 type Result = { success: boolean; error?: string };
@@ -351,6 +351,9 @@ If title or company cannot be determined, return them as empty strings.`,
     return { success: false, error: "Scoring failed. Please try again." };
   }
 
+  // Generate a short summary for display (full text is kept in about_role for research)
+  const descriptionSummary = await summarizeDescription(job.description, openai);
+
   // Save to DB
   // Note: no threshold check here — the user explicitly chose to import this job,
   // so we always save it. The score is still computed and visible on the detail page.
@@ -366,6 +369,7 @@ If title or company cannot be determined, return them as empty strings.`,
       salary: job.salary ?? null,
       job_type: job.job_type ?? "fulltime",
       about_role: job.description,
+      description_summary: descriptionSummary ?? undefined,
       match_score: scored.matchScore,
       match_reason: scored.matchReason,
       matched_skills: scored.matchedSkills,
