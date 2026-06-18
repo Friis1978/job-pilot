@@ -253,7 +253,7 @@ function normalizeAdzunaJob(job: AdzunaJob): NormalizedJob {
 }
 
 export async function summarizeDescription(description: string, openai: OpenAI): Promise<string | null> {
-  if (!description || description.length < 150) return null;
+  if (!description || description.length < 500) return null;
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
