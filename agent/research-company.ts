@@ -809,7 +809,9 @@ Only extract contacts explicitly named in the text.`,
       const isAggregatorSourceUrl = ["careerjet", "jobviewtrack", "jooble", "adzuna", "glassdoor"].some(
         (d) => (job.source_url ?? "").includes(d),
       );
-      const skipSourceUrlBrowser = contactFoundFromJobDescription && isAggregatorSourceUrl && !!companyResearchRaw.address;
+      // Only skip if about_role is the full job text (> 1000 chars = browser enrichment worked)
+      // AND we found a contact in it. A short snippet means enrichment failed — don't skip.
+      const skipSourceUrlBrowser = contactFoundFromJobDescription && isAggregatorSourceUrl && (job.about_role?.length ?? 0) > 1000;
       if (job.source_url && !skipSourceUrlBrowser) {
         try {
           try {
