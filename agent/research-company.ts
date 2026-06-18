@@ -210,16 +210,36 @@ function companySlugHyphen(name: string): string {
     .replace(/\s+/g, "-");
 }
 
-// Try a list of candidate URLs and return the first that responds successfully
-async function probeUrls(candidates: string[]): Promise<string | null> {
+// Try a list of candidate URLs and return the first that responds successfully.
+// When companySlugCheck is provided, the page content must contain it — prevents
+// accepting parked domains that return 200 with generic parking page content.
+async function probeUrls(candidates: string[], companySlugCheck?: string): Promise<string | null> {
   for (const url of candidates) {
     try {
-      const res = await fetch(url, {
-        method: "HEAD",
-        redirect: "follow",
-        signal: AbortSignal.timeout(5000),
-      });
-      if (res.ok || res.status < 400) return url;
+      if (companySlugCheck) {
+        // Full GET so we can inspect content — parked domains return 200 but have no real content
+        const res = await fetch(url, {
+          method: "GET",
+          redirect: "follow",
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          },
+          signal: AbortSignal.timeout(6000),
+        });
+        if (!res.ok || res.status >= 400) continue;
+        const html = await res.text();
+        const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").toLowerCase();
+        // Must have real content AND mention the company (guards against parking pages)
+        if (text.length < 300 || !text.includes(companySlugCheck)) continue;
+        return url;
+      } else {
+        const res = await fetch(url, {
+          method: "HEAD",
+          redirect: "follow",
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok || res.status < 400) return url;
+      }
     } catch {
       // try next
     }
@@ -383,7 +403,7 @@ Only return a URL you are confident about — do not guess. Return JSON: { "url"
                 `https://www.${slug}.${tld}`,
                 ...(slugH !== slug ? [`https://${slugH}.${tld}`, `https://www.${slugH}.${tld}`] : []),
               ]);
-              const probed = await probeUrls(localCandidates);
+              const probed = await probeUrls(localCandidates, slug.slice(0, 5));
               if (probed) {
                 console.log(`[agent/research-company] local TLD override: ${homepageUrl} → ${probed}`);
                 homepageUrl = probed;
@@ -409,12 +429,16 @@ Only return a URL you are confident about — do not guess. Return JSON: { "url"
             `https://www.${slug}.${tld}`,
             ...(slugH !== slug ? [`https://${slugH}.${tld}`, `https://www.${slugH}.${tld}`] : []),
           ]),
-          // .com fallback
+          // .com fallback — also try .io and .ai for tech/startup companies
           `https://www.${slug}.com`,
           `https://${slug}.com`,
           ...(slugH !== slug ? [`https://www.${slugH}.com`, `https://${slugH}.com`] : []),
+          `https://${slug}.io`,
+          `https://www.${slug}.io`,
+          `https://${slug}.ai`,
+          `https://www.${slug}.ai`,
         ];
-        const probed = await probeUrls(candidates);
+        const probed = await probeUrls(candidates, slug.slice(0, 5));
         if (probed) {
           homepageUrl = probed;
           console.log(`[agent/research-company] URL probing found: ${probed}`);
