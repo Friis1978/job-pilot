@@ -152,11 +152,11 @@ async function browserEnrichJobs(jobs: NormalizedJob[]): Promise<Map<string, str
     await stagehand.init();
     const page = stagehand.context.activePage()!;
 
-    for (const job of toEnrich.slice(0, 5)) {
+    for (const job of toEnrich.slice(0, 3)) {
       try {
         // Use "load" instead of "networkidle" — Careerjet loads tracking scripts
         // that keep the network busy and can cause networkidle to time out.
-        await page.goto(job.url, { waitUntil: "load", timeoutMs: 25000 });
+        await page.goto(job.url, { waitUntil: "load", timeoutMs: 15000 });
         const innerText = await page.evaluate(() => {
           // Prefer the main content area to exclude nav, footer, and similar-jobs noise
           const main = document.querySelector<HTMLElement>(

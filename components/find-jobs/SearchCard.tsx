@@ -30,7 +30,7 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
     setLoading(true);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30_000);
+    const timeoutId = setTimeout(() => controller.abort(), 180_000);
 
     try {
       const res = await fetch("/api/agent/find", {
@@ -68,7 +68,7 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
     } catch (err) {
       clearTimeout(timeoutId);
       if (err instanceof Error && err.name === "AbortError") {
-        toast("Search timed out after 30 seconds. Please try again.", "error");
+        toast("Search timed out. Please try again.", "error");
       } else {
         toast("Something went wrong. Please try again.", "error");
       }

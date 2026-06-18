@@ -3,6 +3,8 @@ import { revalidatePath } from "next/cache";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { findJobs } from "@/agent/find-jobs";
 
+export const maxDuration = 300;
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const insforge = await createInsforgeServer();
