@@ -1044,7 +1044,7 @@ Only extract contacts explicitly named in the text.`,
             const aboutUrl = new URL(aboutPath, page.url()).href;
             await page.goto(aboutUrl, { waitUntil: "networkidle", timeoutMs: 15000 });
             const aboutData = await stagehand.extract(
-              "Extract the full postal address (street number, city, zip, country), any email addresses, phone numbers, and contact person names/titles. Also capture what the company does, their values, team size, funding, and culture. The address is often in a section labelled 'Office', 'Contact', or at the bottom of the page — do not skip it.",
+              `Extract the full postal address (street number, city, zip, country), any email addresses, phone numbers, and contact person names/titles. Also capture what the company does, their values, team size, funding, and culture. The address is often in a section labelled 'Office', 'Contact', or at the bottom of the page — do not skip it. If multiple office addresses are listed, prefer the one in the same country as the job location: ${job.location ?? "unknown"}.`,
               subPageSchema,
             );
             if (aboutData.address && /\d/.test(aboutData.address)) {
@@ -1094,7 +1094,7 @@ Only extract contacts explicitly named in the text.`,
               // Contact pages need a different prompt — the generic "ignore footers/marketing" instruction
               // causes the AI to skip addresses and phone numbers which look like footer/marketing content.
               const extractInstruction = (link.kind === "contact" || link.kind === "about")
-                ? "Extract the full postal address (street number, city, zip, country), any email addresses, phone numbers, and contact person names/titles. Also extract what the company does, their values, and team culture. The address may appear at the bottom of the page in a section like 'Office', 'Contact', or similar — do not skip it."
+                ? `Extract the full postal address (street number, city, zip, country), any email addresses, phone numbers, and contact person names/titles. Also extract what the company does, their values, and team culture. The address may appear at the bottom of the page in a section like 'Office', 'Contact', or similar — do not skip it. If multiple office addresses are listed, prefer the one in the same country as the job location: ${job.location ?? "unknown"}.`
                 : "Extract substance that helps a candidate understand this company before applying: what they do, their values and how they work, the specific technologies and tools they use, notable projects or customers, and how the team operates. Ignore nav, footers, cookie banners, and generic marketing copy.";
               const subData = await stagehand.extract(extractInstruction, subPageSchema);
               const subAddress = subData.address ?? null;
@@ -1158,7 +1158,7 @@ Only extract contacts explicitly named in the text.`,
             try {
               const fallbackUrl = new URL(path, homepageUrl).href;
               await page.goto(fallbackUrl, { waitUntil: "networkidle", timeoutMs: 15000 });
-              const extractInstruction = "This is a company page. Extract the full postal address (street number, city, zip, country), any email addresses, phone numbers, and names/titles of contact persons. These are the primary details we need — do not skip them.";
+              const extractInstruction = `This is a company page. Extract the full postal address (street number, city, zip, country), any email addresses, phone numbers, and names/titles of contact persons. These are the primary details we need — do not skip them. If multiple office addresses are listed, prefer the one in the same country as the job location: ${job.location ?? "unknown"}.`;
               const fallbackData = await stagehand.extract(extractInstruction, subPageSchema);
               if (fallbackData.address && /\d/.test(fallbackData.address)) {
                 companyResearchRaw.address = fallbackData.address;
@@ -1327,16 +1327,43 @@ Skip nav, footers, cookie banners, and marketing boilerplate.`,
           if (m) { httpLangPrefix = `/${m[1]}`; break; }
         } catch { /* skip */ }
       }
-      // Try language-prefixed paths first (e.g. /da/about), then plain paths
-      const contactPaths = httpLangPrefix
-        ? [...basePaths.map((p) => `${httpLangPrefix}${p}`), ...basePaths]
-        : basePaths;
+      // Always try common language prefixes for European companies — don't rely solely on
+      // prefix detection from visited URLs (which fails when the browser phase doesn't run).
+      // Covers sites like pandektes.com/da/about where /about alone returns nothing useful.
+      const langPrefixesToTry = ["/da", "/en", "/de", "/sv", "/no"];
+      const prefixedPaths = [
+        // Detected prefix first (most likely correct), then other common prefixes
+        ...(httpLangPrefix ? basePaths.map((p) => `${httpLangPrefix}${p}`) : []),
+        ...langPrefixesToTry
+          .filter((p) => p !== httpLangPrefix)
+          .flatMap((p) => basePaths.map((base) => `${p}${base}`)),
+      ];
+      // Plain paths + prefixed paths. Plain paths first in case the site supports them directly.
+      const contactPaths = [...basePaths, ...prefixedPaths];
+
+      // Always try paths against BOTH the resolved domain AND the .com equivalent.
+      // Rule: "always search both locale (e.g. .dk) and .com domains".
+      // pandektes.dk may not have /about, but pandektes.com/da/about has the address.
+      const slugForHttp = companySlug(job.company);
+      const slugHForHttp = companySlugHyphen(job.company);
+      const httpBaseCandidates: string[] = [homepageUrl];
+      for (const c of [
+        `https://www.${slugForHttp}.com`,
+        `https://${slugForHttp}.com`,
+        ...(slugHForHttp !== slugForHttp ? [`https://www.${slugHForHttp}.com`, `https://${slugHForHttp}.com`] : []),
+      ]) {
+        try {
+          if (new URL(c).hostname !== new URL(homepageUrl).hostname) httpBaseCandidates.push(c);
+        } catch { /* skip malformed */ }
+      }
+
       // Use a mutable flag so we can break early once a real address AND contact are found
       let httpFoundRealAddress = hasRealAddress;
-      for (const path of contactPaths) {
-        if (httpFoundRealAddress && companyResearchRaw.contactFromJobPosting) break;
-        try {
-          const contactUrl = new URL(path, homepageUrl).href;
+      outer: for (const httpBase of httpBaseCandidates) {
+        for (const path of contactPaths) {
+          if (httpFoundRealAddress && companyResearchRaw.contactFromJobPosting) break outer;
+          try {
+            const contactUrl = new URL(path, httpBase).href;
           const res = await fetch(contactUrl, {
             headers: {
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -1344,12 +1371,18 @@ Skip nav, footers, cookie banners, and marketing boilerplate.`,
           });
           if (!res.ok) continue;
           const html = await res.text();
-          const fullText = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          // Strip script/style BEFORE stripping tags — otherwise JS and CSS text content
+          // inflates the char count to 100k+, burying the actual address in noise.
+          const cleanedHtml = html
+            .replace(/<style[\s\S]*?<\/style>/gi, "")
+            .replace(/<script[\s\S]*?<\/script>/gi, "");
+          const fullText = cleanedHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
           if (fullText.length < 200) continue;
-          // Addresses are typically at the bottom — include both start and end of the page.
-          // Taking only the first N chars frequently cuts off contact sections.
-          const text = fullText.length > 4000
-            ? fullText.slice(0, 2000) + " … " + fullText.slice(-2000)
+          // Addresses are typically at the bottom — take a generous tail slice.
+          // Pandektes-style pages have ~194k chars of text; the address is at ~94% depth
+          // (~11k chars from the end). A 2000-char tail misses it — use 8000 to be safe.
+          const text = fullText.length > 9000
+            ? fullText.slice(0, 1000) + " … " + fullText.slice(-8000)
             : fullText;
 
           const response = await openai.chat.completions.create({
@@ -1368,7 +1401,8 @@ Return ONLY valid JSON:
   "contactTitle": "<their job title — or null>",
   "contactEmail": "<their email address or a general contact email — or null>",
   "contactPhone": "<their phone number or a general contact phone — or null>"
-}`,
+}
+If multiple office addresses appear on the page, return the one in the same country as the job location: ${job.location ?? "unknown"}. Only fall back to a different country's address if no local address exists.`,
               },
               { role: "user", content: text },
             ],
@@ -1405,6 +1439,7 @@ Return ONLY valid JSON:
         } catch {
           // try next path
         }
+      }
       }
     }
 
@@ -1542,7 +1577,7 @@ Rules:
 Return ONLY valid JSON matching this shape:
 {
   "companyOverview": string,
-  "companyAddress": "<full postal address or null>",
+  "companyAddress": "<full postal address or null — if multiple addresses were found, prefer the one in the same country as the job location: ${job.location ?? "unknown"}>",
   "locationShort": "<Town/City and Country only e.g. 'Copenhagen, Denmark' or 'London, UK' — extracted from companyAddress, or null if no address>",
   "contactInfo": { "name": "<name or null>", "title": "<job title or null>", "email": "<email or null>", "phone": "<phone or null>" } | null,
   "recruiterContact": { "name": "<recruiter name or null>", "title": "<recruiter title or null>", "email": "<recruiter email or null>", "phone": "<recruiter phone or null>", "company": "<recruiting agency name or null>" } | null,
