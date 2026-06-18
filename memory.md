@@ -1,51 +1,57 @@
-# Memory — Careerjet/Aggregator Job Enrichment & Research Agent Fixes
+# Memory — Job Enrichment, Research & Summary Pipeline
 
-Last updated: 2026-06-17
+Last updated: 2026-06-18
 
 ## What was built
 
-**`agent/find-jobs.ts`** — Three changes:
-1. `enrichJobDescription`: now always enriches aggregator-sourced jobs regardless of description length. Previously skipped if `description.length > 300`, so Careerjet snippets were never enriched.
-2. Removed `.slice(0, 6000)` truncation — full employer page text stored in `about_role` so contact sections at the bottom are never cut off.
-3. Added `browserEnrichJobs` function + Browserbase/Stagehand imports. After HTTP enrichment runs in parallel, aggregator jobs with descriptions still < 1000 chars are visited in one shared real browser session (bypasses Cloudflare). Up to 5 jobs per search run. Uses `timeoutMs: 25000` per page.
+**`agent/find-jobs.ts`**
+- `summarizeDescription` exported (was private) — now callable from other agents
+- Summary threshold raised from 150 → 500 chars to prevent hallucinated summaries on short Careerjet snippets
+- `browserEnrichJobs` wired in — tested in production, confirmed blocked by Cloudflare Turnstile on careerjet/jobviewtrack. Silently returns empty map when Cloudflare blocks. Careerjet jobs will keep short snippets.
 
-**`agent/research-company.ts`** — Two changes:
-1. DDG job search query: extracts brand from "X søger" prefix, uses unquoted core title terms + `kontakt jobbank jobindex karriere` suffix instead of exact-match quoted full title.
-2. Contact/address preservation: if new research run finds nothing for `contactInfo`, `recruiterContact`, or `companyAddress`, existing saved values are kept rather than wiped.
+**`agent/import-job-from-url.ts`**
+- Imports `summarizeDescription` from `find-jobs.ts`
+- Calls it before DB insert — all future URL-imported jobs now get a `description_summary` automatically
 
-**`agent/import-job-from-url.ts`** — Added optional `pastedText?` parameter. When provided (length > 200), skips all HTTP fetching and uses the pasted text directly.
+**`agent/research-company.ts`**
+- `companyAddress` added to GPT-4o extraction prompt
+- `contactFoundFromJobDescription` flag — skips re-scraping source URL when `about_role.length > 1000` (full enriched text present)
+- Contact/address preservation — re-runs don't wipe existing values
 
-**`app/api/agent/import-url/route.ts`** — Added `text` field parsing, passes it as `pastedText` to `importJobFromUrl`.
+**`components/find-jobs/SearchCard.tsx`**
+- Client timeout raised 30s → 180s for Find Jobs fetch
 
-**`components/find-jobs/SearchCard.tsx`** — Added `importText` state + optional textarea below URL input in the "Add from URL" tab. Sends `text` field in POST body only if > 200 chars.
+**`app/api/agent/find/route.ts`**
+- `export const maxDuration = 300` added
+
+**`components/profile/ProfileForm.tsx`**
+- `isUsed` skill highlighting now includes personal project skills (same visual treatment as work experience)
 
 ## Decisions made
 
-- **Browserbase for Careerjet**: Plain HTTP always fails Cloudflare Turnstile on Careerjet. One shared session per Find Jobs run — no per-job session overhead.
-- **`timeoutMs` not `timeout`**: Stagehand's `page.goto` uses `timeoutMs`. Consistent with `research-company.ts`.
-- **Max 5 browser jobs per run**: Caps Browserbase usage to avoid excessive session time and cost.
-- **Pasted text for URL import**: User pastes job text when a page is Cloudflare-blocked. Browserbase reserved for automated Find Jobs flow.
+- **500 char minimum for summarization**: Anything below risks hallucination — GPT-4o-mini invents details not in the snippet. 500 chars is a safe floor for real content.
+- **Careerjet enrichment limitation accepted**: Cloudflare Turnstile blocks Browserbase on careerjet.dk. No automatic fix possible. User can paste text manually in "Add from URL" tab.
+- **`about_role` = full text, `description_summary` = display**: Full text kept for company research; short summary shown in the UI.
+- **Research skip condition**: Uses `about_role.length > 1000` (not contact found) as the reliable signal that full text is present.
 
 ## Problems solved
 
-- **Careerjet snippets not enriched**: Root cause was `description.length > 300` skip — Careerjet snippets are ~300-500 chars so they passed the threshold but had no contact info. Fixed with `isFromAggregator` check.
-- **Research agent wiping contacts**: Re-running "Research Company" overwrote manually-set contacts. Fixed with preservation logic.
-- **DDG bot challenge in plain HTTP**: DuckDuckGo returns a bot challenge to plain fetch. Works correctly inside Browserbase — not a bug.
+- **Hallucinated summaries**: GPT-4o-mini fabricated job details (stack, role title, culture) from 259-char Careerjet snippets. Fixed by raising minimum length to 500 chars.
+- **import-job-from-url had no summaries**: URL-imported jobs had no `description_summary`. Fixed by calling `summarizeDescription` before insert.
+- **browserEnrichJobs silently skipped**: Guard clause returned early without env vars. Confirmed vars are set in InsForge. Root cause was Cloudflare Turnstile blocking even Browserbase.
 
 ## Current state
 
-- `browserEnrichJobs` is wired in but **not yet tested** in production — needs a real Find Jobs run with Careerjet results to confirm Cloudflare bypass works.
-- Research agent contact preservation is in place.
-- Pasted text for URL import is live.
+- All 13 jobs have summaries (or are below 500 chars and correctly have none)
+- All jobs researched; contacts found where publicly available
+- AMC-Consult hallucinated summary cleared from DB
+- Pipeline fully working for non-Careerjet sources
 
 ## Next session starts with
 
-Test `browserEnrichJobs` by running a Find Jobs search for a Danish location (e.g. Copenhagen) that produces Careerjet results — check that saved `about_role` contains contact sections. If Cloudflare still blocks, check Browserbase session screenshots.
+No immediate tasks queued. If Careerjet enrichment becomes a priority, investigate Browserbase stealth options or consider a different job source for Danish market.
 
 ## Open questions
 
-- Does Browserbase's Chromium actually pass Careerjet's Cloudflare Turnstile, or does it get a "Verify you are human" page? (Turnstile may require user interaction.)
-- For `jobviewtrack.com` URLs that redirect back to Careerjet: the browser will visit a jobviewtrack URL — will it follow through to Careerjet and pass Cloudflare? Needs verification.
-- Should `browserEnrichJobs` guard on `BROWSERBASE_PROJECT_ID` env var to avoid crashes in environments without it configured?
-- Does the jobviewtrack Referer fix resolve to employer URLs in production? (unconfirmed from prior sessions)
-- Has the auth fix (refresh token from Set-Cookie) been confirmed after a full login cycle? (unconfirmed from prior sessions)
+- Careerjet/jobviewtrack via Browserbase is permanently blocked by Cloudflare Turnstile — is a different Danish job source (e.g. Jobindex direct API) worth adding?
+- Koda Staff, Pandektes, Reversio have no contact info found — genuinely no public data, or worth trying a different research strategy?
