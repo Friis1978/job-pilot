@@ -1235,7 +1235,9 @@ Return ONLY valid JSON:
               contactEmail?: string | null;
               contactPhone?: string | null;
             };
-            if (parsed.address && !companyResearchRaw.address) {
+            // Use the parsed address if we don't have one yet, OR if what we have isn't
+            // a real postal address (no digit = just a vague location like "Copenhagen HQ")
+            if (parsed.address && !hasRealAddress) {
               companyResearchRaw.address = parsed.address;
             }
             if (
