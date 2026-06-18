@@ -842,14 +842,18 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                 {data.skills
                   .slice()
                   .sort((a, b) => {
-                    const usedSkills = new Set(data.workExperience.flatMap((r) => r.skills));
+                    const usedSkills = new Set([
+                      ...data.workExperience.flatMap((r) => r.skills),
+                      ...data.personalProjects.flatMap((p) => p.skills),
+                    ]);
                     const aUsed = usedSkills.has(a);
                     const bUsed = usedSkills.has(b);
                     if (aUsed !== bUsed) return aUsed ? -1 : 1;
                     return a.localeCompare(b);
                   })
                   .map((skill) => {
-                  const isUsed = data.workExperience.some((r) => r.skills.includes(skill));
+                  const isUsed = data.workExperience.some((r) => r.skills.includes(skill)) ||
+                    data.personalProjects.some((p) => p.skills.includes(skill));
                   return (
                   <span
                     key={skill}
