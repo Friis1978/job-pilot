@@ -230,8 +230,13 @@ async function probeUrls(candidates: string[], companySlugCheck?: string): Promi
         const html = await res.text();
         const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").toLowerCase();
         // Must have real content AND mention the company (guards against parking pages)
-        if (text.length < 300 || !text.includes(companySlugCheck)) continue;
-        return url;
+        // 2000 chars minimum — parked domain "for sale" pages are short (< 500 chars) but
+        // still mention the company name in the domain string, defeating a short threshold.
+        if (text.length < 2000 || !text.includes(companySlugCheck)) continue;
+        // Return the final URL after any redirects (res.url), NOT the input URL.
+        // If pandektes.dk → 301 → pandektes.com, we want pandektes.com so that
+        // all subsequent path construction uses the correct base domain.
+        return res.url || url;
       } else {
         const res = await fetch(url, {
           method: "HEAD",
@@ -386,34 +391,11 @@ Only return a URL you are confident about — do not guess. Return JSON: { "url"
         console.error("[agent/research-company] GPT-4o URL lookup failed", urlErr);
       }
 
-      // Even if GPT-4o found a URL, if the job is in a country with a known TLD (e.g. .dk)
-      // but the returned URL doesn't use it, probe for a local version first — the GPT may
-      // have returned the US/global parent instead of the local entity.
-      if (gptFoundUrl) {
-        const countryTlds = countryTldsFromLocation(job.location);
-        if (countryTlds.length > 0) {
-          try {
-            const homepageDomain = new URL(homepageUrl).hostname.toLowerCase();
-            const hasLocalTld = countryTlds.some((tld) => homepageDomain.endsWith(`.${tld}`));
-            if (!hasLocalTld) {
-              const slug = companySlug(job.company);
-              const slugH = companySlugHyphen(job.company);
-              const localCandidates = countryTlds.flatMap((tld) => [
-                `https://${slug}.${tld}`,
-                `https://www.${slug}.${tld}`,
-                ...(slugH !== slug ? [`https://${slugH}.${tld}`, `https://www.${slugH}.${tld}`] : []),
-              ]);
-              const probed = await probeUrls(localCandidates, slug.slice(0, 5));
-              if (probed) {
-                console.log(`[agent/research-company] local TLD override: ${homepageUrl} → ${probed}`);
-                homepageUrl = probed;
-              }
-            }
-          } catch {
-            // URL parse failed — keep existing homepageUrl
-          }
-        }
-      }
+      // NOTE: We intentionally do NOT override homepageUrl with a local TLD guess here.
+      // GPT-4o's URL is the most reliable signal — overriding it with a probed .dk/.se URL
+      // risks accepting parked domains (which return 200 and mention the company name in their text).
+      // Instead, country TLD variants are added to `homepagesToTry` below so the browser
+      // tries both the GPT URL and any local TLD versions.
 
       // GPT-4o doesn't know this company — probe common URL patterns before falling
       // back to the generic .com guess. Especially important for smaller companies
@@ -978,28 +960,126 @@ Only extract contacts explicitly named in the text.`,
         }
       }
 
-      // Homepage extraction
+      // Homepage extraction — always try both the resolved URL and the .com version.
+      // Local TLD sites (e.g. pandektes.dk) often redirect to .com but Stagehand may
+      // still fail to extract content. Trying .com explicitly ensures we always have
+      // a fallback with real content.
+      const slug = companySlug(job.company);
+      const slugH = companySlugHyphen(job.company);
+      const comCandidates = [
+        `https://${slug}.com`,
+        `https://www.${slug}.com`,
+        ...(slugH !== slug ? [`https://${slugH}.com`, `https://www.${slugH}.com`] : []),
+        `https://${slug}.io`,
+        `https://www.${slug}.io`,
+        `https://${slug}.ai`,
+        `https://www.${slug}.ai`,
+      ];
+      // Build the ordered list of homepage URLs to try: resolved URL first, then country TLD
+      // variants, then .com/.io/.ai alternatives. Country TLD variants come before .com to honour
+      // the rule "always try the local domain (e.g. .dk) as well as .com".
+      const countryTldsForHomepage = countryTldsFromLocation(job.location);
+      const countryTldCandidates = countryTldsForHomepage.flatMap((tld) => [
+        `https://${slug}.${tld}`,
+        `https://www.${slug}.${tld}`,
+        ...(slugH !== slug ? [`https://${slugH}.${tld}`, `https://www.${slugH}.${tld}`] : []),
+      ]);
+      const homepagesToTry: string[] = [homepageUrl];
+      for (const c of [...countryTldCandidates, ...comCandidates]) {
+        try {
+          if (new URL(c).hostname !== new URL(homepageUrl).hostname) {
+            homepagesToTry.push(c);
+          }
+        } catch { /* skip malformed */ }
+      }
+
       try {
-        await page.goto(homepageUrl, { waitUntil: "networkidle" });
+        let homepageData: { oneLiner?: string; productSummary?: string; signals?: string[]; pageLinks?: Array<{ url: string; kind: string }> } | null = null;
+        let usedHomepageUrl = homepageUrl;
 
-        const homepageData = await stagehand.extract(
-          "This is a company's homepage. Capture what the company actually does, who it's for, and any concrete signals (funding, customers, scale, mission, recent launches). Then find the internal links most worth visiting to research them as an employer.",
-          homepageSchema,
-        );
+        for (const candidateUrl of homepagesToTry) {
+          try {
+            await page.goto(candidateUrl, { waitUntil: "networkidle", timeoutMs: 20000 });
+            const data = await stagehand.extract(
+              "This is a company's homepage. Capture what the company actually does, who it's for, and any concrete signals (funding, customers, scale, mission, recent launches). Then find the internal links most worth visiting to research them as an employer.",
+              homepageSchema,
+            );
+            if (data.oneLiner || data.productSummary) {
+              homepageData = data;
+              usedHomepageUrl = page.url(); // use the final URL after any redirects
+              homepageUrl = usedHomepageUrl; // update so fallback path construction uses the correct base
+              companyResearchRaw.sourceUrls = [usedHomepageUrl];
+              console.log(`[research-company] homepage found at: ${usedHomepageUrl}`);
+              break;
+            }
+            console.log(`[research-company] homepage empty at: ${candidateUrl} — trying next`);
+          } catch {
+            console.log(`[research-company] homepage failed at: ${candidateUrl} — trying next`);
+          }
+        }
 
-        companyResearchRaw.oneLiner = homepageData.oneLiner ?? "";
-        companyResearchRaw.productSummary =
-          homepageData.productSummary ?? "";
-        companyResearchRaw.signals = homepageData.signals ?? [];
+        companyResearchRaw.oneLiner = homepageData?.oneLiner ?? "";
+        companyResearchRaw.productSummary = homepageData?.productSummary ?? "";
+        companyResearchRaw.signals = homepageData?.signals ?? [];
+
+        // Always visit /about directly in the browser — regardless of whether the homepage
+        // extraction succeeded. Homepages are often animated/JS-heavy and Stagehand may fail
+        // to extract links from them. /about reliably contains address, team, and culture info.
+        // Try both plain and language-prefixed variants (e.g. /da/about).
+        const aboutVariants = ["/about", "/about-us", "/om-os"];
+        // Detect language prefix from the current page URL after any redirects
+        try {
+          const finalPathname = new URL(page.url()).pathname;
+          const m = finalPathname.match(/^\/([a-z]{2})(?:\/|$)/);
+          if (m) {
+            const lp = `/${m[1]}`;
+            aboutVariants.unshift(...["/about", "/about-us", "/om-os"].map((p) => `${lp}${p}`));
+          }
+        } catch { /* keep defaults */ }
+
+        for (const aboutPath of aboutVariants) {
+          const currentAddressReal = !!companyResearchRaw.address && /\d/.test(companyResearchRaw.address);
+          if (currentAddressReal) break;
+          try {
+            const aboutUrl = new URL(aboutPath, page.url()).href;
+            await page.goto(aboutUrl, { waitUntil: "networkidle", timeoutMs: 15000 });
+            const aboutData = await stagehand.extract(
+              "Extract the full postal address (street number, city, zip, country), any email addresses, phone numbers, and contact person names/titles. Also capture what the company does, their values, team size, funding, and culture. The address is often in a section labelled 'Office', 'Contact', or at the bottom of the page — do not skip it.",
+              subPageSchema,
+            );
+            if (aboutData.address && /\d/.test(aboutData.address)) {
+              companyResearchRaw.address = aboutData.address;
+            }
+            if (!companyResearchRaw.contactFromJobPosting && (aboutData.contactName || aboutData.contactEmail)) {
+              companyResearchRaw.contactFromJobPosting = {
+                name: aboutData.contactName ?? null,
+                title: aboutData.contactTitle ?? null,
+                email: aboutData.contactEmail ?? null,
+                phone: aboutData.contactPhone ?? null,
+              };
+            }
+            if (aboutData.keyPoints?.length || aboutData.valuesOrCulture?.length || aboutData.technologies?.length) {
+              companyResearchRaw.subPages.push({
+                keyPoints: aboutData.keyPoints ?? [],
+                technologies: aboutData.technologies ?? [],
+                valuesOrCulture: aboutData.valuesOrCulture ?? [],
+                notable: aboutData.notable ?? [],
+                address: aboutData.address ?? null,
+              });
+            }
+            companyResearchRaw.sourceUrls.push(page.url());
+            if (companyResearchRaw.address && /\d/.test(companyResearchRaw.address)) break;
+          } catch { /* try next variant */ }
+        }
 
         // Bail if parked domain or wrong site — fall through to DuckDuckGo search
-        if (!homepageData.oneLiner && !homepageData.productSummary) {
+        if (!homepageData?.oneLiner && !homepageData?.productSummary) {
           console.log(
             "[agent/research-company] no homepage content — skipping sub-pages",
           );
         } else {
           // Sub-page extraction — max 3, prefer about/blog/engineering/product over careers
-          const subPageLinks = (homepageData.pageLinks ?? [])
+          const subPageLinks = (homepageData?.pageLinks ?? [])
             .filter((l) => l.kind !== "careers")
             .sort((a, b) => {
               const ai = PREFERRED_PAGE_KINDS.indexOf(a.kind);
@@ -1013,12 +1093,13 @@ Only extract contacts explicitly named in the text.`,
               await page.goto(link.url, { waitUntil: "networkidle" });
               // Contact pages need a different prompt — the generic "ignore footers/marketing" instruction
               // causes the AI to skip addresses and phone numbers which look like footer/marketing content.
-              const extractInstruction = link.kind === "contact"
-                ? "This is a company contact page. Extract the full postal address (street, city, zip, country), any email addresses, phone numbers, and names/titles of contact persons. These details are the primary content of this page — do not skip them."
+              const extractInstruction = (link.kind === "contact" || link.kind === "about")
+                ? "Extract the full postal address (street number, city, zip, country), any email addresses, phone numbers, and contact person names/titles. Also extract what the company does, their values, and team culture. The address may appear at the bottom of the page in a section like 'Office', 'Contact', or similar — do not skip it."
                 : "Extract substance that helps a candidate understand this company before applying: what they do, their values and how they work, the specific technologies and tools they use, notable projects or customers, and how the team operates. Ignore nav, footers, cookie banners, and generic marketing copy.";
               const subData = await stagehand.extract(extractInstruction, subPageSchema);
               const subAddress = subData.address ?? null;
-              if (subAddress && !companyResearchRaw.address) {
+              const currentAddressIsReal = !!companyResearchRaw.address && /\d/.test(companyResearchRaw.address);
+              if (subAddress && (!companyResearchRaw.address || !currentAddressIsReal)) {
                 companyResearchRaw.address = subAddress;
               }
               if (
@@ -1046,6 +1127,53 @@ Only extract contacts explicitly named in the text.`,
                 link.url,
                 subErr,
               );
+            }
+          }
+        }
+
+        // ── Browser address/contact fallback ──────────────────────────────────
+        // If the sub-page extraction didn't produce a real postal address (one with
+        // a digit), explicitly visit /about and /contact via the real browser.
+        // JS-rendered sites (React, Next.js) are invisible to plain HTTP fetches
+        // so this must run inside the Stagehand session while it's still open.
+        const addressIsRealAfterSubPages = !!companyResearchRaw.address && /\d/.test(companyResearchRaw.address);
+        if (!addressIsRealAfterSubPages || !companyResearchRaw.contactFromJobPosting) {
+          // Detect language prefix from the current page URL (e.g. pandektes.com/da/... → prefix "da")
+          // Many sites use /da/, /en/, /de/ etc. as URL prefixes for localised content.
+          let langPrefix = "";
+          try {
+            const currentPathname = new URL(page.url()).pathname;
+            const prefixMatch = currentPathname.match(/^\/([a-z]{2})(?:\/|$)/);
+            if (prefixMatch) langPrefix = `/${prefixMatch[1]}`;
+          } catch { /* keep empty */ }
+
+          const basePaths = ["/about", "/about-us", "/om-os", "/contact", "/kontakt", "/contact-us"];
+          // Always try both plain paths and language-prefixed paths
+          const fallbackPaths = langPrefix
+            ? [...basePaths.map((p) => `${langPrefix}${p}`), ...basePaths]
+            : basePaths;
+          for (const path of fallbackPaths) {
+            const addressNowReal = !!companyResearchRaw.address && /\d/.test(companyResearchRaw.address);
+            if (addressNowReal && companyResearchRaw.contactFromJobPosting) break;
+            try {
+              const fallbackUrl = new URL(path, homepageUrl).href;
+              await page.goto(fallbackUrl, { waitUntil: "networkidle", timeoutMs: 15000 });
+              const extractInstruction = "This is a company page. Extract the full postal address (street number, city, zip, country), any email addresses, phone numbers, and names/titles of contact persons. These are the primary details we need — do not skip them.";
+              const fallbackData = await stagehand.extract(extractInstruction, subPageSchema);
+              if (fallbackData.address && /\d/.test(fallbackData.address)) {
+                companyResearchRaw.address = fallbackData.address;
+              }
+              if (!companyResearchRaw.contactFromJobPosting && (fallbackData.contactName || fallbackData.contactEmail || fallbackData.contactPhone)) {
+                companyResearchRaw.contactFromJobPosting = {
+                  name: fallbackData.contactName ?? null,
+                  title: fallbackData.contactTitle ?? null,
+                  email: fallbackData.contactEmail ?? null,
+                  phone: fallbackData.contactPhone ?? null,
+                };
+              }
+              companyResearchRaw.sourceUrls.push(fallbackUrl);
+            } catch {
+              // try next path
             }
           }
         }
@@ -1184,15 +1312,29 @@ Skip nav, footers, cookie banners, and marketing boilerplate.`,
 
     // Fallback: if no real address or contact info found, try common contact/about page paths directly
     if (!hasRealAddress || !companyResearchRaw.contactFromJobPosting) {
-      const contactPaths = [
+      const basePaths = [
         "/kontakt", "/contact", "/contact-us", "/contactus",
         "/om-os", "/about", "/about-us", "/about-us/contact",
         "/find-os", "/find-us",
         "/kontakt-os", "/kontaktoplysninger",
         "/vi-er-her", "/company/contact",
       ];
+      // Detect language prefix from any visited source URL (e.g. /da/, /en/, /de/)
+      let httpLangPrefix = "";
+      for (const src of companyResearchRaw.sourceUrls) {
+        try {
+          const m = new URL(src).pathname.match(/^\/([a-z]{2})(?:\/|$)/);
+          if (m) { httpLangPrefix = `/${m[1]}`; break; }
+        } catch { /* skip */ }
+      }
+      // Try language-prefixed paths first (e.g. /da/about), then plain paths
+      const contactPaths = httpLangPrefix
+        ? [...basePaths.map((p) => `${httpLangPrefix}${p}`), ...basePaths]
+        : basePaths;
+      // Use a mutable flag so we can break early once a real address AND contact are found
+      let httpFoundRealAddress = hasRealAddress;
       for (const path of contactPaths) {
-        if (hasRealAddress && companyResearchRaw.contactFromJobPosting) break;
+        if (httpFoundRealAddress && companyResearchRaw.contactFromJobPosting) break;
         try {
           const contactUrl = new URL(path, homepageUrl).href;
           const res = await fetch(contactUrl, {
@@ -1202,7 +1344,13 @@ Skip nav, footers, cookie banners, and marketing boilerplate.`,
           });
           if (!res.ok) continue;
           const html = await res.text();
-          const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 3000);
+          const fullText = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          if (fullText.length < 200) continue;
+          // Addresses are typically at the bottom — include both start and end of the page.
+          // Taking only the first N chars frequently cuts off contact sections.
+          const text = fullText.length > 4000
+            ? fullText.slice(0, 2000) + " … " + fullText.slice(-2000)
+            : fullText;
 
           const response = await openai.chat.completions.create({
             model: "gpt-4o",
@@ -1235,10 +1383,12 @@ Return ONLY valid JSON:
               contactEmail?: string | null;
               contactPhone?: string | null;
             };
-            // Use the parsed address if we don't have one yet, OR if what we have isn't
-            // a real postal address (no digit = just a vague location like "Copenhagen HQ")
-            if (parsed.address && !hasRealAddress) {
+            // Write address if we don't have a real one yet (with a digit = real postal address)
+            if (parsed.address && !httpFoundRealAddress) {
               companyResearchRaw.address = parsed.address;
+              if (/\d/.test(parsed.address)) {
+                httpFoundRealAddress = true; // stop overwriting with a later path's result
+              }
             }
             if (
               !companyResearchRaw.contactFromJobPosting &&
