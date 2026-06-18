@@ -1178,8 +1178,12 @@ Skip nav, footers, cookie banners, and marketing boilerplate.`,
       }
     }
 
-    // Fallback: if no address or contact info found, try common contact/about page paths directly
-    if (!companyResearchRaw.address || !companyResearchRaw.contactFromJobPosting) {
+    // A real postal address always contains a digit (street number or zip code).
+    // "Copenhagen HQ", "Remote", etc. are location hints, not real addresses — treat as missing.
+    const hasRealAddress = !!companyResearchRaw.address && /\d/.test(companyResearchRaw.address);
+
+    // Fallback: if no real address or contact info found, try common contact/about page paths directly
+    if (!hasRealAddress || !companyResearchRaw.contactFromJobPosting) {
       const contactPaths = [
         "/kontakt", "/contact", "/contact-us", "/contactus",
         "/om-os", "/about", "/about-us", "/about-us/contact",
@@ -1188,7 +1192,7 @@ Skip nav, footers, cookie banners, and marketing boilerplate.`,
         "/vi-er-her", "/company/contact",
       ];
       for (const path of contactPaths) {
-        if (companyResearchRaw.address && companyResearchRaw.contactFromJobPosting) break;
+        if (hasRealAddress && companyResearchRaw.contactFromJobPosting) break;
         try {
           const contactUrl = new URL(path, homepageUrl).href;
           const res = await fetch(contactUrl, {
