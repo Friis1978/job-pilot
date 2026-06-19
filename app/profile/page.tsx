@@ -1,6 +1,7 @@
 import { Navbar } from "@/components/layout/Navbar";
 import { CompletionIndicator } from "@/components/profile/CompletionIndicator";
 import { ProfilePageShell } from "@/components/profile/ProfilePageShell";
+import { OnboardingDialog } from "@/components/dashboard/OnboardingDialog";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import type { Profile } from "@/types";
 
@@ -84,6 +85,7 @@ export default async function ProfilePage() {
   return (
     <>
       <Navbar user={{ name: userMeta?.full_name ?? userMeta?.name, email: authData.user?.email, avatarUrl: profile?.avatar_url ?? userMeta?.avatar_url }} isAdmin={profile?.is_admin ?? false} />
+      <OnboardingDialog show={!profile?.onboarding_seen} />
       <main className="min-h-screen bg-background py-8">
         <div className="w-full max-w-360 mx-auto px-4 sm:px-6 flex flex-col gap-6 pb-12">
           <CompletionIndicator percentage={percentage} missingFields={missingFields} />

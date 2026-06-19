@@ -7,9 +7,10 @@ type Props = {
   jobId: string;
   companyName: string;
   hasResearch: boolean;
+  fullWidth?: boolean;
 };
 
-export function TailoredResumeButton({ jobId, companyName, hasResearch }: Props) {
+export function TailoredResumeButton({ jobId, companyName, hasResearch, fullWidth }: Props) {
   const [loading, setLoading] = useState(false);
 
   async function handleGenerate() {
@@ -38,18 +39,15 @@ export function TailoredResumeButton({ jobId, companyName, hasResearch }: Props)
   }
 
   return (
-    <div className="flex flex-col items-end gap-1 shrink-0">
+    <div className={`flex flex-col gap-1 ${fullWidth ? "w-full" : "items-end shrink-0"}`}>
       <button
         onClick={handleGenerate}
         disabled={loading}
-        className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-accent-foreground rounded-lg text-xs font-medium hover:bg-accent-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className={`flex items-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${fullWidth ? "w-full justify-center gap-1.5 py-3 px-4 bg-surface-tertiary border border-border-muted text-text-primary rounded-xl text-sm font-bold underline hover:bg-border" :"gap-1.5 px-3 py-1.5 bg-accent text-accent-foreground rounded-lg text-xs font-medium hover:bg-accent-dark"}`}
       >
-        {loading ? (
-          <SpinnerIcon className="w-3.5 h-3.5 animate-spin" />
-        ) : (
-          <DocumentIcon className="w-3.5 h-3.5" />
-        )}
-        {loading ? "Generating..." : "Download Tailored Resume"}
+        {loading && <SpinnerIcon className={fullWidth ? "w-4 h-4 animate-spin" : "w-3.5 h-3.5 animate-spin"} />}
+        {!loading && !fullWidth && <DocumentIcon className="w-3.5 h-3.5" />}
+        {loading ? "Generating..." : "Tailored resume"}
       </button>
       {!hasResearch && (
         <p className="text-xs text-text-muted text-right">

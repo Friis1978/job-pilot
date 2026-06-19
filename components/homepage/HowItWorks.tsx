@@ -55,7 +55,7 @@ export function HowItWorks() {
           <div className="flex items-center justify-center p-8 sm:p-10 lg:p-12">
             <div className="overflow-hidden w-full">
               <Image
-                src="/images/jobs-lists.png"
+                src="/images/onboarding-jobs.png"
                 alt="Jobs list with match scores"
                 width={800}
                 height={560}

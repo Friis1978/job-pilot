@@ -8,7 +8,6 @@ import { ResearchButton } from "@/components/find-jobs/ResearchButton";
 import { CoverLetterSection } from "@/components/find-jobs/CoverLetterSection";
 import { TailoredResumeButton } from "@/components/find-jobs/TailoredResumeButton";
 import { StatusBadge } from "@/components/find-jobs/StatusBadge";
-import { ApplicationPipeline } from "@/components/find-jobs/ApplicationPipeline";
 import { RescoreButton } from "@/components/find-jobs/RescoreButton";
 import type { JobStatus } from "@/components/find-jobs/StatusBadge";
 
@@ -53,7 +52,22 @@ type Job = {
   status: string;
   external_apply_url: string | null;
   found_at: string;
+  source: string | null;
 };
+
+function formatSource(source: string | null): string {
+  if (!source) return "—";
+  const map: Record<string, string> = {
+    adzuna: "Adzuna",
+    jooble: "Jooble",
+    jobtech: "JobTech",
+    glassdoor: "Glassdoor",
+    careerjet: "Careerjet",
+    search: "Job search",
+    url: "Imported",
+  };
+  return map[source.toLowerCase()] ?? source;
+}
 
 function formatJobType(jobType: string | null): string {
   if (!jobType) return "—";
@@ -110,11 +124,21 @@ export default async function JobDetailsPage({
     (profileData as Pick<Profile, "work_experience"> | null)?.work_experience,
   );
 
+  const matchColor = getMatchColor(job.match_score);
+
+  const skillsScore = (() => {
+    const matched = job.matched_skills?.length ?? 0;
+    const missing = job.missing_skills?.length ?? 0;
+    const total = matched + missing;
+    if (total === 0) return job.match_score;
+    return Math.round((matched / total) * 100);
+  })();
+
   return (
     <>
       <Navbar user={{ name: userMeta?.full_name ?? userMeta?.name, email: user.email, avatarUrl: (profileData as { avatar_url?: string | null } | null)?.avatar_url ?? userMeta?.avatar_url }} isAdmin={(profileData as { is_admin?: boolean } | null)?.is_admin ?? false} />
       <main className="min-h-screen bg-background py-8">
-        <div className="w-full max-w-360 mx-auto px-4 sm:px-6 flex flex-col gap-5 pb-12">
+        <div className="w-full max-w-360 mx-auto px-4 sm:px-6 pb-12 flex flex-col gap-5">
 
           {/* Back to Jobs */}
           <Link
@@ -125,254 +149,326 @@ export default async function JobDetailsPage({
             Back to Jobs
           </Link>
 
-          {/* Job Header Card */}
-          <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm flex items-center gap-4">
-            <div className="shrink-0 w-12 h-12 bg-surface-secondary border border-border rounded-xl flex items-center justify-center">
-              <BuildingIcon className="w-6 h-6 text-text-muted" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold text-text-primary leading-tight">
-                {job.title}
-              </h1>
-              <p className="mt-0.5 text-sm text-text-secondary">
-                {job.company}
-                <span className="mx-2">•</span>
-                <span className={`font-semibold ${getMatchColor(job.match_score)}`}>
-                  {job.match_score}% Match Score
-                </span>
-              </p>
-            </div>
-            <StatusBadge jobId={job.id} status={(job.status as JobStatus) ?? "saved"} />
-            {job.external_apply_url && (
-              <a
-                href={job.external_apply_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="shrink-0 flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors"
-              >
-                <ExternalLinkIcon className="w-4 h-4" />
-                View Job Post
-              </a>
-            )}
-          </div>
+          {/* Two-column layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
 
-          {/* Info Cards Row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <InfoCard
-              icon={<DollarIcon className="w-5 h-5 text-success shrink-0" />}
-              value={job.salary ?? "—"}
-              label="Salary Est."
-            />
-            <InfoCard
-              icon={<PinIcon className="w-5 h-5 text-info-medium shrink-0" />}
-              value={job.location ?? "—"}
-              label="Location"
-            />
-            <InfoCard
-              icon={<BriefcaseIcon className="w-5 h-5 text-info-medium shrink-0" />}
-              value={formatJobType(job.job_type)}
-              label="Job Type"
-            />
-            <InfoCard
-              icon={<CalendarIcon className="w-5 h-5 text-info-medium shrink-0" />}
-              value={formatDateAgo(job.found_at)}
-              label="Date Found"
-            />
-          </div>
+            {/* ── LEFT COLUMN ─────────────────────────────────────────── */}
+            <div className="flex flex-col gap-5">
 
-          {/* Application Pipeline */}
-          <ApplicationPipeline jobId={job.id} status={(job.status as JobStatus) ?? "saved"} />
-
-          {/* AI Match Reasoning */}
-          {job.match_reason && (
-            <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center gap-2 mb-4">
-                <SparkleIcon className="w-4 h-4 text-success shrink-0" />
-                <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                  AI Match Reasoning
-                </span>
-              </div>
-              <p className="text-sm text-text-primary leading-relaxed">
-                {job.match_reason}
-              </p>
-            </div>
-          )}
-
-          {/* Required Skills vs Your Profile */}
-          {((job.matched_skills?.length ?? 0) > 0 ||
-            (job.missing_skills?.length ?? 0) > 0) && (
-            <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                  Required Skills vs Your Profile
-                </p>
-                <RescoreButton jobId={job.id} />
-              </div>
-
-              {(job.matched_skills?.length ?? 0) > 0 && (
-                <div className="mb-4">
-                  <p className="text-sm text-text-secondary mb-2">You have</p>
-                  <div className="flex flex-wrap gap-2">
-                    {job.matched_skills!.map((skill) => {
-                      const yrs =
-                        skillYears[skill] ??
-                        skillYears[
-                          Object.keys(skillYears).find(
-                            (k) => k.toLowerCase() === skill.toLowerCase(),
-                          ) ?? ""
-                        ] ??
-                        null;
-                      return (
+              {/* Job Header Card */}
+              <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm flex items-start gap-4">
+<div className="flex-1 min-w-0">
+                  <h1 className="text-xl font-bold text-text-primary leading-tight">{job.title}</h1>
+                  <p className="mt-0.5 text-sm text-text-secondary">
+                    {job.company}
+                    {job.location && <> &middot; {job.location}</>}
+                    {job.job_type && <> &middot; {formatJobType(job.job_type)}</>}
+                  </p>
+                  {(job.matched_skills?.length ?? 0) > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-3">
+                      {job.matched_skills!.slice(0, 5).map((skill) => (
                         <span
                           key={skill}
-                          className="flex items-center gap-1 px-3 py-1 bg-success-lightest text-success-foreground rounded-full text-sm font-medium"
+                          className="px-2.5 py-1 bg-surface-secondary border border-border rounded-full text-xs font-medium text-text-secondary"
                         >
-                          <CheckIcon className="w-3.5 h-3.5 shrink-0" />
                           {skill}
-                          {yrs != null && (
-                            <span className="opacity-70 font-normal">· {yrs}yr</span>
-                          )}
                         </span>
-                      );
-                    })}
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col items-center gap-1 shrink-0">
+                  <MatchCircle score={job.match_score} colorClass={matchColor} />
+                  <span className="text-xs text-text-muted">Match score</span>
+                </div>
+              </div>
+
+              {/* Match Breakdown */}
+              {((job.matched_skills?.length ?? 0) > 0 ||
+                (job.missing_skills?.length ?? 0) > 0) && (
+                <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                      Match Breakdown
+                    </p>
+                    <RescoreButton jobId={job.id} />
+                  </div>
+
+                  {/* Progress bars */}
+                  <div className="flex flex-col gap-3 mb-6">
+                    <ProgressBar label="Skills" value={skillsScore} barColor="bg-success" textColor="text-success" />
+                    <ProgressBar label="Experience" value={job.match_score} barColor="bg-info-medium" textColor="text-info-medium" />
+                    <ProgressBar label="Seniority" value={job.match_score} barColor="bg-success" textColor="text-success" />
+                  </div>
+
+                  {/* Matched / Missing skills two-column */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-5 border-t border-border">
+                    {(job.matched_skills?.length ?? 0) > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary mb-3">
+                          Matched Skills
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {job.matched_skills!.map((skill) => {
+                            const yrs =
+                              skillYears[skill] ??
+                              skillYears[
+                                Object.keys(skillYears).find(
+                                  (k) => k.toLowerCase() === skill.toLowerCase(),
+                                ) ?? ""
+                              ] ??
+                              null;
+                            return (
+                              <span
+                                key={skill}
+                                className="px-3 py-1 bg-success-lightest text-success-foreground rounded-full text-sm font-medium"
+                              >
+                                {skill}
+                                {yrs != null && (
+                                  <span className="opacity-70 font-normal"> · {yrs}yr</span>
+                                )}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {(job.missing_skills?.length ?? 0) > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary mb-3">
+                          Missing Skills
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {job.missing_skills!.map((skill) => (
+                            <span
+                              key={skill}
+                              className="px-3 py-1 bg-error/10 text-error rounded-full text-sm font-medium"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
 
-              {(job.missing_skills?.length ?? 0) > 0 && (
-                <div>
-                  <p className="text-sm text-text-secondary mb-2">Gap skills</p>
-                  <div className="flex flex-wrap gap-2">
-                    {job.missing_skills!.map((skill) => (
-                      <span
-                        key={skill}
-                        className="flex items-center gap-1 px-3 py-1 bg-accent-muted text-accent rounded-full text-sm font-medium"
+              {/* Job Description */}
+              {(job.description_summary || job.about_role) && (
+                <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <DocIcon className="w-5 h-5 text-text-muted shrink-0" />
+                      <h2 className="text-base font-semibold text-text-primary">
+                        Job Description
+                      </h2>
+                    </div>
+                    {job.external_apply_url && (
+                      <a
+                        href={job.external_apply_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-sm text-accent hover:text-accent-dark transition-colors shrink-0"
                       >
-                        <XSmallIcon className="w-3.5 h-3.5 shrink-0" />
-                        {skill}
-                      </span>
-                    ))}
+                        Full posting
+                        <ExternalLinkIcon className="w-3.5 h-3.5" />
+                      </a>
+                    )}
                   </div>
+                  {(() => {
+                    const raw = job.description_summary ?? job.about_role ?? "";
+                    const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => l.replace(/^[•\-\*]\s*/, ""));
+                    if (lines.length > 1) {
+                      return (
+                        <ul className="flex flex-col gap-2">
+                          {lines.map((text, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm text-text-primary leading-relaxed">
+                              <span className="mt-2 w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+                              {text}
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                    }
+                    return <p className="text-sm text-text-primary leading-relaxed">{raw}</p>;
+                  })()}
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Job Description */}
-          {(job.description_summary || job.about_role) && (
-            <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <DocIcon className="w-5 h-5 text-text-muted shrink-0" />
-                  <h2 className="text-base font-semibold text-text-primary">
-                    Job Description
+              {/* Company Research */}
+              <div className="bg-surface border border-border rounded-2xl shadow-sm overflow-hidden">
+                <div className="flex items-center gap-3 px-6 py-5 border-b border-border">
+                  <BuildingIcon className="w-5 h-5 text-text-muted shrink-0" />
+                  <h2 className="flex-1 text-base font-semibold text-text-primary">
+                    Company Research
                   </h2>
+                  <ResearchButton jobId={job.id} hasResearch={!!job.company_research} />
                 </div>
-                {job.external_apply_url && (
+
+                <div className="bg-surface-tertiary p-5">
+                  {job.company_research ? (
+                    <CompanyDossierDisplay
+                      dossier={job.company_research as unknown as CompanyDossier}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 gap-3">
+                      <div className="w-10 h-10 flex items-center justify-center">
+                        <BuildingIcon className="w-8 h-8 text-border" />
+                      </div>
+                      <p className="text-sm font-medium text-text-primary">
+                        No research yet
+                      </p>
+                      <p className="text-sm text-text-muted text-center max-w-xs">
+                        Click &ldquo;Research Company&rdquo; to let the AI browse{" "}
+                        {job.company}&apos;s public pages and build a dossier.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Cover Letter */}
+              <div id="cover-letter">
+                <CoverLetterSection jobId={job.id} initialCoverLetter={job.cover_letter} hasAvatar={!!profileData?.avatar_url} />
+              </div>
+
+            </div>
+
+            {/* ── RIGHT SIDEBAR ────────────────────────────────────────── */}
+            <div className="flex flex-col gap-3 lg:sticky lg:top-8">
+
+              {/* Main card: buttons + details */}
+              <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm flex flex-col gap-2">
+
+                {/* Apply Now */}
+                {job.external_apply_url ? (
                   <a
                     href={job.external_apply_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-sm text-accent hover:text-accent-dark transition-colors shrink-0"
+                    className="w-full flex items-center justify-center gap-1.5 py-3 bg-accent text-accent-foreground rounded-xl text-sm font-bold underline hover:bg-accent-dark transition-colors"
                   >
-                    Full posting
-                    <ExternalLinkIcon className="w-3.5 h-3.5" />
+                    Apply now
+                    <span className="no-underline">↗</span>
                   </a>
-                )}
-              </div>
-              {job.description_summary ? (
-                <ul className="flex flex-col gap-2">
-                  {job.description_summary
-                    .split("\n")
-                    .map((line) => line.trim())
-                    .filter(Boolean)
-                    .map((line, i) => {
-                      const text = line.replace(/^[•\-\*]\s*/, "");
-                      return (
-                        <li key={i} className="flex items-start gap-2 text-sm text-text-primary leading-relaxed">
-                          <span className="mt-2 w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
-                          {text}
-                        </li>
-                      );
-                    })}
-                </ul>
-              ) : (
-                <p className="text-sm text-text-primary leading-relaxed">{job.about_role}</p>
-              )}
-            </div>
-          )}
-
-          {/* Company Research */}
-          <div className="bg-surface border border-border rounded-2xl shadow-sm overflow-hidden">
-            <div className="flex items-center gap-3 px-6 py-5 border-b border-border">
-              <BuildingIcon className="w-5 h-5 text-text-muted shrink-0" />
-              <h2 className="flex-1 text-base font-semibold text-text-primary">
-                Company Research
-              </h2>
-              <ResearchButton jobId={job.id} hasResearch={!!job.company_research} />
-            </div>
-
-            <div className="bg-surface-secondary p-5">
-              {job.company_research ? (
-                <CompanyDossierDisplay
-                  dossier={
-                    // Safe cast — shape is controlled by research-company agent
-                    job.company_research as unknown as CompanyDossier
-                  }
-                />
-              ) : (
-                /* Empty state */
-                <div className="flex flex-col items-center justify-center py-10 gap-3">
-                  <div className="w-10 h-10 flex items-center justify-center">
-                    <BuildingIcon className="w-8 h-8 text-border" />
+                ) : (
+                  <div className="w-full flex items-center justify-center py-3 border border-border rounded-xl text-sm font-medium text-text-muted cursor-not-allowed">
+                    No job link available
                   </div>
-                  <p className="text-sm font-medium text-text-primary">
-                    No research yet
-                  </p>
-                  <p className="text-sm text-text-muted text-center max-w-xs">
-                    Click &ldquo;Research Company&rdquo; to let the AI browse{" "}
-                    {job.company}&apos;s public pages and build a dossier.
+                )}
+
+                {/* Download Tailored Resume */}
+                <TailoredResumeButton
+                  jobId={job.id}
+                  companyName={job.company}
+                  hasResearch={!!job.company_research}
+                  fullWidth
+                />
+
+                {/* Separator */}
+                <div className="h-px bg-border-muted mx-1 my-1" />
+
+                {/* Job Details */}
+                <div className="flex flex-col">
+                  <DetailRow label="Source" value={formatSource(job.source)} />
+                  <DetailRow label="Posted" value={formatDateAgo(job.found_at)} />
+                  <DetailRow label="Contract" value={formatJobType(job.job_type)} />
+                  <DetailRow label="Salary" value={job.salary ?? "—"} />
+                  <div className="flex items-center justify-between py-2.5">
+                    <span className="text-xs font-medium text-text-muted">Status</span>
+                    <StatusBadge jobId={job.id} status={(job.status as JobStatus) ?? "saved"} />
+                  </div>
+                </div>
+
+              </div>
+
+              {/* AI Match Summary */}
+              {job.match_reason && (
+                <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <SparkleIcon className="w-4 h-4 text-success shrink-0" />
+                    <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                      AI Match Summary
+                    </span>
+                  </div>
+                  <p className="text-sm text-text-secondary leading-relaxed">
+                    {job.match_reason}
                   </p>
                 </div>
               )}
+
             </div>
           </div>
-
-          {/* Tailored Resume */}
-          <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <DocIcon className="w-5 h-5 text-text-muted shrink-0" />
-              <h2 className="flex-1 text-base font-semibold text-text-primary">Tailored Resume</h2>
-            </div>
-            <div className="flex items-start gap-4">
-              <p className="flex-1 text-sm text-text-secondary leading-5">
-                Generate a version of your resume with the summary and bullet points rewritten to match what {job.company} is looking for — based on the job description{job.company_research ? " and company research" : ""}.
-              </p>
-              <TailoredResumeButton
-                jobId={job.id}
-                companyName={job.company}
-                hasResearch={!!job.company_research}
-              />
-            </div>
-          </div>
-
-          {/* Cover Letter */}
-          <CoverLetterSection jobId={job.id} initialCoverLetter={job.cover_letter} hasAvatar={!!profileData?.avatar_url} />
-
-          {/* Apply Now */}
-          {job.external_apply_url && (
-            <a
-              href={job.external_apply_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-4 bg-accent text-accent-foreground rounded-xl text-base font-semibold text-center hover:bg-accent-dark transition-colors"
-            >
-              Apply Now at {job.company}
-            </a>
-          )}
         </div>
       </main>
     </>
+  );
+}
+
+function ProgressBar({
+  label,
+  value,
+  barColor,
+  textColor,
+}: {
+  label: string;
+  value: number;
+  barColor: string;
+  textColor: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-20 text-sm text-text-secondary shrink-0">{label}</span>
+      <div className="flex-1 h-2 bg-border rounded-full overflow-hidden">
+        <div
+          className={`h-full ${barColor} rounded-full`}
+          style={{ width: `${Math.min(value, 100)}%` }}
+        />
+      </div>
+      <span className={`w-9 text-sm font-semibold text-right shrink-0 ${textColor}`}>
+        {value}%
+      </span>
+    </div>
+  );
+}
+
+function MatchCircle({ score, colorClass }: { score: number; colorClass: string }) {
+  const radius = 28;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - score / 100);
+  const lightBg =
+    colorClass === "text-success" ? "bg-success-lightest" :
+    colorClass === "text-info-medium" ? "bg-info-lightest" :
+    "bg-warning/10";
+
+  return (
+    <div className="relative flex items-center justify-center w-[72px] h-[72px] shrink-0">
+      <svg className="w-[72px] h-[72px] -rotate-90" viewBox="0 0 72 72">
+        <circle cx="36" cy="36" r={radius} fill="none" strokeWidth="5" stroke="currentColor" className="text-border" />
+        <circle
+          cx="36" cy="36" r={radius} fill="none"
+          strokeWidth="5" stroke="currentColor"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className={colorClass}
+        />
+      </svg>
+      <div className={`absolute w-[51px] h-[51px] rounded-full ${lightBg}`} />
+      <div className="absolute flex flex-col items-center">
+        <span className={`text-base font-bold leading-none ${colorClass}`}>{score}%</span>
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
+      <span className="text-xs font-medium text-text-muted">{label}</span>
+      <span className="text-xs font-medium text-text-primary text-right max-w-[180px] truncate">{value}</span>
+    </div>
   );
 }
 
@@ -433,7 +529,7 @@ function CompanyDossierDisplay({ dossier }: { dossier: CompanyDossier }) {
         </div>
       )}
 
-      {/* Tech Stack — pill tags with code icon */}
+      {/* Tech Stack */}
       {dossier.techStack.length > 0 && (
         <div className="flex flex-col gap-3">
           <p className="text-sm font-semibold text-text-primary">Tech Stack</p>
@@ -451,7 +547,7 @@ function CompanyDossierDisplay({ dossier }: { dossier: CompanyDossier }) {
         </div>
       )}
 
-      {/* Culture + Your Edge — 2-column grid */}
+      {/* Culture + Your Edge */}
       {(dossier.culture.length > 0 || dossier.yourEdge.length > 0) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {dossier.culture.length > 0 && (
@@ -489,7 +585,7 @@ function CompanyDossierDisplay({ dossier }: { dossier: CompanyDossier }) {
         </div>
       )}
 
-      {/* Gaps to Address + Smart Questions — 2-column grid */}
+      {/* Gaps to Address + Smart Questions */}
       {(dossier.gapsToAddress.length > 0 || dossier.smartQuestions.length > 0) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {dossier.gapsToAddress.length > 0 && (
@@ -527,7 +623,7 @@ function CompanyDossierDisplay({ dossier }: { dossier: CompanyDossier }) {
         </div>
       )}
 
-      {/* Why This Role — full-width card */}
+      {/* Why This Role */}
       {dossier.whyThisRole && (
         <div className="bg-surface border border-border rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-3">
@@ -538,7 +634,7 @@ function CompanyDossierDisplay({ dossier }: { dossier: CompanyDossier }) {
         </div>
       )}
 
-      {/* Interview Prep — full-width card */}
+      {/* Interview Prep */}
       {dossier.interviewPrep.length > 0 && (
         <div className="bg-surface border border-border rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-3">
@@ -575,32 +671,6 @@ function CompanyDossierDisplay({ dossier }: { dossier: CompanyDossier }) {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function InfoCard({
-  icon,
-  value,
-  label,
-}: {
-  icon: React.ReactNode;
-  value: string;
-  label: string;
-}) {
-  return (
-    <div className="bg-surface border border-border rounded-2xl p-4 shadow-sm">
-      <div className="flex items-center gap-3">
-        {icon}
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-text-primary truncate">
-            {value}
-          </p>
-          <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
-            {label}
-          </p>
-        </div>
-      </div>
     </div>
   );
 }
@@ -649,37 +719,11 @@ function ExternalLinkIcon({ className }: { className?: string }) {
   );
 }
 
-function DollarIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
-    </svg>
-  );
-}
-
 function PinIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 21s-8-6.895-8-12a8 8 0 1116 0c0 5.105-8 12-8 12z" />
       <circle cx="12" cy="9" r="2.5" />
-    </svg>
-  );
-}
-
-function BriefcaseIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="7" width="20" height="14" rx="2" />
-      <path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2M12 12v4M10 14h4" />
-    </svg>
-  );
-}
-
-function CalendarIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" />
-      <path d="M16 2v4M8 2v4M3 10h18" />
     </svg>
   );
 }

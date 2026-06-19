@@ -36,8 +36,8 @@ export function Hero() {
       {/* Dashboard preview — gray background, no rounded corners, separate section */}
       <div className="w-full max-w-300 mx-auto bg-surface-muted p-4 sm:p-10">
         <Image
-          src="/images/dashboard-demo.png"
-          alt="JobPilot dashboard"
+          src="/images/onboarding-profile.png"
+          alt="Job Pilot profile page"
           width={1200}
           height={700}
           className="w-full h-auto"

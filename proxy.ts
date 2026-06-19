@@ -72,6 +72,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
+  // Redirect logged-in users away from the marketing homepage
+  if (pathname === "/" && accessToken) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
   // Forward the valid access token to API route handlers via a custom header.
   // Route handlers cannot reliably read cookies that proxy refreshed on the
   // response (Next.js gives them the original request cookies), so we pass the
@@ -94,6 +99,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/",
     "/dashboard/:path*",
     "/profile/:path*",
     "/find-jobs/:path*",

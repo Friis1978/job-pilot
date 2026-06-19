@@ -60,6 +60,7 @@ export type Profile = {
   approval_status: 'pending' | 'approved' | 'rejected';
   is_admin: boolean;
   welcomed_at: string | null;
+  onboarding_seen: boolean;
   created_at: string;
   updated_at: string;
 };
