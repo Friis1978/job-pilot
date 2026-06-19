@@ -63,6 +63,11 @@ export function normalizeLocationToEnglish(location: string | null | undefined):
     .join(", ");
 }
 
+/**
+ * Computes total career span in years as the distance between the earliest
+ * start date and the latest end date across all work experience entries.
+ * Concurrent roles are NOT double-counted.
+ */
 export function computeTotalYearsExperience(
   workExperience: WorkExperience[] | null | undefined,
 ): number {
@@ -101,6 +106,12 @@ type SkillPeriod = {
   skills?: string[];
 };
 
+/**
+ * Accumulates years of experience per skill across work history and any extra
+ * periods (e.g. personal projects). Overlapping periods are additive.
+ * @param extraPeriods Additional dated skill periods to include alongside work experience.
+ * @returns Map of skill name → floored years of usage.
+ */
 export function computeSkillYears(
   workExperience: WorkExperience[] | null | undefined,
   extraPeriods?: SkillPeriod[] | null,
@@ -128,6 +139,11 @@ export function computeSkillYears(
   );
 }
 
+/**
+ * Strips HTML tags and decodes entities to produce readable plain text.
+ * Block-level tags (p, div, li, h1–h6, etc.) become newlines so paragraph
+ * structure is preserved. Collapses runs of 3+ blank lines down to 2.
+ */
 export function stripHtml(html: string): string {
   return html
     // Block-level tags → newline so paragraphs stay readable
@@ -153,6 +169,7 @@ export function stripHtml(html: string): string {
     .trim();
 }
 
+/** Converts an ISO date string to a human-readable relative label ("Just now", "3 hours ago", "Yesterday", etc.). */
 export function formatDateAgo(isoDate: string): string {
   const diff = Date.now() - new Date(isoDate).getTime();
   const minutes = Math.floor(diff / 60_000);

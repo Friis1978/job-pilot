@@ -135,6 +135,14 @@ async function fetchLinkedInJob(jobId: string): Promise<string | null> {
   }
 }
 
+/**
+ * Imports a job posting from a URL into the user's saved jobs list.
+ * Fetch strategy (in order): pasted text → LinkedIn guest API → plain HTTP fetch →
+ * SSR embedded state extraction → browser render via Browserbase. GPT-4o then
+ * extracts structured fields and scores the job against the user's profile.
+ * Always saves the job regardless of match score (user explicitly chose to import it).
+ * @param pastedText Raw job text the user pasted manually (bypasses fetch when long enough).
+ */
 export async function importJobFromUrl(userId: string, url: string, pastedText?: string): Promise<Result> {
   const insforge = await createInsforgeServer();
   const posthog = getPostHogClient();

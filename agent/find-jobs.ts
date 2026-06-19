@@ -18,9 +18,12 @@ const AGGREGATOR_DOMAINS = [
   "linkedin", "indeed", "jobindex", "stepstone", "monster",
 ];
 
-// jobviewtrack.com requires the Careerjet Referer to redirect to the employer page.
-// Without it, the server bounces back to the Careerjet listing. We make a dedicated
-// GET request with the correct Referer and capture the final URL before enrichment.
+/**
+ * Resolves jobviewtrack.com redirect URLs to the final employer page URL.
+ * jobviewtrack requires the Careerjet `Referer` header to follow the redirect chain;
+ * without it the server loops back to the Careerjet listing. Returns the original
+ * URL unchanged if resolution fails or lands on another aggregator.
+ */
 async function resolveTrackingUrl(url: string): Promise<string> {
   if (!url.includes("jobviewtrack")) return url;
   try {
@@ -46,9 +49,11 @@ async function resolveTrackingUrl(url: string): Promise<string> {
   return url;
 }
 
-// Follow the job URL redirect and extract the full description from the employer's own page.
-// Jooble and Careerjet only return short snippets; the real posting often has contact persons,
-// "About us" sections, and requirements that are critical for scoring and research.
+/**
+ * Fetches the employer's own job page to replace the short aggregator snippet with
+ * the full posting text. Also updates `job.url` to the permanent employer URL when
+ * a redirect is followed. Skips non-aggregator jobs that already have a long description.
+ */
 async function enrichJobDescription(job: NormalizedJob): Promise<NormalizedJob> {
   // Resolve tracking/redirect URLs before enrichment so the saved URL is permanent
   const resolvedUrl = await resolveTrackingUrl(job.url);
@@ -198,6 +203,11 @@ type FindJobsResult = {
 
 type JobSource = "adzuna" | "jobtech" | "jooble" | "careerjet" | "glassdoor";
 
+/**
+ * Selects which job-board APIs to query and which Adzuna country code to use
+ * based on the searched location string. Defaults to US sources when no
+ * recognised country or city pattern is found.
+ */
 function detectSources(location: string): {
   sources: JobSource[];
   adzunaCountry: string;
@@ -252,6 +262,10 @@ function normalizeAdzunaJob(job: AdzunaJob): NormalizedJob {
   };
 }
 
+/**
+ * Generates a concise 8–10 bullet-point summary of a job description using
+ * gpt-4o-mini. Returns `null` for short descriptions (< 500 chars) or on error.
+ */
 export async function summarizeDescription(description: string, openai: OpenAI): Promise<string | null> {
   if (!description || description.length < 500) return null;
   try {
@@ -282,6 +296,13 @@ Return only the bullet points, each on its own line starting with "•". No intr
   }
 }
 
+/**
+ * Scores a job against the candidate's profile using gpt-4o, returning a
+ * 0–100 match score, a plain-English reason, matched skills, and missing skills.
+ * Location rules are derived from `searchedLocation`; when empty the candidate's
+ * profile preferences are used instead. Returns `null` on parse/API failure.
+ * @param searchedLocation The explicit location the user searched for (pass empty string to fall back to profile preferences).
+ */
 export async function scoreJob(
   job: NormalizedJob,
   profile: Profile,
@@ -384,6 +405,13 @@ Recent work: ${JSON.stringify(
   }
 }
 
+/**
+ * Main job-search orchestrator. Queries the appropriate job boards for the given
+ * title and location, deduplicates against the user's existing saved jobs, enriches
+ * descriptions (HTTP then browser fallback), scores each job against the user's profile,
+ * and persists qualifying matches to the database.
+ * @param minScore Minimum match score (0–100) required to save a job. Defaults to `MATCH_THRESHOLD`.
+ */
 export async function findJobs(
   userId: string,
   jobTitle: string,

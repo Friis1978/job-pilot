@@ -2,6 +2,10 @@ type HogQLResponse = {
   results: (string | number | null)[][];
 };
 
+/**
+ * Executes a raw HogQL query against the configured PostHog project.
+ * Applies an 8-second timeout and throws on non-2xx responses.
+ */
 async function hogql(query: string): Promise<HogQLResponse> {
   const key = process.env.POSTHOG_PERSONAL_API_KEY;
   const host = process.env.POSTHOG_API_HOST;
@@ -70,11 +74,16 @@ export type DashboardStats = {
   companiesResearched: number;
 };
 
+/** Coerces a HogQL result cell (string, number, or null) to a number, returning 0 for NaN/null. */
 function safeNum(v: string | number | null | undefined): number {
   const n = Number(v);
   return isNaN(n) ? 0 : n;
 }
 
+/**
+ * Fetches aggregated job-search stats for the dashboard from PostHog event data.
+ * All counts are scoped to the given user's `distinct_id`.
+ */
 export async function getDashboardStats(userId: string): Promise<DashboardStats> {
   const [jobResults, researchResults] = await Promise.all([
     hogql(
@@ -115,6 +124,10 @@ export async function getDashboardStats(userId: string): Promise<DashboardStats>
 
 export type JobsOverTimePoint = { label: string; search: number; imported: number };
 
+/**
+ * Returns daily job counts for the last 30 days split into `search` (agent-found)
+ * and `imported` (URL import) buckets. Days with no activity are included as zeros.
+ */
 export async function getJobsOverTime(userId: string): Promise<JobsOverTimePoint[]> {
   const { results } = await hogql(
     `SELECT toDate(timestamp) AS day, properties.source AS source, count() AS cnt
@@ -156,6 +169,10 @@ const SCORE_BUCKETS = [
   { label: "90-100%", min: 90, max: 101 },
 ] as const;
 
+/**
+ * Returns match score distribution across five fixed 10-point buckets (50–100%),
+ * split by job source. Used to render the score histogram on the dashboard.
+ */
 export async function getMatchScoreDistribution(userId: string): Promise<MatchScorePoint[]> {
   const { results } = await hogql(
     `SELECT properties.matchScore AS score, properties.source AS source, count() AS cnt

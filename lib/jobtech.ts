@@ -16,6 +16,10 @@ type JobTechResponse = {
   hits: JobTechHit[];
 };
 
+/**
+ * Searches the Swedish JobTech Dev API (jobtechdev.se) by job title.
+ * The API is Sweden-only; no location filter is applied — results are always Swedish postings.
+ */
 export async function searchJobsSweden(jobTitle: string): Promise<NormalizedJob[]> {
   const params = new URLSearchParams({
     q: jobTitle,

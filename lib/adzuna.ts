@@ -1,5 +1,9 @@
 import type { AdzunaJob } from "@/types";
 
+/**
+ * Searches the Adzuna jobs API and returns the raw result list.
+ * @param country Two-letter Adzuna country code used in the API path (e.g. "dk", "gb", "us").
+ */
 export async function searchJobs(
   jobTitle: string,
   location: string,

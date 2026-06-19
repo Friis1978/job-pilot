@@ -33,6 +33,11 @@ export const LANGUAGE_LABELS: Record<string, { category: string; position: strin
   en: { category: "APPLICATION", position: "POSITION" },
 };
 
+/**
+ * Detects the most likely language of `text` by counting high-frequency
+ * marker words for each supported language. Returns an ISO 639-1 code ("da",
+ * "en", "de", etc.), falling back to "en" when no markers match.
+ */
 export function detectLanguage(text: string): string {
   const words = text
     .toLowerCase()

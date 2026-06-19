@@ -31,6 +31,7 @@ const MISSING_FIELD_LABELS: Record<(typeof REQUIRED_FIELDS)[number], string> = {
   remote_preference: "REMOTE PREF",
 };
 
+/** Splits a comma-separated string into a trimmed, non-empty string array. */
 function splitToArray(value: string): string[] {
   return value
     .split(",")
@@ -38,6 +39,12 @@ function splitToArray(value: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Upserts the current user's profile and revalidates the `/profile` page cache.
+ * Inserts a new row if one doesn't yet exist (for users pre-dating the DB trigger),
+ * otherwise updates in place. Also computes `years_experience` and `is_complete`
+ * from the submitted data before writing to the database.
+ */
 export async function saveProfile(
   input: ProfileFormInput,
 ): Promise<{ success: boolean; error?: string }> {

@@ -1,4 +1,4 @@
-# Memory — Profile Form: Tooltips, Education Accordions, Cover Letter Tone
+# Memory — Profile Form: Tooltips, Education Accordions, Cover Letter Tone + JSDoc + App Map
 
 Last updated: 2026-06-19
 
@@ -28,6 +28,16 @@ Last updated: 2026-06-19
   - Cover Letter Instructions label converted from `Tooltip` component to `InfoIcon`
   - All textareas changed from `resize-none` to `resize-y`
 
+### App Map
+- Created `context/app-map.md` — complete navigable reference for all pages, routes, APIs, agents, actions, components, libs, types, and key user flows
+
+### JSDoc
+- Added JSDoc to key files where it genuinely adds value:
+  - `lib/utils.ts`, `lib/detect-language.ts`, `lib/toast.ts`
+  - `actions/profile.ts` (`splitToArray`, `saveProfile`)
+  - `agent/find-jobs.ts`, `agent/generate-cover-letter.ts`, `agent/import-job-from-url.ts`
+  - `lib/adzuna.ts`, `lib/jobtech.ts`, `lib/careerjet.ts`, `lib/posthog-query.ts`
+
 ## Decisions made
 
 - **InfoIcon does NOT use Tooltip.tsx** — it renders its own inline tooltip span directly, positioned relative to the parent label. `Tooltip.tsx` is still used in JobsTable/dashboard charts and must not be changed to match InfoIcon behavior.
@@ -38,9 +48,12 @@ Last updated: 2026-06-19
 
 ## Problems solved
 
-- **Tooltip overflow** — `whitespace-nowrap` was overriding `whitespace-normal` in Tailwind output (alphabetical sort). Removed `whitespace-nowrap`.
-- **Arrow disconnected from box** — arrow at `left-[2.5px]` fell within `rounded-md` corner radius (6px). Fixed by making arrow external to tooltip bubble and using `top-[calc(100%-1px)]` to overlap 1px.
-- **Arrow centered on full-width label** — `w-fit` on labelClass makes label shrink to text content width, so `left-1/2` centers the arrow over the label text, not the full container.
+- **Tooltip text in uppercase**: `normal-case tracking-normal` on tooltip span overrides label's `uppercase tracking-wide`
+- **Tooltip overflow**: removed `whitespace-nowrap` which was winning over `whitespace-normal` in Tailwind alphabetical output
+- **Arrow disconnected from box**: made arrow external to bubble; `top-[calc(100%-1px)]` overlaps 1px
+- **Tooltip left-edge overflow**: changed from `left-1/2 -translate-x-1/2` to `left-0` on bubble
+- **Arrow centering with full-width label**: `w-fit` on labelClass makes label shrink to text width
+- **"Profile needs attention" bug**: `computeCompletion` in `app/profile/page.tsx` now checks education array with `.some()` instead of treating as single object
 
 ## Current state
 
@@ -49,6 +62,8 @@ Last updated: 2026-06-19
 - Cover letter tone: 4 options, in Cover Letter Instructions section, always applied
 - All textareas are vertically resizable
 - Tooltip system: left-aligned bubble, arrow centered in label text, no left-edge overflow
+- `context/app-map.md` created and complete
+- JSDoc added to key utility/agent/action files
 
 ## Next session starts with
 

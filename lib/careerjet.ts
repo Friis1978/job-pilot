@@ -19,6 +19,10 @@ type CareerjetResponse = {
   error?: string;
 };
 
+/**
+ * Searches the Careerjet public API and returns normalised job listings.
+ * @param locale POSIX locale code that controls the Careerjet regional index (e.g. "da_DK", "sv_SE"). Defaults to Danish.
+ */
 export async function searchJobsCareerjet(
   jobTitle: string,
   location: string,

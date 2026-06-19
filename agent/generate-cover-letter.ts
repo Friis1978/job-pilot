@@ -26,6 +26,14 @@ const OPENING_STRATEGIES = [
   "Open with a direct statement of fit: what the candidate brings + what the role needs, stated plainly and confidently. No flattery, no 'thrilled to apply'.",
 ];
 
+/**
+ * Generates a personalised cover letter for a saved job using gpt-4o.
+ * Detects the job's language from the posting text and writes the letter in that
+ * language. Picks a random opening strategy unless the candidate has provided
+ * custom cover letter instructions (which override the default style guide).
+ * Archives any existing cover letter to `cover_letter_history` before overwriting.
+ * @param extraInstructions Per-generation instructions that override the system prompt when provided.
+ */
 export async function generateCoverLetter(
   userId: string,
   jobId: string,
