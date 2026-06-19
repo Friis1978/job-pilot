@@ -28,10 +28,14 @@ Return ONLY valid JSON with this exact shape — use empty string "" for missing
       "responsibilities": string
     }
   ],
-  "highestDegree": string,
-  "fieldOfStudy": string,
-  "institution": string,
-  "graduationYear": string
+  "educations": [
+    {
+      "degree": string,
+      "field": string,
+      "institution": string,
+      "year": string
+    }
+  ]
 }
 
 Rules:
@@ -42,7 +46,7 @@ Rules:
 - responsibilities: one paragraph summarising key responsibilities and achievements for the role
 - workExperience: maximum 10 most recent roles, oldest first
 - skills: individual technology or skill names, not sentences (e.g. ["React", "TypeScript", "AWS"])
-- highestDegree: one of "high_school", "associate", "bachelor", "master", "phd", or "" if not found
+- educations: all degrees found, most recent first; degree must be one of "high_school", "associate", "bachelor", "master", "phd", "other", or "" if not determinable
 - Do NOT extract email — leave it out of the response entirely
 - Do NOT guess preference fields (jobTitlesSeeking, remotePreference, salary, etc.)`;
 

@@ -48,7 +48,7 @@ function computeCompletion(profile: Profile | null): {
     experience_level: !!profile.experience_level,
     skills: (profile.skills?.length ?? 0) > 0,
     work_experience: (profile.work_experience?.length ?? 0) > 0,
-    education_degree: !!(profile.education as { degree?: string } | null)?.degree,
+    education_degree: Array.isArray(profile.education) ? profile.education.some((e) => !!(e as { degree?: string }).degree) : !!(profile.education as { degree?: string } | null)?.degree,
     job_titles_seeking: (profile.job_titles_seeking?.length ?? 0) > 0,
     remote_preference: !!profile.remote_preference,
   };

@@ -10,15 +10,15 @@ export function Tooltip({ content, children }: Props) {
       <span
         role="tooltip"
         className="
-          pointer-events-none absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2
-          px-2.5 py-1.5 rounded-md bg-[#111] text-white text-xs leading-snug whitespace-nowrap
+          pointer-events-none absolute z-50 bottom-full left-0 mb-2
+          px-2.5 py-1.5 rounded-md bg-[#111] text-white text-xs leading-snug
           opacity-0 group-hover/tooltip:opacity-100 transition-opacity duration-150
-          max-w-xs break-words whitespace-normal text-center
+          w-max min-w-[8rem] max-w-xs break-words whitespace-normal text-left normal-case tracking-normal
         "
       >
         {content}
         {/* Arrow */}
-        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[#111]" />
+        <span className="absolute top-[calc(100%-1px)] left-1/2 -translate-x-1/2 border-x-4 border-t-8 border-b-0 border-transparent border-t-[#111]" />
       </span>
     </span>
   );

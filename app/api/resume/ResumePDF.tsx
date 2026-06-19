@@ -402,19 +402,21 @@ export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
         ) : null}
 
         {/* Education */}
-        {profile.education && profile.education.degree ? (
+        {profile.education && profile.education.length > 0 ? (
           <View>
             <Text style={styles.sectionLabel}>Education</Text>
             <View style={styles.divider} />
-            <Text style={styles.eduDegree}>
-              {profile.education.degree}
-              {profile.education.field ? ` in ${profile.education.field}` : ""}
-            </Text>
-            <Text style={styles.eduDetail}>
-              {[profile.education.institution, profile.education.year]
-                .filter(Boolean)
-                .join("  ·  ")}
-            </Text>
+            {profile.education.map((edu, i) => (
+              <View key={i} style={i > 0 ? { marginTop: 6 } : undefined}>
+                <Text style={styles.eduDegree}>
+                  {edu.degree}
+                  {edu.field ? ` in ${edu.field}` : ""}
+                </Text>
+                <Text style={styles.eduDetail}>
+                  {[edu.institution, edu.year].filter(Boolean).join("  ·  ")}
+                </Text>
+              </View>
+            ))}
           </View>
         ) : null}
       </Page>

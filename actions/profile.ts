@@ -49,12 +49,7 @@ export async function saveProfile(
     }
     const userId = data.user.id;
 
-    const education = {
-      degree: input.highestDegree,
-      field: input.fieldOfStudy,
-      institution: input.institution,
-      year: input.graduationYear,
-    };
+    const educations = input.educations.filter((e) => e.degree);
 
     const workExperience = input.workExperience.map(
       ({ id: _id, ...rest }) => rest,
@@ -75,7 +70,7 @@ export async function saveProfile(
       skills: input.skills.length > 0 ? input.skills : null,
       industries: input.industries.length > 0 ? input.industries : null,
       work_experience: workExperience.length > 0 ? workExperience : null,
-      education: education.degree ? education : null,
+      education: educations.length > 0 ? educations : null,
       job_titles_seeking: jobTitlesSeeking.length > 0 ? jobTitlesSeeking : null,
       remote_preference: input.remotePreference || null,
       preferred_locations: preferredLocations.length > 0 ? preferredLocations : null,

@@ -5,6 +5,7 @@ import { saveProfile, updateAvatarUrl } from "@/actions/profile";
 import { toast } from "@/lib/toast";
 import { insforge } from "@/lib/insforge-client";
 import { AvatarCropModal } from "@/components/profile/AvatarCropModal";
+import { Tooltip } from "@/components/ui/Tooltip";
 import type { Profile, ProfileFormInput } from "@/types";
 
 type WorkExperienceEntry = {
@@ -17,6 +18,14 @@ type WorkExperienceEntry = {
   responsibilities: string;
   skills: string[];
   skillInput: string;
+};
+
+type EducationEntry = {
+  id: string;
+  degree: string;
+  field: string;
+  institution: string;
+  year: string;
 };
 
 type PersonalProjectEntry = {
@@ -48,10 +57,7 @@ type FormData = {
   industryInput: string;
   workExperience: WorkExperienceEntry[];
   personalProjects: PersonalProjectEntry[];
-  highestDegree: string;
-  fieldOfStudy: string;
-  institution: string;
-  graduationYear: string;
+  educations: EducationEntry[];
   jobTitlesSeeking: string;
   remotePreference: string;
   salaryExpectation: string;
@@ -77,6 +83,7 @@ const CHANGE_LABELS: Partial<Record<keyof FormData, string>> = {
   skills:             "Skills",
   industries:         "Industries",
   personalProjects:   "Personal Projects",
+  educations:         "Education",
   jobTitlesSeeking:   "Job Titles Seeking",
   remotePreference:   "Remote Preference",
   salaryExpectation:  "Salary Expectation",
@@ -90,18 +97,12 @@ const CHANGE_LABELS: Partial<Record<keyof FormData, string>> = {
   careerVision:       "Career Vision",
 };
 
-const EDUCATION_FIELDS: (keyof FormData)[] = ["highestDegree", "fieldOfStudy", "institution", "graduationYear"];
-
 function computeChangedFields(current: FormData, savedJson: string): string[] {
   const prev = JSON.parse(savedJson) as Record<string, unknown>;
   const changed: string[] = [];
 
   for (const [key, label] of Object.entries(CHANGE_LABELS) as [keyof FormData, string][]) {
     if (JSON.stringify(current[key]) !== JSON.stringify(prev[key])) changed.push(label);
-  }
-
-  if (EDUCATION_FIELDS.some((f) => JSON.stringify(current[f]) !== JSON.stringify(prev[f]))) {
-    changed.push("Education");
   }
 
   const currWE = JSON.stringify(current.workExperience.map(({ skillInput: _si, ...r }) => r));
@@ -116,13 +117,32 @@ function fmtMonthYear(ym: string): string {
 }
 
 const labelClass =
-  "block text-xs font-medium uppercase tracking-wide text-text-secondary mb-1.5";
+  "relative group/tooltip block w-fit text-xs font-medium uppercase tracking-wide text-text-secondary mb-1.5";
 
 const inputClass =
   "w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors";
 
 const selectClass =
   "w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors appearance-none";
+
+function InfoIcon({ tip }: { tip: string }) {
+  return (
+    <>
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" className="text-text-muted cursor-default shrink-0">
+        <circle cx="6.5" cy="6.5" r="6" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M6.5 5.5v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        <circle cx="6.5" cy="3.5" r="0.6" fill="currentColor" />
+      </svg>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute z-50 bottom-full left-0 mb-2 px-2.5 py-1.5 rounded-md bg-[#111] text-white text-xs leading-snug opacity-0 group-hover/tooltip:opacity-100 transition-opacity duration-150 w-max min-w-[8rem] max-w-xs break-words whitespace-normal text-left normal-case tracking-normal"
+      >
+        {tip}
+      </span>
+      <span className="pointer-events-none absolute z-50 bottom-full left-1/2 -translate-x-1/2 opacity-0 group-hover/tooltip:opacity-100 transition-opacity duration-150 border-x-8 border-t-8 border-b-0 border-transparent border-t-[#111]" />
+    </>
+  );
+}
 
 function SectionAccordion({ title, children }: { title: string; children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(true);
@@ -161,15 +181,16 @@ function profileToFormData(p: Profile | null | undefined): FormData {
       linkedinUrl: "", portfolioUrl: "",
       currentTitle: "", experienceLevel: "",
       skills: [], skillInput: "", industries: [], industryInput: "",
-      workExperience: [], personalProjects: [], highestDegree: "", fieldOfStudy: "",
-      institution: "", graduationYear: "", jobTitlesSeeking: "",
+      workExperience: [], personalProjects: [], educations: [], jobTitlesSeeking: "",
       remotePreference: "", salaryExpectation: "", preferredLocations: "",
       coverLetterTone: "", coverLetterInstructions: "",
       motivation: "", proudAchievement: "", energyTasks: "",
       companyTypePreference: [], careerVision: "",
     };
   }
-  const edu = p.education as { degree?: string; field?: string; institution?: string; year?: string } | null;
+  const rawEdu = p.education as unknown;
+  const eduArr: { degree?: string; field?: string; institution?: string; year?: string }[] =
+    Array.isArray(rawEdu) ? rawEdu : rawEdu ? [rawEdu as { degree?: string; field?: string; institution?: string; year?: string }] : [];
   return {
     fullName: p.full_name ?? "",
     email: p.email ?? "",
@@ -207,10 +228,13 @@ function profileToFormData(p: Profile | null | undefined): FormData {
       currentlyWorking: proj.currentlyWorking ?? false,
       skillInput: "",
     })),
-    highestDegree: edu?.degree ?? "",
-    fieldOfStudy: edu?.field ?? "",
-    institution: edu?.institution ?? "",
-    graduationYear: edu?.year ?? "",
+    educations: eduArr.map((e) => ({
+      id: crypto.randomUUID(),
+      degree: e.degree ?? "",
+      field: e.field ?? "",
+      institution: e.institution ?? "",
+      year: e.year ?? "",
+    })),
     jobTitlesSeeking: (p.job_titles_seeking ?? []).join(", "),
     remotePreference: p.remote_preference ?? "",
     salaryExpectation: p.salary_expectation ?? "",
@@ -243,10 +267,9 @@ function mergeExtracted(
     workExperience: extracted.workExperience?.length
       ? extracted.workExperience.map((r) => ({ ...r, id: crypto.randomUUID(), skills: r.skills ?? [], skillInput: "" }))
       : base.workExperience,
-    highestDegree: extracted.highestDegree || base.highestDegree,
-    fieldOfStudy: extracted.fieldOfStudy || base.fieldOfStudy,
-    institution: extracted.institution || base.institution,
-    graduationYear: extracted.graduationYear || base.graduationYear,
+    educations: extracted.educations?.length
+      ? extracted.educations.map((e) => ({ ...e, id: crypto.randomUUID() }))
+      : base.educations,
   };
 }
 
@@ -270,6 +293,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
   const [roleErrors, setRoleErrors] = useState<Record<string, Set<string>>>({});
   const [openRoles, setOpenRoles] = useState<Set<string>>(new Set());
   const [openProjects, setOpenProjects] = useState<Set<string>>(new Set());
+  const [openEducations, setOpenEducations] = useState<Set<string>>(new Set());
   const [skillDupeError, setSkillDupeError] = useState(false);
   const [industryDupeError, setIndustryDupeError] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState(() => snapshot(data));
@@ -367,6 +391,29 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
     }));
     setOpenRoles((prev) => new Set([...prev, newId]));
     setShouldScrollToRole(true);
+  }
+
+  function addEducation() {
+    const newId = crypto.randomUUID();
+    setData((prev) => ({
+      ...prev,
+      educations: [
+        ...prev.educations,
+        { id: newId, degree: "", field: "", institution: "", year: "" },
+      ],
+    }));
+    setOpenEducations((prev) => new Set([...prev, newId]));
+  }
+
+  function removeEducation(id: string) {
+    setData((prev) => ({ ...prev, educations: prev.educations.filter((e) => e.id !== id) }));
+  }
+
+  function updateEducation(id: string, field: keyof Omit<EducationEntry, "id">, value: string) {
+    setData((prev) => ({
+      ...prev,
+      educations: prev.educations.map((e) => (e.id === id ? { ...e, [field]: value } : e)),
+    }));
   }
 
   useEffect(() => {
@@ -630,6 +677,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
             personalProjects: data.personalProjects.map(
               ({ id: _id, skillInput: _si, ...r }) => r,
             ),
+            educations: data.educations.map(({ id: _id, ...e }) => e),
           });
           setSaving(false);
           if (result.success) {
@@ -702,7 +750,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
 
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <div>
-              <label className={labelClass}>Full Name</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Full Name <InfoIcon tip="Enter your full name as it should appear on your resume and cover letters" /></label>
               <input
                 type="text"
                 value={data.fullName}
@@ -712,7 +760,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
               />
             </div>
             <div>
-              <label className={labelClass}>Email</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Email <InfoIcon tip="Your primary email address used for job application correspondence" /></label>
               <input
                 type="email"
                 value={data.email}
@@ -722,7 +770,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
               />
             </div>
             <div>
-              <label className={labelClass}>Phone Number</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Phone Number <InfoIcon tip="Your contact number — include the country code if you are applying internationally" /></label>
               <input
                 type="tel"
                 value={data.phone}
@@ -732,7 +780,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
               />
             </div>
             <div>
-              <label className={labelClass}>Location</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Location <InfoIcon tip="Your current city and country — used to find nearby jobs and appear on your resume" /></label>
               <input
                 type="text"
                 value={data.location}
@@ -744,7 +792,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
             <div>
-              <label className={labelClass}>LinkedIn URL</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>LinkedIn URL <InfoIcon tip="Paste your full LinkedIn profile URL — it will be included on your resume and cover letters" /></label>
               <input
                 type="url"
                 value={data.linkedinUrl}
@@ -754,7 +802,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
               />
             </div>
             <div>
-              <label className={labelClass}>Portfolio / GitHub</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Portfolio / GitHub <InfoIcon tip="Link to your portfolio site, GitHub profile, or personal website — shown to employers on your resume" /></label>
               <input
                 type="url"
                 value={data.portfolioUrl}
@@ -773,7 +821,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <div className="xl:col-span-3">
-              <label className={labelClass}>Current / Recent Job Title</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Current / Recent Job Title <InfoIcon tip="Your current or most recent job title — used to match you with relevant jobs and tailor your resume" /></label>
               <input
                 type="text"
                 value={data.currentTitle}
@@ -783,7 +831,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
               />
             </div>
             <div>
-              <label className={labelClass}>Experience Level</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Experience Level <InfoIcon tip="Select the seniority level that best describes you — affects how jobs are matched and how your resume is positioned" /></label>
               <div className="relative">
                 <select
                   value={data.experienceLevel}
@@ -811,7 +859,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
 
           {/* Skills */}
           <div>
-            <label className={labelClass}>Skills</label>
+            <label className={`${labelClass} flex items-center gap-1.5`}>Skills <InfoIcon tip="Add your technical and professional skills one at a time — press Enter after each one" /></label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -883,7 +931,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
 
           {/* Industries */}
           <div>
-            <label className={labelClass}>Industries (Optional)</label>
+            <label className={`${labelClass} flex items-center gap-1.5`}>Industries (Optional) <InfoIcon tip="Add industries you have worked in or prefer — improves the accuracy of job matching" /></label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -1020,7 +1068,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                   <div className="px-4 pb-4 flex flex-col gap-4 border-t border-border pt-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className={labelClass}>Company Name <span className="text-error">*</span></label>
+                        <label className={`${labelClass} flex items-center gap-1.5`}>Company Name <InfoIcon tip="The full name of the company you worked at" /> <span className="text-error">*</span></label>
                         <input
                           type="text"
                           value={role.company}
@@ -1033,7 +1081,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                         />
                       </div>
                       <div>
-                        <label className={labelClass}>Job Title <span className="text-error">*</span></label>
+                        <label className={`${labelClass} flex items-center gap-1.5`}>Job Title <InfoIcon tip="Your official title at this company — be specific, as it is used to match you with similar roles" /> <span className="text-error">*</span></label>
                         <input
                           type="text"
                           value={role.title}
@@ -1049,7 +1097,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className={labelClass}>Start Date <span className="text-error">*</span></label>
+                        <label className={`${labelClass} flex items-center gap-1.5`}>Start Date <InfoIcon tip="Month and year you started this role" /> <span className="text-error">*</span></label>
                         <input
                           type="month"
                           value={role.startDate}
@@ -1061,7 +1109,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                         />
                       </div>
                       <div>
-                        <label className={labelClass}>End Date {!role.currentlyWorking && <span className="text-error">*</span>}</label>
+                        <label className={`${labelClass} flex items-center gap-1.5`}>End Date <InfoIcon tip="Month and year you left this role — leave blank if currently working here" /> {!role.currentlyWorking && <span className="text-error">*</span>}</label>
                         <div className="flex items-center gap-3">
                           <input
                             type="month"
@@ -1090,18 +1138,18 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                     </div>
 
                     <div>
-                      <label className={labelClass}>Key Responsibilities</label>
+                      <label className={`${labelClass} flex items-center gap-1.5`}>Key Responsibilities <InfoIcon tip="Summarise your main responsibilities and achievements — the AI uses this to tailor your resume and cover letters to each job" /></label>
                       <textarea
                         value={role.responsibilities}
                         onChange={(e) => updateRole(role.id, "responsibilities", e.target.value)}
                         placeholder="Describe your key contributions and responsibilities..."
                         rows={3}
-                        className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-none"
+                        className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-y"
                       />
                     </div>
 
                     <div>
-                      <label className={labelClass}>Skills Used</label>
+                      <label className={`${labelClass} flex items-center gap-1.5`}>Skills Used <InfoIcon tip="Add technologies and skills you used in this role — helps match you with similar positions" /></label>
                       <div className="flex gap-2">
                         <input
                           type="text"
@@ -1250,7 +1298,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                   {/* Accordion body */}
                   {isOpen && <div className="px-4 pb-4 flex flex-col gap-4 border-t border-border pt-4">
                     <div>
-                      <label className={labelClass}>Project Name</label>
+                      <label className={`${labelClass} flex items-center gap-1.5`}>Project Name <InfoIcon tip="Give the project a short, clear name that describes what it is" /></label>
                       <input
                         type="text"
                         value={proj.name}
@@ -1262,7 +1310,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className={labelClass}>From</label>
+                        <label className={`${labelClass} flex items-center gap-1.5`}>From <InfoIcon tip="Month and year you started this project" /></label>
                         <input
                           type="month"
                           value={proj.startDate}
@@ -1271,7 +1319,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                         />
                       </div>
                       <div>
-                        <label className={labelClass}>To</label>
+                        <label className={`${labelClass} flex items-center gap-1.5`}>To <InfoIcon tip="Month and year you finished — leave blank if still active" /></label>
                         <div className="flex items-center gap-3">
                           <input
                             type="month"
@@ -1301,7 +1349,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                     </div>
 
                     <div>
-                      <label className={labelClass}>Description</label>
+                      <label className={`${labelClass} flex items-center gap-1.5`}>Description <InfoIcon tip="What did you build? What does it do? What problems did it solve?" /></label>
                       <textarea
                         value={proj.description}
                         onChange={(e) => updateProject(proj.id, "description", e.target.value)}
@@ -1313,7 +1361,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div>
-                        <label className={labelClass}>Live URL (Optional)</label>
+                        <label className={`${labelClass} flex items-center gap-1.5`}>Live URL (Optional) <InfoIcon tip="Link to the deployed or live version of this project if publicly accessible" /></label>
                         <input
                           type="url"
                           value={proj.url}
@@ -1323,7 +1371,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                         />
                       </div>
                       <div>
-                        <label className={labelClass}>GitHub (Optional)</label>
+                        <label className={`${labelClass} flex items-center gap-1.5`}>GitHub (Optional) <InfoIcon tip="Link to this project's source code repository on GitHub or similar" /></label>
                         <input
                           type="url"
                           value={proj.githubUrl}
@@ -1333,7 +1381,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                         />
                       </div>
                       <div>
-                        <label className={labelClass}>Video (Optional)</label>
+                        <label className={`${labelClass} flex items-center gap-1.5`}>Video (Optional) <InfoIcon tip="Link to a demo, walkthrough, or presentation video of this project" /></label>
                         <input
                           type="url"
                           value={proj.videoUrl}
@@ -1345,7 +1393,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                     </div>
 
                     <div>
-                      <label className={labelClass}>Skills Used</label>
+                      <label className={`${labelClass} flex items-center gap-1.5`}>Skills Used <InfoIcon tip="Add the technologies and tools you used — helps match you to jobs requiring similar work" /></label>
                       <div className="flex gap-2">
                         <input
                           type="text"
@@ -1419,66 +1467,128 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
 
         {/* Education */}
         <SectionAccordion title="Education">
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          <div>
-            <label className={labelClass}>Highest Degree</label>
-            <div className="relative">
-              <select
-                value={data.highestDegree}
-                onChange={(e) => setField("highestDegree", e.target.value)}
-                className={selectClass}
-              >
-                <option value="">Select...</option>
-                <option value="high_school">High School</option>
-                <option value="associate">Associate</option>
-                <option value="bachelor">Bachelor&apos;s</option>
-                <option value="master">Master&apos;s</option>
-                <option value="phd">PhD</option>
-                <option value="other">Other</option>
-              </select>
-              <svg
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
-                width="14"
-                height="14"
-                viewBox="0 0 14 14"
-                fill="none"
-              >
-                <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <div className="flex flex-col gap-2">
+            {data.educations.length === 0 && (
+              <p className="text-sm text-text-muted">No education added yet.</p>
+            )}
+            {data.educations.map((edu, index) => {
+              const isOpen = openEducations.has(edu.id);
+              const degreeLabel: Record<string, string> = {
+                high_school: "High School", associate: "Associate",
+                bachelor: "Bachelor's", master: "Master's", phd: "PhD", other: "Other",
+              };
+              const heading = edu.degree && edu.institution
+                ? `${degreeLabel[edu.degree] ?? edu.degree} — ${edu.institution}`
+                : edu.degree ? (degreeLabel[edu.degree] ?? edu.degree)
+                : edu.institution || `Education ${index + 1}`;
+              return (
+                <div key={edu.id} className="border rounded-xl overflow-hidden border-border">
+                  <div className="flex items-center hover:bg-surface-secondary transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => setOpenEducations((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(edu.id)) next.delete(edu.id);
+                        else next.add(edu.id);
+                        return next;
+                      })}
+                      className="flex-1 flex items-center gap-3 px-4 py-3 text-left min-w-0"
+                    >
+                      <svg
+                        width="16" height="16" viewBox="0 0 16 16" fill="none"
+                        stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
+                        className={`shrink-0 text-text-muted transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}
+                      >
+                        <path d="M6 4l4 4-4 4" />
+                      </svg>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-text-primary truncate">{heading}</p>
+                        {edu.year && <p className="text-xs text-text-muted">{edu.year}</p>}
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeEducation(edu.id)}
+                      className="shrink-0 text-xs text-text-muted hover:text-error transition-colors px-4 py-3"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  {isOpen && (
+                    <div className="px-4 pb-4 flex flex-col gap-4 border-t border-border pt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                        <div>
+                          <label className={`${labelClass} flex items-center gap-1.5`}>Degree <InfoIcon tip="Select the highest degree you earned at this institution" /></label>
+                          <div className="relative">
+                            <select
+                              value={edu.degree}
+                              onChange={(e) => updateEducation(edu.id, "degree", e.target.value)}
+                              className={selectClass}
+                            >
+                              <option value="">Select...</option>
+                              <option value="high_school">High School</option>
+                              <option value="associate">Associate</option>
+                              <option value="bachelor">Bachelor&apos;s</option>
+                              <option value="master">Master&apos;s</option>
+                              <option value="phd">PhD</option>
+                              <option value="other">Other</option>
+                            </select>
+                            <svg
+                              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
+                              width="14" height="14" viewBox="0 0 14 14" fill="none"
+                            >
+                              <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </div>
+                        </div>
+                        <div>
+                          <label className={`${labelClass} flex items-center gap-1.5`}>Field of Study <InfoIcon tip="Your major or primary area of study at this institution" /></label>
+                          <input
+                            type="text"
+                            value={edu.field}
+                            onChange={(e) => updateEducation(edu.id, "field", e.target.value)}
+                            placeholder="Computer Science"
+                            className={inputClass}
+                          />
+                        </div>
+                        <div>
+                          <label className={`${labelClass} flex items-center gap-1.5`}>Institution Name <InfoIcon tip="The full name of the university, college, or school" /></label>
+                          <input
+                            type="text"
+                            value={edu.institution}
+                            onChange={(e) => updateEducation(edu.id, "institution", e.target.value)}
+                            placeholder="E.g. State University"
+                            className={inputClass}
+                          />
+                        </div>
+                        <div>
+                          <label className={`${labelClass} flex items-center gap-1.5`}>Graduation Year <InfoIcon tip="The year you graduated or are expected to graduate from this programme" /></label>
+                          <input
+                            type="text"
+                            value={edu.year}
+                            onChange={(e) => updateEducation(edu.id, "year", e.target.value)}
+                            placeholder="YYYY"
+                            maxLength={4}
+                            className={inputClass}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <button
+              type="button"
+              onClick={addEducation}
+              className="mt-1 flex items-center gap-1.5 text-sm font-medium text-accent hover:text-accent-dark transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
-            </div>
+              Add education
+            </button>
           </div>
-          <div>
-            <label className={labelClass}>Field of Study</label>
-            <input
-              type="text"
-              value={data.fieldOfStudy}
-              onChange={(e) => setField("fieldOfStudy", e.target.value)}
-              placeholder="Computer Science"
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Institution Name</label>
-            <input
-              type="text"
-              value={data.institution}
-              onChange={(e) => setField("institution", e.target.value)}
-              placeholder="E.g. State University"
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Graduation Year</label>
-            <input
-              type="text"
-              value={data.graduationYear}
-              onChange={(e) => setField("graduationYear", e.target.value)}
-              placeholder="YYYY"
-              maxLength={4}
-              className={inputClass}
-            />
-          </div>
-        </div>
         </SectionAccordion>
 
         {/* Job Preferences */}
@@ -1486,7 +1596,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <div className="xl:col-span-2">
-              <label className={labelClass}>Job Titles Seeking</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Job Titles Seeking <InfoIcon tip="Enter the job titles you are actively applying for, separated by commas — used to filter and rank job matches" /></label>
               <input
                 type="text"
                 value={data.jobTitlesSeeking}
@@ -1496,7 +1606,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
               />
             </div>
             <div>
-              <label className={labelClass}>Remote Preference</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Remote Preference <InfoIcon tip="Whether you want to work on-site, hybrid, or fully remote" /></label>
               <div className="relative">
                 <select
                   value={data.remotePreference}
@@ -1521,7 +1631,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
               </div>
             </div>
             <div>
-              <label className={labelClass}>Salary Expectation (Optional)</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Salary Expectation (Optional) <InfoIcon tip="Your target annual salary — used to filter job listings by compensation range" /></label>
               <input
                 type="text"
                 value={data.salaryExpectation}
@@ -1531,41 +1641,15 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
               />
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Preferred Locations (Optional)</label>
-              <input
-                type="text"
-                value={data.preferredLocations}
-                onChange={(e) => setField("preferredLocations", e.target.value)}
-                placeholder="E.g. New York, London"
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Cover Letter Tone</label>
-              <div className="relative">
-                <select
-                  value={data.coverLetterTone}
-                  onChange={(e) => setField("coverLetterTone", e.target.value)}
-                  className={selectClass}
-                >
-                  <option value="">Select...</option>
-                  <option value="formal">Formal</option>
-                  <option value="casual">Casual</option>
-                  <option value="enthusiastic">Enthusiastic</option>
-                </select>
-                <svg
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 14 14"
-                  fill="none"
-                >
-                  <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-            </div>
+          <div>
+            <label className={`${labelClass} flex items-center gap-1.5`}>Preferred Locations (Optional) <InfoIcon tip="Cities or regions where you want to work, separated by commas" /></label>
+            <input
+              type="text"
+              value={data.preferredLocations}
+              onChange={(e) => setField("preferredLocations", e.target.value)}
+              placeholder="E.g. New York, London"
+              className={inputClass}
+            />
           </div>
         </div>
         </SectionAccordion>
@@ -1578,40 +1662,40 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
             </p>
 
             <div>
-              <label className={labelClass}>Motivation</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Motivation <InfoIcon tip="What motivates you in your work? What kind of impact do you want to create?" /></label>
               <textarea
                 value={data.motivation}
                 onChange={(e) => setField("motivation", e.target.value)}
                 placeholder="What motivates you in your work? What kind of impact do you want to create?"
                 rows={3}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-none"
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-y"
               />
             </div>
 
             <div>
-              <label className={labelClass}>Key Achievement</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Key Achievement <InfoIcon tip="Describe a result or achievement you're proud of — what was the situation, what did you do, and what happened?" /></label>
               <textarea
                 value={data.proudAchievement}
                 onChange={(e) => setField("proudAchievement", e.target.value)}
                 placeholder="Describe a result or achievement you're proud of — what was the situation, what did you do, and what happened?"
                 rows={3}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-none"
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-y"
               />
             </div>
 
             <div>
-              <label className={labelClass}>What Gives You Energy</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>What Gives You Energy <InfoIcon tip="What kinds of tasks, problems, or situations energize you most at work?" /></label>
               <textarea
                 value={data.energyTasks}
                 onChange={(e) => setField("energyTasks", e.target.value)}
                 placeholder="What kinds of tasks, problems, or situations energize you most at work?"
                 rows={3}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-none"
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-y"
               />
             </div>
 
             <div>
-              <label className={labelClass}>Preferred Company Type</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Preferred Company Type <InfoIcon tip="Used to find jobs and personalize cover letters toward the kinds of companies you want to work at" /></label>
               <div className="flex flex-wrap gap-2 mt-1">
                 {(["Startup", "Scale-up", "Established corporation", "Agency / consultancy", "Public sector", "Non-profit"] as const).map((type) => {
                   const selected = data.companyTypePreference.includes(type);
@@ -1641,13 +1725,13 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
             </div>
 
             <div>
-              <label className={labelClass}>Career Vision</label>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Career Vision <InfoIcon tip="Where do you want to be professionally in 2-3 years? What are you growing toward?" /></label>
               <textarea
                 value={data.careerVision}
                 onChange={(e) => setField("careerVision", e.target.value)}
                 placeholder="Where do you want to be professionally in 2-3 years? What are you growing toward?"
                 rows={2}
-                className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-none"
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-y"
               />
             </div>
           </div>
@@ -1656,48 +1740,75 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
         {/* Cover Letter Instructions */}
         <SectionAccordion title="Cover Letter Instructions">
           <div className="flex flex-col gap-3">
-            <p className="text-xs text-text-secondary">
-              Paste a Markdown instruction set that guides cover letter generation — voice rules, projects, career facts, structural preferences. The agent uses this instead of its defaults.
-            </p>
-            <div className="flex items-center gap-2">
-              <label
-                htmlFor="cl-instructions-upload"
-                className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors"
-              >
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                  <path d="M6.5 1v7M3.5 4l3-3 3 3M1.5 10v1a1 1 0 001 1h9a1 1 0 001-1v-1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            <div>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Cover Letter Tone <InfoIcon tip="Sets the overall writing style — formal keeps it professional, casual is relaxed, enthusiastic shows excitement, confident is assertive" /></label>
+              <div className="relative inline-block">
+                <select
+                  value={data.coverLetterTone}
+                  onChange={(e) => setField("coverLetterTone", e.target.value)}
+                  className={selectClass.replace("w-full", "w-auto pr-8")}
+                >
+                  <option value="">Select...</option>
+                  <option value="formal">Formal</option>
+                  <option value="casual">Casual</option>
+                  <option value="enthusiastic">Enthusiastic</option>
+                  <option value="confident">Confident</option>
+                </select>
+                <svg
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                >
+                  <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                Load .md file
+              </div>
+            </div>
+            <div>
+            <div className="flex items-end justify-between gap-3 mb-1.5">
+              <label htmlFor="cl-instructions-textarea" className={`${labelClass} flex items-center gap-1.5 mb-0`}>
+                Instructions
+                <InfoIcon tip="Paste a Markdown instruction set that guides cover letter generation — voice rules, projects, career facts, structural preferences. The agent uses this instead of its defaults." />
               </label>
-              <input
-                id="cl-instructions-upload"
-                type="file"
-                accept=".md,.txt"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = "";
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = (ev) => {
-                    setField("coverLetterInstructions", (ev.target?.result as string) ?? "");
-                  };
-                  reader.readAsText(file);
-                }}
-              />
-              {data.coverLetterInstructions && (
-                <span className="text-xs text-text-muted">
-                  {data.coverLetterInstructions.length.toLocaleString()} chars
-                </span>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                <label
+                  htmlFor="cl-instructions-upload"
+                  className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors"
+                >
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <path d="M6.5 1v7M3.5 4l3-3 3 3M1.5 10v1a1 1 0 001 1h9a1 1 0 001-1v-1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Upload Markdown
+                </label>
+                <input
+                  id="cl-instructions-upload"
+                  type="file"
+                  accept=".md,.txt"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      setField("coverLetterInstructions", (ev.target?.result as string) ?? "");
+                    };
+                    reader.readAsText(file);
+                  }}
+                />
+              </div>
             </div>
             <textarea
+              id="cl-instructions-textarea"
+
               value={data.coverLetterInstructions}
               onChange={(e) => setField("coverLetterInstructions", e.target.value)}
               placeholder="# Cover Letter Instructions&#10;&#10;Paste your instruction set here, or load a .md file above..."
               rows={12}
               className="w-full px-3 py-2 border border-border rounded-lg text-xs font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-y"
             />
+            </div>
           </div>
         </SectionAccordion>
 

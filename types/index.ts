@@ -39,7 +39,7 @@ export type Profile = {
   skills: string[] | null;
   industries: string[] | null;
   work_experience: WorkExperience[] | null;
-  education: Education | null;
+  education: Education[] | null;
   job_titles_seeking: string[] | null;
   remote_preference: string | null;
   preferred_locations: string[] | null;
@@ -129,10 +129,7 @@ export type ProfileFormInput = {
     responsibilities: string;
     skills?: string[];
   }[];
-  highestDegree: string;
-  fieldOfStudy: string;
-  institution: string;
-  graduationYear: string;
+  educations: Education[];
   jobTitlesSeeking: string;
   remotePreference: string;
   salaryExpectation: string;

@@ -145,7 +145,7 @@ ${companyTypePreference.length > 0 ? `- The candidate prefers ${companyTypePrefe
 - Write the entire letter in ${language}`;
 
     const systemPrompt = customInstructions
-      ? `You are an expert cover letter writer. The candidate's instruction set below is their personal style guide — follow it for voice, tone, structure, and formatting preferences.
+      ? `You are an expert cover letter writer. The candidate's instruction set below is their personal style guide — follow it for voice, tone, structure, and formatting preferences. Write in a ${tone} tone.
 ${coreRules}
 
 CANDIDATE'S COVER LETTER INSTRUCTIONS:
