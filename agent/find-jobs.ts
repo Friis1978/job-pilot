@@ -263,6 +263,27 @@ function normalizeAdzunaJob(job: AdzunaJob): NormalizedJob {
 }
 
 /**
+ * Extracts a salary/compensation string from raw job description text.
+ * Looks for labelled patterns first ("Compensation Range:", "Salary:"), then
+ * unlabelled currency+range patterns. Returns null if nothing is found.
+ */
+export function extractSalaryFromText(text: string): string | null {
+  if (!text) return null;
+  const patterns = [
+    // Labelled: "Compensation Range: €56K–€70K", "Salary: 500,000–700,000 DKK"
+    /(?:compensation\s+range|salary(?:\s+range)?|løn(?:\s+range)?|pay)\s*:?\s*((?:[€$£]|DKK|SEK|NOK|EUR|USD|GBP)?\s*\d[\d\s,\.]*[kKmM]?\s*[-–]\s*(?:[€$£]|DKK|SEK|NOK|EUR|USD|GBP)?\s*\d[\d\s,\.]*[kKmM]?(?:\s*(?:EUR|DKK|SEK|NOK|GBP|USD|kr))?)/i,
+    // Unlabelled: "700k–850k DKK", "€56K–€70K", "$80,000–$100,000"
+    /((?:[€$£])\d[\d\s,\.]*[kKmM]?\s*[-–]\s*(?:[€$£])\d[\d\s,\.]*[kKmM]?(?:\s*(?:EUR|DKK|SEK|NOK|GBP|USD))?)/,
+    /(\d[\d\s,\.]*[kKmM]?\s*[-–]\s*\d[\d\s,\.]*[kKmM]?\s*(?:EUR|DKK|SEK|NOK|GBP|USD|kr)\b)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1].trim().replace(/\s+/g, " ");
+  }
+  return null;
+}
+
+/**
  * Generates a concise 8–10 bullet-point summary of a job description using
  * gpt-4o-mini. Returns `null` for short descriptions (< 500 chars) or on error.
  */
@@ -558,6 +579,14 @@ export async function findJobs(
       for (const job of enrichedJobs) {
         const text = browserEnriched.get(job.id);
         if (text) job.description = text;
+      }
+    }
+
+    // Fill missing salary from description text before scoring
+    for (const job of enrichedJobs) {
+      if (!job.salary && job.description) {
+        const extracted = extractSalaryFromText(job.description);
+        if (extracted) job.salary = extracted;
       }
     }
 

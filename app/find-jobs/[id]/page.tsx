@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { formatDateAgo, computeSkillYears } from "@/lib/utils";
+import { SalaryDisplay } from "@/components/find-jobs/SalaryDisplay";
 import type { Profile } from "@/types";
 import { Navbar } from "@/components/layout/Navbar";
 import { ResearchButton } from "@/components/find-jobs/ResearchButton";
@@ -88,6 +89,7 @@ function getMatchColor(score: number): string {
   if (score >= 80) return "text-info-medium";
   return "text-warning";
 }
+
 
 export default async function JobDetailsPage({
   params,
@@ -374,7 +376,7 @@ export default async function JobDetailsPage({
                   <DetailRow label="Source" value={formatSource(job.source)} />
                   <DetailRow label="Posted" value={formatDateAgo(job.found_at)} />
                   <DetailRow label="Contract" value={formatJobType(job.job_type)} />
-                  <DetailRow label="Salary" value={job.salary ?? "—"} />
+                  <DetailRow label="Salary" value={<SalaryDisplay salary={job.salary} />} />
                   <div className="flex items-center justify-between py-2.5">
                     <span className="text-xs font-medium text-text-muted">Status</span>
                     <StatusBadge jobId={job.id} status={(job.status as JobStatus) ?? "saved"} />
@@ -443,8 +445,8 @@ function MatchCircle({ score, colorClass }: { score: number; colorClass: string 
     "bg-warning/10";
 
   return (
-    <div className="relative flex items-center justify-center w-[72px] h-[72px] shrink-0">
-      <svg className="w-[72px] h-[72px] -rotate-90" viewBox="0 0 72 72">
+    <div className="relative flex items-center justify-center w-18 h-18 shrink-0">
+      <svg className="w-18 h-18 -rotate-90" viewBox="0 0 72 72">
         <circle cx="36" cy="36" r={radius} fill="none" strokeWidth="5" stroke="currentColor" className="text-border" />
         <circle
           cx="36" cy="36" r={radius} fill="none"
@@ -463,11 +465,11 @@ function MatchCircle({ score, colorClass }: { score: number; colorClass: string 
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
-      <span className="text-xs font-medium text-text-muted">{label}</span>
-      <span className="text-xs font-medium text-text-primary text-right max-w-[180px] truncate">{value}</span>
+      <span className="text-xs font-medium text-text-muted shrink-0">{label}</span>
+      <span className="text-xs font-medium text-text-primary text-right max-w-[180px]">{value}</span>
     </div>
   );
 }

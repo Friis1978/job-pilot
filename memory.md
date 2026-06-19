@@ -1,65 +1,40 @@
-# Memory — Job Detail Page Redesign + Onboarding Flow
+# Memory — Code Cleanup + Salary Display
 
-Last updated: 2026-06-19 23:30
+Last updated: 2026-06-20
 
 ## What was built
 
-### Onboarding flow (completed, confirmed working)
-- `components/dashboard/OnboardingDialog.tsx` — 2-step modal (profile → find jobs), shown to new users
-- `app/api/onboarding/mark-seen/route.ts` — POST endpoint sets `onboarding_seen = true`
-- `app/profile/page.tsx` — shows OnboardingDialog for new users (`!profile?.onboarding_seen`)
-- `app/dashboard/page.tsx` — redirects new users (onboarding_seen false/null) to `/profile`
-- `proxy.ts` — redirects logged-in users from `/` to `/dashboard`; `"/"` added to matcher
-- `public/images/onboarding-profile.png`, `onboarding-jobs.png`, `onboarding-research.png` — Playwright-generated fake UI screenshots used in dialog AND homepage (Hero, HowItWorks, Features components updated)
+### Refactoring (this session)
+- **`components/find-jobs/SalaryDisplay.tsx`** — extracted from `app/find-jobs/[id]/page.tsx`. Standalone component showing original salary + DKK monthly conversion in sidebar.
+- **`lib/utils.ts`** — added `CURRENCY_TO_DKK` constant (EUR: 7.46, USD: 6.80, GBP: 8.50, SEK: 0.65, NOK: 0.67) exported alongside `MATCH_THRESHOLD`.
+- **`app/find-jobs/[id]/page.tsx`** — cleaned up: removed local `SalaryDisplay` and `CURRENCY_TO_DKK`, imports `SalaryDisplay` from components and no longer needs `CURRENCY_TO_DKK` directly. Also fixed Tailwind warnings: `w-[72px]`→`w-18`, `h-[72px]`→`h-18` in `MatchCircle`.
 
-### Job detail page redesign (`app/find-jobs/[id]/page.tsx`)
-Complete rewrite to two-column layout:
-- **Left column**: job header (title, company·location·jobtype subtitle, top 5 matched skill pills, match score circle + "Match score" label), match breakdown card (progress bars + matched/missing skills two-column), job description, company research, cover letter
-- **Right sticky sidebar** (320px): single white card (`bg-surface border border-border rounded-2xl p-4`) containing:
-  - Apply now ↗ (blue, bold underline)
-  - Tailored resume (`bg-surface-tertiary border border-border`, bold underline, no icon, label = "Tailored resume")
-  - `h-px bg-border-muted` separator
-  - Bare detail rows: Source / Posted / Contract / Salary / Status (no card wrapper, no dividers)
-  - Below the card: AI Match Summary card
-- Removed: ApplicationPipeline, InfoCard grid, bottom Apply Now button, Generate Cover Letter button (removed twice — do not add back)
-- Added: `MatchCircle` SVG with light colored inner bg, `ProgressBar`, `DetailRow`, `formatSource()`
-- `source` field added to Job type — formatted (adzuna→Adzuna, url→Imported, search→Job search, etc.)
-- Company research content area uses `bg-surface-tertiary`
-
-### TailoredResumeButton (`components/find-jobs/TailoredResumeButton.tsx`)
-- Added `fullWidth?: boolean` prop
-- fullWidth: `bg-surface-tertiary border border-border`, `rounded-xl`, `text-sm font-bold underline`, no icon, label = "Tailored resume"
-- Non-fullWidth: unchanged (accent bg, small, with icon) — used in job list
-
-### MatchCircle design (user approved)
-- Inner circle fill: `bg-success-lightest` / `bg-info-lightest` / `bg-warning/10` based on score tier
-- "match" text inside circle removed, "Match score" label below circle kept
-
-### Data fixes (manual via Playwright scrape)
-- Job `c471a9ef` (SimCorp Senior SE): full description fetched from Careerjet, `about_role` + `description_summary` updated
-- Job `50d983be` (SimCorp Junior SE): same — Careerjet URL `dk2687a65504cf360f4d9d8fb2f5175739`
+### From previous session (still current)
+- Complete two-column job detail page redesign (`app/find-jobs/[id]/page.tsx`)
+- `TailoredResumeButton` with `fullWidth` prop (`components/find-jobs/TailoredResumeButton.tsx`)
+- Salary extraction in `agent/find-jobs.ts` — `extractSalaryFromText()` runs after enrichment for new jobs
+- Two SimCorp jobs have full descriptions fetched from Careerjet (IDs: `c471a9ef`, `50d983be`)
+- Air Apps job (`0e5e4c12`) salary manually set from Careerjet scrape
 
 ## Decisions made
 
-- **Sidebar is one white card** containing all buttons + detail rows. AI Match Summary is separate card below.
-- **Generate Cover Letter button** — do not add to sidebar (user removed it twice)
-- **Match breakdown bars** — Skills % from matched/missing arrays ratio; Experience + Seniority use `match_score` as placeholder. Real data needs `match_breakdown jsonb` column + AI scorer update.
-- **Job description rendering** — unified: split on `\n`, >1 line → bullets, else paragraph. Applies to both `description_summary` and `about_role` fallback.
-- **Boolean null from PostgREST** — use `!value` not `=== false` for `onboarding_seen` checks
-- **Missing skills**: `bg-error/10 text-error`. Matched skills: `bg-success-lightest text-success-foreground`
+- **`CURRENCY_TO_DKK` lives in `lib/utils.ts`** — shared constant, not buried in a component
+- **`SalaryDisplay` is its own component** — `components/find-jobs/SalaryDisplay.tsx` (not in utils.ts which is plain TS, no JSX)
+- **Tailwind `w-[51px]`/`h-[51px]`/`max-w-[180px]`** — left as arbitrary values, no clean Tailwind v3 equivalents
+- **Salary extraction** — applies only to new jobs going forward; existing jobs with null salary confirmed to have vague language ("Competitive salary" etc), no retroactive update possible
+- **Generate cover letter button** — do not add to sidebar (removed twice by user)
+- **Sidebar is one white card** containing all buttons + detail rows; AI Match Summary is separate card below
 
 ## Problems solved
 
-- Careerjet blocks WebFetch (418) — use Playwright `browser_navigate` + `browser_evaluate` instead
-- jobviewtrack redirect URLs resolve correctly in Playwright without special Referer headers
-- Short `about_role` (< 500 chars) skips AI summarization — now falls back with same bullet renderer
+- Careerjet blocks WebFetch (418) — use Playwright `browser_navigate` + `browser_evaluate`
+- `CURRENCY_TO_DKK` was inside `SalaryDisplay` function — moved to module level, then to utils
 
 ## Current state
 
-- Job detail page fully redesigned, all sidebar tweaks complete, user happy with design
+- Job detail page fully functional with two-column layout, salary display with DKK conversion, match breakdown with progress bars + skills
 - Onboarding flow working end-to-end
-- Homepage images updated to Playwright screenshots
-- Two SimCorp jobs have correct full descriptions in DB
+- All refactoring from this session complete — no partial work
 
 ## Next session starts with
 
@@ -67,8 +42,8 @@ No specific next task — ask the user what to work on.
 
 ## Open questions
 
-- Match breakdown Experience/Seniority are placeholders — needs `match_breakdown jsonb` on `jobs` + AI scorer change
+- Match breakdown Experience/Seniority bars use `match_score` as placeholder — needs `match_breakdown jsonb` column on `jobs` + AI scorer update for real data
 - Other jobs may have truncated `about_role` — handled case-by-case via Playwright scrape
-- Emails not working in production (from previous session) — env vars need adding to InsForge deployment, `bandfolio.ai` needs Resend verification
-- Should rejected users see different message on `/pending`? (from previous session)
-- Should Admin nav link show badge count for pending users? (from previous session)
+- Emails not working in production — env vars need adding to InsForge deployment, `bandfolio.ai` needs Resend verification
+- Should rejected users see different message on `/pending`?
+- Should Admin nav link show badge count for pending users?

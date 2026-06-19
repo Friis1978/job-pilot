@@ -2,6 +2,15 @@ import type { WorkExperience } from "@/types";
 
 export const MATCH_THRESHOLD = 70;
 
+/** Fixed exchange rates to DKK (EUR pegged by ECB; others approximate). */
+export const CURRENCY_TO_DKK: Record<string, number> = {
+  EUR: 7.46,
+  USD: 6.80,
+  GBP: 8.50,
+  SEK: 0.65,
+  NOK: 0.67,
+};
+
 // Maps common city names to all recognised variants (English + local language).
 // Used to run parallel searches on APIs that only accept one form at a time.
 const LOCATION_ALIASES: Record<string, string[]> = {
