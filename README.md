@@ -2,7 +2,7 @@
 
 An AI-powered job hunting assistant. Set up your profile once, then let the agent find relevant jobs, score them against your actual skills, research each company, and generate a tailored cover letter — all before you click Apply.
 
-**Live:** [8kj4iaqv.insforge.site](https://8kj4iaqv.insforge.site)
+**Live:** [findjob.insforge.site](https://findjob.insforge.site)
 
 ---
 
@@ -16,6 +16,7 @@ An AI-powered job hunting assistant. Set up your profile once, then let the agen
 - **Resume extraction** — upload an existing PDF and GPT-4o pre-fills your profile fields from it
 - **Application pipeline** — track jobs through Saved → Applied → Interviewing → Offer
 - **Dashboard analytics** — PostHog-powered charts for jobs over time, match score distribution, and company research activity
+- **User approval gate** — new sign-ups are held in a pending state until an admin approves them; automated emails via Resend notify both the user and the admin
 
 ---
 
@@ -30,6 +31,7 @@ An AI-powered job hunting assistant. Set up your profile once, then let the agen
 | Browser automation | Stagehand |
 | Job sources | Adzuna, JobTech, Jooble, CareerJet, RapidAPI (Glassdoor) |
 | Analytics | PostHog |
+| Email | Resend |
 | PDF generation | @react-pdf/renderer |
 | Styling | Tailwind CSS 4 |
 | Language | TypeScript (strict) |
@@ -45,6 +47,8 @@ An AI-powered job hunting assistant. Set up your profile once, then let the agen
 /find-jobs         Search + job list with filters
 /find-jobs/[id]    Job details, company research, cover letter, tailored resume
 /profile           Profile builder, resume upload and generation
+/pending           Waiting-for-approval page (shown to unapproved users)
+/admin             Admin panel — approve or reject pending users
 ```
 
 ---
@@ -57,6 +61,7 @@ An AI-powered job hunting assistant. Set up your profile once, then let the agen
 - A [Browserbase](https://browserbase.com) account for company research
 - Job source API keys (Adzuna required; Jooble, CareerJet, RapidAPI optional but recommended)
 - A [PostHog](https://posthog.com) project for analytics (optional)
+- A [Resend](https://resend.com) account with a verified sender domain for approval emails
 
 ---
 
@@ -91,6 +96,12 @@ JOOBLE_API_KEY=your-jooble-key          # jooble.org/api/index
 CAREERJET_API_KEY=your-careerjet-key    # careerjet.com/affiliate
 RAPIDAPI_KEY=your-rapidapi-key          # rapidapi.com — used for Glassdoor
 
+# Resend — transactional emails for user approval flow
+RESEND_API_KEY=re_...
+RESEND_FROM_EMAIL=noreply@yourdomain.com   # must be a verified Resend sender domain
+ADMIN_EMAIL=your@email.com                 # receives new sign-up notifications
+NEXT_PUBLIC_APP_URL=https://your-app-url   # used in email links
+
 # PostHog — event tracking and dashboard charts
 NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN=phc_...
 NEXT_PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com
@@ -120,6 +131,10 @@ Open [http://localhost:3000](http://localhost:3000).
 | `BROWSERBASE_PROJECT_ID` | Yes | Browserbase project ID |
 | `ADZUNA_APP_ID` | Yes | Adzuna app ID |
 | `ADZUNA_APP_KEY` | Yes | Adzuna app key |
+| `RESEND_API_KEY` | Yes | Resend API key for approval emails |
+| `RESEND_FROM_EMAIL` | Yes | Verified sender address (e.g. `noreply@yourdomain.com`) |
+| `ADMIN_EMAIL` | Yes | Admin email — receives new sign-up notifications |
+| `NEXT_PUBLIC_APP_URL` | Yes | Public app URL — used in email login links |
 | `JOOBLE_API_KEY` | No | Jooble API key |
 | `CAREERJET_API_KEY` | No | CareerJet API key |
 | `RAPIDAPI_KEY` | No | RapidAPI key — used for Glassdoor integration |
@@ -146,10 +161,16 @@ Open [http://localhost:3000](http://localhost:3000).
 │   ├── dashboard/              # Stats, activity feed, analytics charts
 │   ├── find-jobs/              # Search form + job list + job details
 │   ├── profile/                # Profile builder + resume management
-│   └── api/                    # API routes (agent triggers, resume, jobs CRUD)
+│   ├── pending/                # Pending approval page
+│   ├── admin/                  # Admin panel (approve/reject users)
+│   └── api/                    # API routes (agent triggers, resume, jobs, admin)
 ├── actions/                    # Next.js Server Actions (profile save/update)
 ├── components/                 # UI components — no DB calls, no business logic
+│   ├── admin/                  # AdminUsersTable
+│   └── ...
 ├── lib/                        # Third-party client init + shared utilities
+│   ├── resend.ts               # Email functions (pending, approved, admin notification)
+│   └── ...
 ├── types/                      # Shared TypeScript types
 └── context/                    # Architecture docs and AI agent guidelines
 ```
@@ -182,6 +203,27 @@ See [`context/app-map.md`](context/app-map.md) for a full reference of every rou
 2. Edit any field manually, then generate a clean PDF resume from your current profile
 3. From any job detail page, generate a job-tailored version optimised for that role
 
+### User approval
+1. New user signs in via Google or GitHub OAuth
+2. They land on `/pending` and receive an email telling them their account is under review
+3. The admin receives a notification email and reviews the request at `/admin`
+4. Admin clicks **Approve** — the user gets an email with a login link and can now access the app
+5. Unapproved users are blocked from all protected routes by `proxy.ts` via the `jp_approved` cookie
+
+---
+
+## Admin setup
+
+To grant admin access to a user, run the following SQL on your InsForge database:
+
+```sql
+UPDATE profiles
+SET approval_status = 'approved', is_admin = true
+WHERE id = (SELECT id FROM auth.users WHERE email = 'your@email.com' LIMIT 1);
+```
+
+Admins see an **Admin** link in the navbar and can access `/admin` to approve or reject pending users.
+
 ---
 
 ## Deployment
@@ -200,6 +242,8 @@ To deploy manually:
 npx @insforge/cli@latest deployments deploy .
 ```
 
+Remember to set all required environment variables in your InsForge deployment settings — `.env.local` is only used for local development.
+
 ---
 
 ## Notes
@@ -209,3 +253,5 @@ npx @insforge/cli@latest deployments deploy .
 - **Job language detection** covers Danish, Swedish, Norwegian, German, Dutch, French, Spanish, and English. Letters are always written in the detected language of the job posting.
 - **Adzuna** always searches with `category=it-jobs`. Change this in `lib/adzuna.ts` for non-tech roles.
 - **RLS** — all database queries are scoped to the authenticated user via InsForge Row Level Security. Never query without a `user_id` filter in application code.
+- **Approval cookie lifetime** — `jp_approved` is a 7-day httpOnly cookie. If an admin revokes a user's approval, they retain access until the cookie expires or they log out.
+- **Resend sender domain** — `RESEND_FROM_EMAIL` must be a verified domain in your Resend dashboard. Approval emails will silently fail until this is configured.

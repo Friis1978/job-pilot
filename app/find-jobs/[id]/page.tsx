@@ -102,7 +102,7 @@ export default async function JobDetailsPage({
 
   const { data: profileData } = await insforge.database
     .from("profiles")
-    .select("work_experience, avatar_url")
+    .select("work_experience, avatar_url, is_admin")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -112,7 +112,7 @@ export default async function JobDetailsPage({
 
   return (
     <>
-      <Navbar user={{ name: userMeta?.full_name ?? userMeta?.name, email: user.email, avatarUrl: (profileData as { avatar_url?: string | null } | null)?.avatar_url ?? userMeta?.avatar_url }} />
+      <Navbar user={{ name: userMeta?.full_name ?? userMeta?.name, email: user.email, avatarUrl: (profileData as { avatar_url?: string | null } | null)?.avatar_url ?? userMeta?.avatar_url }} isAdmin={(profileData as { is_admin?: boolean } | null)?.is_admin ?? false} />
       <main className="min-h-screen bg-background py-8">
         <div className="w-full max-w-360 mx-auto px-4 sm:px-6 flex flex-col gap-5 pb-12">
 

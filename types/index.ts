@@ -57,6 +57,9 @@ export type Profile = {
   resume_pdf_url: string | null;
   avatar_url: string | null;
   is_complete: boolean;
+  approval_status: 'pending' | 'approved' | 'rejected';
+  is_admin: boolean;
+  welcomed_at: string | null;
   created_at: string;
   updated_at: string;
 };

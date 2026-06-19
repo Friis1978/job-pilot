@@ -2,6 +2,7 @@ import { updateSession } from "@insforge/sdk/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const PROTECTED_PATHS = ["/dashboard", "/profile", "/find-jobs"];
+const ADMIN_PATHS = ["/admin"];
 
 // Routes where we skip updateSession — the route handler manages its own refresh
 // to avoid double-consuming the refresh token (token rotation).
@@ -42,9 +43,29 @@ export async function proxy(request: NextRequest) {
   const isProtected = PROTECTED_PATHS.some((path) =>
     pathname.startsWith(path),
   );
+  const isAdminPath = ADMIN_PATHS.some((path) =>
+    pathname === path || pathname.startsWith(path + "/"),
+  );
 
-  if (isProtected && !accessToken) {
+  // Redirect unauthenticated users away from protected and admin routes
+  if ((isProtected || isAdminPath) && !accessToken) {
     return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  // Authenticated but not yet approved — redirect to waiting page
+  if (isProtected && accessToken) {
+    const isApproved = request.cookies.get("jp_approved")?.value === "1";
+    if (!isApproved) {
+      return NextResponse.redirect(new URL("/pending", request.url));
+    }
+  }
+
+  // Admin routes require the jp_admin cookie
+  if (isAdminPath && accessToken) {
+    const isAdminUser = request.cookies.get("jp_admin")?.value === "1";
+    if (!isAdminUser) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
   }
 
   if (pathname === "/auth/login" && accessToken) {
@@ -76,6 +97,7 @@ export const config = {
     "/dashboard/:path*",
     "/profile/:path*",
     "/find-jobs/:path*",
+    "/admin/:path*",
     "/auth/login",
     "/api/:path*",
   ],

@@ -11,13 +11,15 @@ const NAV_LINKS = [
   { href: "/profile", label: "Profile" },
 ];
 
+const ADMIN_LINK = { href: "/admin", label: "Admin" };
+
 export type NavUser = {
   name?: string | null;
   email?: string | null;
   avatarUrl?: string | null;
 };
 
-type Props = { user?: NavUser; hasAccount?: boolean };
+type Props = { user?: NavUser; hasAccount?: boolean; isAdmin?: boolean };
 
 function getInitials(name?: string | null, email?: string | null): string {
   if (name?.trim()) {
@@ -30,7 +32,7 @@ function getInitials(name?: string | null, email?: string | null): string {
   return "?";
 }
 
-export function Navbar({ user, hasAccount }: Props) {
+export function Navbar({ user, hasAccount, isAdmin }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -61,7 +63,7 @@ export function Navbar({ user, hasAccount }: Props) {
 
         {user && (
           <nav className="order-3 w-full flex items-center justify-center gap-5 sm:gap-8 sm:order-0 sm:w-auto">
-            {NAV_LINKS.map(({ href, label }) => {
+            {[...NAV_LINKS, ...(isAdmin ? [ADMIN_LINK] : [])].map(({ href, label }) => {
               const isActive = pathname === href || pathname.startsWith(href + "/");
               return (
                 <Link

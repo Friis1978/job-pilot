@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { setAuthCookies } from "@insforge/sdk/ssr";
+import { createServerClient } from "@insforge/sdk/ssr";
 import { getPostHogClient } from "@/lib/posthog-server";
+import { sendPendingEmail, sendAdminNotificationEmail } from "@/lib/resend";
 
 function getSubFromJwt(token: string): string | null {
   try {
@@ -70,7 +72,54 @@ export async function GET(request: NextRequest) {
       posthog.identify({ distinctId: userId });
     }
 
-    const response = NextResponse.redirect(`${origin}/dashboard`);
+    // Check approval status and detect first login using the fresh access token.
+    // createInsforgeServer() can't be used here since auth cookies aren't set yet,
+    // so we create a one-off client with the token directly.
+    let approvalStatus: "pending" | "approved" | "rejected" = "pending";
+    let isAdmin = false;
+
+    if (userId) {
+      const tempClient = createServerClient({
+        baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL!,
+        anonKey: process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY!,
+        accessToken: data.accessToken,
+      });
+
+      const { data: profile } = await tempClient.database
+        .from("profiles")
+        .select("email, full_name, approval_status, is_admin, welcomed_at")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (profile) {
+        approvalStatus = profile.approval_status as "pending" | "approved" | "rejected";
+        isAdmin = profile.is_admin as boolean;
+
+        // First login: set welcomed_at and send emails if still pending
+        if (profile.welcomed_at === null) {
+          await tempClient.database
+            .from("profiles")
+            .update({ welcomed_at: new Date().toISOString() })
+            .eq("id", userId);
+
+          if (approvalStatus === "pending") {
+            await Promise.allSettled([
+              sendPendingEmail(
+                (profile.email as string | null) ?? "",
+                (profile.full_name as string | null) ?? "there",
+              ),
+              sendAdminNotificationEmail(
+                (profile.email as string | null) ?? "",
+                (profile.full_name as string | null) ?? (profile.email as string | null) ?? "",
+              ),
+            ]);
+          }
+        }
+      }
+    }
+
+    const destination = approvalStatus === "approved" ? "/dashboard" : "/pending";
+    const response = NextResponse.redirect(`${origin}${destination}`);
 
     response.cookies.delete("insforge_pkce_verifier");
 
@@ -79,6 +128,28 @@ export async function GET(request: NextRequest) {
       path: "/",
       sameSite: "lax",
     });
+
+    // Set approval cookie — checked by proxy on every protected-route request
+    if (approvalStatus === "approved") {
+      response.cookies.set("jp_approved", "1", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 7, // 7 days — matches token lifetime
+        path: "/",
+      });
+    }
+
+    // Set admin cookie — checked by proxy on /admin routes
+    if (isAdmin) {
+      response.cookies.set("jp_admin", "1", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 7,
+        path: "/",
+      });
+    }
 
     // InsForge returns the refresh token via Set-Cookie header, not in the JSON body.
     const setCookieHeader = res.headers.get("set-cookie");
@@ -90,8 +161,8 @@ export async function GET(request: NextRequest) {
       { accessToken: data.accessToken, refreshToken: extractedRefreshToken },
       {
         options: {
-          accessToken: { maxAge: 60 * 60 * 24 * 7 },  // 7 days
-          refreshToken: { maxAge: 60 * 60 * 24 * 7 }, // match InsForge's 7-day JWT TTL
+          accessToken: { maxAge: 60 * 60 * 24 * 7 },
+          refreshToken: { maxAge: 60 * 60 * 24 * 7 },
         },
       },
     );
