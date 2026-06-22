@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement, type ReactElement } from "react";
 import type { DocumentProps } from "@react-pdf/renderer";
+import { PDFDocument } from "pdf-lib";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { detectLanguage, LANGUAGE_LABELS } from "@/lib/detect-language";
+import { computeSkillYears } from "@/lib/utils";
 import { CoverLetterPDF } from "./CoverLetterPDF";
+import { ResumePDF } from "@/app/api/resume/ResumePDF";
 import type { Profile } from "@/types";
 
-// GET — download cover letter as PDF
+// GET — download cover letter as PDF (optionally with resume appended)
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -15,6 +18,7 @@ export async function GET(
   try {
     const { id: jobId } = await params;
     const includePhoto = req.nextUrl.searchParams.get("photo") !== "0";
+    const includeResume = req.nextUrl.searchParams.get("resume") === "1";
     const insforge = await createInsforgeServer();
     const { data: authData, error: authError } = await insforge.auth.getCurrentUser();
     if (authError || !authData?.user) {
@@ -25,13 +29,13 @@ export async function GET(
     const [jobRes, profileRes] = await Promise.all([
       insforge.database
         .from("jobs")
-        .select("title, company, about_role, responsibilities, requirements, cover_letter")
+        .select("title, company, about_role, responsibilities, requirements, cover_letter, tailored_resume_content")
         .eq("id", jobId)
         .eq("user_id", userId)
         .single(),
       insforge.database
         .from("profiles")
-        .select("full_name, email, phone, portfolio_url, avatar_url")
+        .select("*")
         .eq("id", userId)
         .single(),
     ]);
@@ -44,7 +48,7 @@ export async function GET(
     }
 
     const job = jobRes.data;
-    const profile = profileRes.data as Pick<Profile, "full_name" | "email" | "phone" | "portfolio_url" | "avatar_url">;
+    const profile = profileRes.data as Profile;
 
     if (!job.cover_letter) {
       return NextResponse.json({ error: "No cover letter to download. Generate one first." }, { status: 400 });
@@ -60,10 +64,8 @@ export async function GET(
     const lang = detectLanguage(allJobText || job.cover_letter);
     const labels = LANGUAGE_LABELS[lang] ?? LANGUAGE_LABELS.en;
 
-    // avatars bucket is public — pass URL directly, react-pdf fetches it during render
     const avatarUrl = includePhoto && profile.avatar_url ? profile.avatar_url : null;
 
-    // Build contact parts — email falls back to auth email if not saved in profile
     const email = profile.email || authData.user.email || null;
     const contactParts: string[] = [];
     if (profile.phone) contactParts.push(profile.phone);
@@ -72,7 +74,10 @@ export async function GET(
       contactParts.push(profile.portfolio_url.replace(/^https?:\/\//, "").replace(/\/$/, ""));
     }
 
-    const element = createElement(CoverLetterPDF, {
+    const safeCompany = job.company.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+    // Render cover letter PDF
+    const clElement = createElement(CoverLetterPDF, {
       fullName: profile.full_name ?? "",
       jobTitle: job.title,
       company: job.company,
@@ -81,14 +86,41 @@ export async function GET(
       avatarUrl,
       labels,
     }) as unknown as ReactElement<DocumentProps>;
+    const clBuffer = await renderToBuffer(clElement);
 
-    const buffer = await renderToBuffer(element);
-    const safeCompany = job.company.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    // If resume not requested or no stored tailored content, return cover letter only
+    const tailoredContent = job.tailored_resume_content as Record<string, unknown> | null;
+    if (!includeResume || !tailoredContent) {
+      return new NextResponse(new Uint8Array(clBuffer), {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="cover-letter-${safeCompany}.pdf"`,
+        },
+      });
+    }
 
-    return new NextResponse(new Uint8Array(buffer), {
+    // Render resume PDF
+    const skillYears = computeSkillYears(profile.work_experience);
+    const resumeElement = createElement(ResumePDF, {
+      profile,
+      generated: tailoredContent as Parameters<typeof ResumePDF>[0]["generated"],
+      skillYears,
+    }) as unknown as ReactElement<DocumentProps>;
+    const resumeBuffer = await renderToBuffer(resumeElement);
+
+    // Merge cover letter + resume into one PDF
+    const merged = await PDFDocument.create();
+    for (const buf of [clBuffer, resumeBuffer]) {
+      const src = await PDFDocument.load(buf);
+      const pages = await merged.copyPages(src, src.getPageIndices());
+      pages.forEach((p) => merged.addPage(p));
+    }
+    const mergedBuffer = Buffer.from(await merged.save());
+
+    return new NextResponse(new Uint8Array(mergedBuffer), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="cover-letter-${safeCompany}.pdf"`,
+        "Content-Disposition": `attachment; filename="application-${safeCompany}.pdf"`,
       },
     });
   } catch (err) {

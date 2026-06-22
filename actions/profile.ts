@@ -85,6 +85,7 @@ export async function saveProfile(
       cover_letter_tone: input.coverLetterTone || null,
       cover_letter_instructions: input.coverLetterInstructions || null,
       personal_projects: input.personalProjects.length > 0 ? input.personalProjects : null,
+      personal_interests: input.personalInterests || null,
       motivation: input.motivation || null,
       proud_achievement: input.proudAchievement || null,
       energy_tasks: input.energyTasks || null,

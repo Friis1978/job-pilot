@@ -142,7 +142,7 @@ WHAT DRIVES THE CANDIDATE:
 EXPERIENCE & SKILLS:
 - Draw on ALL work history — matched skills are a hint, not the limit. Older roles often contain the most relevant experience
 - Where the candidate has years of experience for a skill relevant to this role, include the number naturally (e.g. "5 years of React")
-- If personal projects are listed, weave in at least one that's relevant — mention it by name and include its live URL or GitHub URL inline ("you can see this at https://...") — real links turn claims into proof
+- If personal projects are listed, weave in at least one that's relevant — mention it by name and include ALL available links inline (Live URL, GitHub URL, and Video URL — include every one that exists for the project, e.g. "live at https://..., source at https://..., demo at https://...") — real links turn claims into proof
 
 FINISHING:
 - Acknowledge gap skills briefly — one sentence max, frame as adjacent strength or fast ramp

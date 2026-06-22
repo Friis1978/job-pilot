@@ -47,6 +47,7 @@ export type Profile = {
   cover_letter_tone: string | null;
   cover_letter_instructions: string | null;
   personal_projects: PersonalProject[] | null;
+  personal_interests: string | null;
   motivation: string | null;
   proud_achievement: string | null;
   energy_tasks: string | null;
@@ -95,6 +96,8 @@ export type AdzunaJob = {
 
 export type ScoredJob = {
   matchScore: number;
+  experienceScore: number;
+  seniorityScore: number;
   matchReason: string;
   matchedSkills: string[];
   missingSkills: string[];
@@ -141,6 +144,7 @@ export type ProfileFormInput = {
   coverLetterTone: string;
   coverLetterInstructions: string;
   personalProjects: { name: string; description: string; url: string; githubUrl: string; videoUrl: string; skills: string[]; startDate: string; endDate: string; currentlyWorking: boolean }[];
+  personalInterests: string;
   motivation: string;
   proudAchievement: string;
   energyTasks: string;

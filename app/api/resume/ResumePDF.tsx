@@ -38,85 +38,85 @@ const ACCENT = "#7C5CFC";
 const styles = StyleSheet.create({
   page: {
     fontFamily: "Helvetica",
-    fontSize: 10,
+    fontSize: 9,
     color: TEXT,
-    paddingTop: 40,
-    paddingBottom: 40,
-    paddingLeft: 48,
-    paddingRight: 48,
-    lineHeight: 1.5,
+    paddingTop: 30,
+    paddingBottom: 30,
+    paddingLeft: 40,
+    paddingRight: 40,
+    lineHeight: 1.4,
   },
   // Header
   headerName: {
-    fontSize: 22,
+    fontSize: 20,
     fontFamily: "Helvetica-Bold",
     color: TEXT,
-    marginBottom: 8,
-  },
-  headerTitle: {
-    fontSize: 12,
-    color: MUTED,
     marginBottom: 4,
   },
+  headerTitle: {
+    fontSize: 11,
+    color: MUTED,
+    marginBottom: 3,
+  },
   headerContact: {
-    fontSize: 9,
+    fontSize: 8,
     color: MUTED,
     flexDirection: "row",
     flexWrap: "wrap",
   },
   headerDot: {
-    fontSize: 9,
+    fontSize: 8,
     color: MUTED,
     marginLeft: 4,
     marginRight: 4,
   },
   // Section
   sectionLabel: {
-    fontSize: 8,
+    fontSize: 7,
     fontFamily: "Helvetica-Bold",
     color: ACCENT,
-    marginTop: 14,
-    marginBottom: 5,
+    marginTop: 10,
+    marginBottom: 3,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   divider: {
     borderBottomWidth: 0.5,
     borderBottomColor: "#E5E7EB",
-    marginBottom: 6,
+    marginBottom: 4,
   },
   // Summary
   summaryText: {
-    fontSize: 10,
+    fontSize: 9,
     color: TEXT,
-    lineHeight: 1.6,
+    lineHeight: 1.5,
   },
   // Skills
   skillGroupRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 3,
+    marginBottom: 2,
   },
   skillGroupLabel: {
-    fontSize: 8,
+    fontSize: 7,
     fontFamily: "Helvetica-Bold",
     color: MUTED,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    width: 110,
+    width: 100,
     paddingTop: 1,
     flexShrink: 0,
   },
   skillsText: {
-    fontSize: 9,
+    fontSize: 8,
     color: TEXT,
-    lineHeight: 1.5,
+    lineHeight: 1.4,
     flex: 1,
   },
   skillsRowText: {
-    fontSize: 9,
+    fontSize: 8,
     color: TEXT,
-    lineHeight: 1.5,
+    lineHeight: 1.4,
   },
   // Work experience
   roleRow: {
@@ -126,72 +126,72 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   roleCompany: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: "Helvetica-Bold",
     color: TEXT,
   },
   roleDates: {
-    fontSize: 9,
+    fontSize: 8,
     color: MUTED,
   },
   roleTitle: {
-    fontSize: 10,
+    fontSize: 9,
     color: MUTED,
-    marginBottom: 2,
+    marginBottom: 1,
   },
   roleSkills: {
-    fontSize: 8,
+    fontSize: 7,
     color: MUTED,
-    marginBottom: 3,
+    marginBottom: 2,
   },
   bulletRow: {
     flexDirection: "row",
-    marginBottom: 2,
+    marginBottom: 1,
     paddingLeft: 4,
   },
   bulletDot: {
-    fontSize: 9,
+    fontSize: 8,
     color: TEXT,
     width: 10,
   },
   bulletText: {
-    fontSize: 9,
+    fontSize: 8,
     color: TEXT,
     flex: 1,
-    lineHeight: 1.5,
+    lineHeight: 1.4,
   },
   roleBlock: {
-    marginBottom: 8,
+    marginBottom: 5,
   },
   // Education
   eduDegree: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: "Helvetica-Bold",
     color: TEXT,
   },
   eduDetail: {
-    fontSize: 10,
+    fontSize: 9,
     color: MUTED,
   },
   // Personal projects
   projectDesc: {
-    fontSize: 9,
+    fontSize: 8,
     color: TEXT,
-    lineHeight: 1.5,
+    lineHeight: 1.4,
   },
   projectLinks: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginTop: 3,
-    gap: 10,
+    marginTop: 2,
+    gap: 8,
   },
   projectLink: {
-    fontSize: 8,
+    fontSize: 7,
     color: ACCENT,
     textDecoration: "none",
   },
   projectLinkLabel: {
-    fontSize: 7,
+    fontSize: 6,
     color: MUTED,
     fontFamily: "Helvetica-Bold",
     textTransform: "uppercase",
@@ -262,15 +262,17 @@ export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
             <Text style={styles.sectionLabel}>Skills</Text>
             <View style={styles.divider} />
             {generated.skillGroups!.map((group, gi) => {
-              const sorted = group.skills
-                .slice()
-                .sort((a, b) => {
-                  const yA = skillYears[a] ?? 0;
-                  const yB = skillYears[b] ?? 0;
-                  if (yB !== yA) return yB - yA;
-                  return a.localeCompare(b);
-                })
-                .map((skill) => {
+              // "Required" group preserves the route's custom order (frontend frameworks first).
+              // All other groups sort by years of experience descending.
+              const skills = group.label === "Required"
+                ? group.skills.slice()
+                : group.skills.slice().sort((a, b) => {
+                    const yA = skillYears[a] ?? 0;
+                    const yB = skillYears[b] ?? 0;
+                    if (yB !== yA) return yB - yA;
+                    return a.localeCompare(b);
+                  });
+              const sorted = skills.map((skill) => {
                   const yrs = skillYears[skill];
                   return yrs && yrs > 0 ? `${skill} (${yrs} yr${yrs === 1 ? "" : "s"})` : skill;
                 });

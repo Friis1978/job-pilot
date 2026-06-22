@@ -64,6 +64,7 @@ type FormData = {
   preferredLocations: string;
   coverLetterTone: string;
   coverLetterInstructions: string;
+  personalInterests: string;
   motivation: string;
   proudAchievement: string;
   energyTasks: string;
@@ -90,6 +91,7 @@ const CHANGE_LABELS: Partial<Record<keyof FormData, string>> = {
   preferredLocations: "Preferred Locations",
   coverLetterTone:    "Cover Letter Tone",
   coverLetterInstructions: "Cover Letter Instructions",
+  personalInterests:  "Personal Interests",
   motivation:         "Motivation",
   proudAchievement:   "Key Achievement",
   energyTasks:        "Energy Tasks",
@@ -184,6 +186,7 @@ function profileToFormData(p: Profile | null | undefined): FormData {
       workExperience: [], personalProjects: [], educations: [], jobTitlesSeeking: "",
       remotePreference: "", salaryExpectation: "", preferredLocations: "",
       coverLetterTone: "", coverLetterInstructions: "",
+      personalInterests: "",
       motivation: "", proudAchievement: "", energyTasks: "",
       companyTypePreference: [], careerVision: "",
     };
@@ -241,6 +244,7 @@ function profileToFormData(p: Profile | null | undefined): FormData {
     preferredLocations: (p.preferred_locations ?? []).join(", "),
     coverLetterTone: p.cover_letter_tone ?? "",
     coverLetterInstructions: p.cover_letter_instructions ?? "",
+    personalInterests: p.personal_interests ?? "",
     motivation: p.motivation ?? "",
     proudAchievement: p.proud_achievement ?? "",
     energyTasks: p.energy_tasks ?? "",
@@ -855,6 +859,17 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                 </svg>
               </div>
             </div>
+          </div>
+
+          <div>
+            <label className={`${labelClass} flex items-center gap-1.5`}>Personal Interests <InfoIcon tip="What do you enjoy outside of work? Hobbies, sports, side projects, communities — used to add a personal touch to your resume summary." /></label>
+            <textarea
+              value={data.personalInterests}
+              onChange={(e) => setField("personalInterests", e.target.value)}
+              placeholder="e.g. I'm into trail running, building side projects, and playing guitar. I volunteer as a coding mentor on weekends."
+              rows={3}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-y"
+            />
           </div>
 
           {/* Skills */}

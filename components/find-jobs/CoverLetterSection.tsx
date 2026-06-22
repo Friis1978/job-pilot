@@ -7,9 +7,10 @@ type Props = {
   jobId: string;
   initialCoverLetter: string | null;
   hasAvatar: boolean;
+  tailoredSummary?: string | null;
 };
 
-export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Props) {
+export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar, tailoredSummary }: Props) {
   const [coverLetter, setCoverLetter] = useState(initialCoverLetter);
   const [generating, setGenerating] = useState(false);
   const [extraInstructions, setExtraInstructions] = useState("");
@@ -19,6 +20,7 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Pro
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [includePhoto, setIncludePhoto] = useState(true);
+  const [includeResume, setIncludeResume] = useState(false);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -91,7 +93,10 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Pro
   async function handleDownload() {
     setDownloading(true);
     try {
-      const params = hasAvatar && !includePhoto ? "?photo=0" : "";
+      const searchParams = new URLSearchParams();
+      if (hasAvatar && !includePhoto) searchParams.set("photo", "0");
+      if (tailoredSummary && includeResume) searchParams.set("resume", "1");
+      const params = searchParams.toString() ? `?${searchParams.toString()}` : "";
       const res = await fetch(`/api/jobs/${jobId}/cover-letter${params}`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -153,6 +158,21 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar }: Pro
                 <PhotoIcon className="w-3.5 h-3.5" />
                 Photo
                 {includePhoto && <CheckIcon className="w-3 h-3" />}
+              </button>
+            )}
+            {tailoredSummary && (
+              <button
+                onClick={() => setIncludeResume((v) => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                  includeResume
+                    ? "border-accent text-accent bg-accent/5 hover:bg-accent/10"
+                    : "border-border text-text-muted hover:bg-surface-secondary"
+                }`}
+                title={includeResume ? "Resume will be appended to PDF" : "Download cover letter only"}
+              >
+                <SummaryIcon className="w-3.5 h-3.5" />
+                + Resume
+                {includeResume && <CheckIcon className="w-3 h-3" />}
               </button>
             )}
             <button
@@ -341,6 +361,15 @@ function PhotoIcon({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
       <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
       <circle cx="12" cy="13" r="4" />
+    </svg>
+  );
+}
+
+function SummaryIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+      <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
     </svg>
   );
 }

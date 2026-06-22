@@ -44,12 +44,15 @@ type Job = {
   job_type: string | null;
   about_role: string | null;
   match_score: number;
+  experience_score: number | null;
+  seniority_score: number | null;
   match_reason: string | null;
   matched_skills: string[] | null;
   missing_skills: string[] | null;
   company_research: Record<string, unknown> | null;
   description_summary: string | null;
   cover_letter: string | null;
+  tailored_summary: string | null;
   status: string;
   external_apply_url: string | null;
   found_at: string;
@@ -199,12 +202,12 @@ export default async function JobDetailsPage({
                   {/* Progress bars */}
                   <div className="flex flex-col gap-3 mb-6">
                     <ProgressBar label="Skills" value={skillsScore} barColor="bg-success" textColor="text-success" />
-                    <ProgressBar label="Experience" value={job.match_score} barColor="bg-info-medium" textColor="text-info-medium" />
-                    <ProgressBar label="Seniority" value={job.match_score} barColor="bg-success" textColor="text-success" />
+                    <ProgressBar label="Experience" value={job.experience_score ?? job.match_score} barColor="bg-info-medium" textColor="text-info-medium" />
+                    <ProgressBar label="Seniority" value={job.seniority_score ?? job.match_score} barColor="bg-success" textColor="text-success" />
                   </div>
 
-                  {/* Matched / Missing skills two-column */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-5 border-t border-border">
+                  {/* Matched / Missing skills stacked */}
+                  <div className="flex flex-col gap-5 pt-5 border-t border-border">
                     {(job.matched_skills?.length ?? 0) > 0 && (
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary mb-3">
@@ -332,7 +335,7 @@ export default async function JobDetailsPage({
 
               {/* Cover Letter */}
               <div id="cover-letter">
-                <CoverLetterSection jobId={job.id} initialCoverLetter={job.cover_letter} hasAvatar={!!profileData?.avatar_url} />
+                <CoverLetterSection jobId={job.id} initialCoverLetter={job.cover_letter} hasAvatar={!!profileData?.avatar_url} tailoredSummary={job.tailored_summary} />
               </div>
 
             </div>

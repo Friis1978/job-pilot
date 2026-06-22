@@ -364,10 +364,15 @@ export async function scoreJob(
 Return ONLY valid JSON with this exact shape:
 {
   "matchScore": <integer 0-100>,
+  "experienceScore": <integer 0-100>,
+  "seniorityScore": <integer 0-100>,
   "matchReason": "<one paragraph explaining the match quality>",
   "matchedSkills": ["<every skill from the candidate's list that appears or is implied in the job description>"],
   "missingSkills": ["<skill the job explicitly requires that the candidate does not have>"]
 }
+
+experienceScore: How well the candidate's years of experience and work history matches what the role requires. 100 = perfect fit, 0 = far too junior or overqualified.
+seniorityScore: How well the candidate's seniority level (junior/mid/senior/lead) matches the role's expected level. 100 = exact match, 0 = major mismatch.
 
 Language note: Job descriptions may be written in any language — Danish, Swedish, Norwegian, German, or others. Technical skill names (TypeScript, Vue.js, React, Nuxt, Node.js, Python, etc.) appear in English even inside non-English text. Read the full description regardless of language and match skills by their English name.
 
@@ -375,6 +380,7 @@ Skill matching rules:
 - matchedSkills must include EVERY skill from the candidate's profile that is explicitly named in the job description, or is a direct alias/variant of an explicitly named technology (e.g. "Tailwind" matches "Tailwind CSS"; "React Hooks" matches if "React" is named; "Node" matches "Node.js"; "Vue" matches "Vue 3"). Be exhaustive — do not skip skills that genuinely match.
 - A direct alias means a more specific or shortened form of the SAME technology. Word similarity alone is NOT a match: "graphing platform" does not match "GraphQL", "scripting" does not match "TypeScript". The technology name itself must appear.
 - Do NOT include a skill just because it is commonly associated with a mentioned technology. If the job says "Azure" but not "Docker", do not add "Docker".
+- Do NOT include ubiquitous collaboration tools (Jira, Confluence, Figma, GitHub, GitLab, Slack, Notion, Linear, etc.) unless the job description explicitly names them. These tools are used everywhere — their absence from the posting means the job did not list them as a requirement or skill.
 - missingSkills should only include skills the job lists as candidate requirements or qualifications (e.g. in sections like "What You Will Bring", "Requirements", "You Need"). Do NOT add skills that only appear in a "Tech Stack", "Our Tools", or "About Us" section — those describe what the company uses, not what the candidate must know.
 - Do not add skills to either list that aren't grounded in both the job description and the candidate's profile.
 
@@ -642,6 +648,8 @@ export async function findJobs(
         about_role: r.job.description,
         description_summary: summaries[i] ?? null,
         match_score: r.matchScore,
+        experience_score: r.experienceScore ?? null,
+        seniority_score: r.seniorityScore ?? null,
         match_reason: r.matchReason,
         matched_skills: r.matchedSkills,
         missing_skills: r.missingSkills,
