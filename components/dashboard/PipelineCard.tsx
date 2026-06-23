@@ -4,6 +4,7 @@ type PipelineData = {
   interviewing: number;
   offer: number;
   rejected: number;
+  no_fit: number;
 };
 
 const PIPELINE_STEPS: { key: keyof PipelineData; label: string; color: string; bg: string }[] = [
@@ -12,6 +13,7 @@ const PIPELINE_STEPS: { key: keyof PipelineData; label: string; color: string; b
   { key: "interviewing", label: "Interviewing", color: "text-accent",           bg: "bg-accent" },
   { key: "offer",        label: "Offer",        color: "text-success-foreground", bg: "bg-success" },
   { key: "rejected",     label: "Rejected",     color: "text-error",            bg: "bg-error" },
+  { key: "no_fit",       label: "No fit",       color: "text-warning",          bg: "bg-warning" },
 ];
 
 export function PipelineCard({ data }: { data: PipelineData }) {

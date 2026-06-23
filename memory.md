@@ -1,51 +1,79 @@
-# Memory — Resume, Cover Letter, and Match Breakdown Session
+# Memory — Find Jobs UI — Mobile, Filters, and Pipeline State
 
-Last updated: 2026-06-22
+Last updated: 2026-06-23
 
 ## What was built
 
-### Tailored Resume fixes
-- **`app/api/jobs/[id]/tailored-resume/route.ts`** — Moved DB save (`tailored_resume_content`) to AFTER post-processing so the Required skills group is included in the stored content (used by cover letter merge). Added orphan safety net: profile skills not in any AI group are appended to an "Other" group.
-- **`app/api/resume/ResumePDF.tsx`** — Required group preserves custom order (frontend frameworks first); all other groups sort by years desc.
+### "No fit" pipeline state
+- **DB** — Dropped and recreated `jobs_status_check` constraint via InsForge MCP to include `'no_fit'`.
+- **`app/api/jobs/[id]/status/route.ts`** — Added `no_fit` to `VALID_STATUSES` allowlist.
+- **`components/find-jobs/StatusBadge.tsx`** — Added `no_fit` to `JobStatus` type and `STATUS_CONFIG` (label: "No fit", pill: `bg-warning/10 text-warning border border-warning/30`). Full rewrite to use `createPortal` to escape `overflow-hidden` table container. Dropdown positions via `getBoundingClientRect()` with flip-up detection near viewport bottom. Click-outside handler checks both `buttonRef` and `dropdownRef`.
+- **`components/dashboard/PipelineCard.tsx`** — Added `no_fit` step (`text-warning`, `bg-warning`).
+- **`app/dashboard/page.tsx`** — Added `no_fit: 0` to pipeline counts initializer.
 
-### Match Breakdown — real scores
-- **DB migration** — Added `experience_score integer` and `seniority_score integer` columns to `jobs` table (via InsForge MCP).
-- **`types/index.ts`** — Added `experienceScore` and `seniorityScore` to `ScoredJob` type.
-- **`agent/find-jobs.ts`** — AI prompt now returns `experienceScore` (years/history fit) and `seniorityScore` (junior/mid/senior level fit) as separate 0–100 integers. Both saved to DB on insert.
-- **`app/find-jobs/[id]/page.tsx`** — Added `experience_score` and `seniority_score` to `Job` type. ProgressBars now use real scores, falling back to `match_score` for pre-existing jobs. Matched skills layout changed from 2-column grid to stacked (full width) so badges fill the column.
+### Per-job description regeneration
+- **`app/api/jobs/[id]/regenerate-description/route.ts`** — New POST route: reads `about_role`, summarizes via GPT-4o-mini (8–10 bullets), saves to `description_summary`.
+- **`components/find-jobs/RegenerateDescriptionButton.tsx`** — Client component. `hasSummary=true`: small "Re-run" border button. `hasSummary=false`: primary "Generate summary" button. Reloads page on success.
+- **`app/find-jobs/[id]/page.tsx`** — Job description card redesigned: header has DocIcon + title + RegenerateDescriptionButton. Body in `bg-surface-tertiary p-5`. "Full posting" link bottom-left styled like TailoredResumeButton (border, rounded-xl, underline, bold).
 
-### Cover letter project links
-- **`agent/generate-cover-letter.ts`** — Updated rule to require ALL available project links (Live, GitHub, Video) inline when referencing personal projects.
+### Find-jobs table — mobile responsive
+- **`components/find-jobs/JobsTable.tsx`** — Table changes:
+  - `table-fixed` on `<table>` to prevent mobile overflow
+  - Removed "Researched" column entirely
+  - Column visibility: company/role always visible; location/status/date hidden on mobile (`hidden md:table-cell`)
+  - Company icon: `hidden md:flex`
+  - Match bar: `hidden md:block`, width `w-16` (was `w-32`)
+  - Match column: `w-[14%]` (was `w-16` fixed — was overflowing into status column)
+  - Match `<td>`: `overflow-hidden` to prevent bar bleed
+  - Column header: "Match Score" → "Match"
+  - Removed bulk action buttons (Re-score all, Research all, Clear all), removed `BulkOpsProvider`
+
+### No fit toggle
+- Hide `no_fit` jobs by default (`showNoFit` state, default `false`)
+- "Show No fit" / "Hide No fit" toggle button with warning-orange styling, only shown when `no_fit` jobs exist
+
+### Combined filter dropdown
+- **`components/find-jobs/JobsTable.tsx`** — Filter button opens a portal dropdown with two sections: Match (All/High/Low pills) + Skills (scrollable chips). Badge shows active filter count. Replaced separate match-cycle button and standalone skills chip row.
+- Search input filters by company, role, AND `matched_skills` (any skill containing the query string). Placeholder: "Filter by company, role or skill..."
+
+### SearchCard mobile layout
+- **`components/find-jobs/SearchCard.tsx`** — Recent searches: 1 on mobile, 3 on `md`, 5 on `lg` (index-based visibility). Form layout: Job Title full row, Location + Min Match in same row (`md:contents` trick), Find Jobs button `w-full md:w-auto`.
 
 ## Decisions made
 
-- **DB save after post-processing**: `tailored_resume_content` must always be saved after the Required group logic runs so the cover letter merge (which reads from DB) also has the Required section.
-- **Orphan skills safety net**: AI sometimes drops skills it doesn't recognise well (Supabase, InsForge). Any profile skill missing from AI-generated groups gets added to an "Other" group. This is a post-processing step in the route, not a prompt instruction.
-- **Matched skills full-width layout**: Removed the `sm:grid-cols-2` side-by-side layout for matched/missing skills — matched skills now always take full card width, missing skills stack below.
-- **Experience/Seniority scores**: Existing jobs predate the new columns and will show `match_score` as fallback for both bars. Only new jobs found after this session will have real separate scores.
+- **Portal pattern for dropdowns**: Both `StatusBadge` dropdown and filter dropdown use `createPortal` into `document.body` with `getBoundingClientRect()` positioning. This is required because the table has `overflow-hidden` which clips absolutely-positioned children.
+- **Click-outside with dual refs**: Whenever a portal dropdown has a trigger button, the click-outside handler must check BOTH the button ref AND the dropdown ref, otherwise dropdown item clicks close before they fire.
+- **`table-fixed` + `overflow-hidden` on match cell**: Without `table-fixed`, the table overflows the viewport on mobile. Without `overflow-hidden` on the match `<td>`, the bar bleeds into the status column.
+- **`md:contents` for grouped mobile / flat desktop layout**: Wrapping Location + Min Match in a div with `md:contents` dissolves the wrapper in flex context at `md+`, making them behave as direct flex children (flat desktop row) while staying grouped on mobile.
+- **No fit hidden by default**: No fit jobs are filtered out unless `showNoFit=true` or `statusFilter === "no_fit"`. This keeps the list clean for daily use.
 
 ## Problems solved
 
-- **Required skills missing from resume PDF**: DB save was happening before the Required group was prepended. Fixed by moving save after all post-processing.
-- **Supabase/InsForge disappearing from resume**: AI was silently dropping unrecognised BaaS platform names from skill groups. Fixed with orphan detection — any skill not in any group gets added to "Other".
-- **Experience/Seniority bars hardcoded**: Both bars were `job.match_score` — now real separate scores from the AI scorer.
-- **Matched skills squished to half width**: Was in a `grid-cols-2` with missing skills — changed to stacked layout.
+- **StatusBadge dropdown clipped by `overflow-hidden`**: Fixed with `createPortal` to `document.body`.
+- **Dropdown items not selectable after portal**: Click-outside handler was only checking `buttonRef`, so dropdown clicks (now outside button) triggered close before `handleSelect`. Fixed by adding `dropdownRef` to the check.
+- **Status update returning 400 for `no_fit`**: `VALID_STATUSES` in the API route didn't include it. Added.
+- **DB rejecting `no_fit`**: CHECK constraint only allowed old values. Dropped and recreated.
+- **Table overflow on mobile**: `table-fixed` fixed it.
+- **Match bar bleeding into status column**: Bar was `w-32` inside a `w-16` column. Fixed: column → `w-[14%]`, bar → `w-16`, added `overflow-hidden` on `<td>`.
 
 ## Current state
 
-- Tailored resume: Required group works, orphan skills recovered, DB save correct. All post-processing complete before save.
-- Match breakdown: Real experience/seniority scores for new jobs; existing jobs fall back to match_score.
-- Cover letter: Includes all project links (live, GitHub, video) when referencing personal projects.
-- Skills badges: Full width, natural wrap, no grow/stretch.
+Everything is working:
+- No fit state: DB, API, StatusBadge, PipelineCard all updated
+- Description regeneration: API + button component working
+- Job description card: redesigned with Re-run in header, Full posting link bottom-left
+- Find jobs table: mobile responsive, no overflow, columns correct
+- Filter dropdown: combined match + skills, portal-based, no standalone skill chips
+- Search: filters by company/role/skill
 
 ## Next session starts with
 
-No specific pending task — session ended cleanly. Next work item is whatever the user brings.
+No pending tasks. Next work item is whatever the user brings.
 
 ## Open questions
 
-- The job `f90a590e-2e08-4cda-b063-ece6baa6a124` (Laerdal) has stale `tailored_resume_content` in DB without Required group. User needs to regenerate the resume for that job to get the fixed version.
-- Existing jobs have null `experience_score` / `seniority_score` — they show `match_score` as fallback. Could add a re-score feature to backfill these.
+- Existing jobs have null `experience_score` / `seniority_score` — show `match_score` as fallback. Could add re-score to backfill.
 - Emails not working in production — env vars need adding to InsForge deployment, `bandfolio.ai` needs Resend verification.
 - Should rejected users see different message on `/pending`?
 - Should Admin nav link show badge count for pending users?
+- The job `f90a590e-2e08-4cda-b063-ece6baa6a124` (Laerdal) has stale `tailored_resume_content` without Required group — needs re-generate.

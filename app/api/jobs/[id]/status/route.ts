@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createInsforgeServer } from "@/lib/insforge-server";
 
-const VALID_STATUSES = ["saved", "applied", "interviewing", "offer", "rejected"];
+const VALID_STATUSES = ["saved", "applied", "interviewing", "offer", "rejected", "no_fit"];
 
 export async function PATCH(
   req: NextRequest,

@@ -20,7 +20,6 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
 
   // URL tab state
   const [importUrl, setImportUrl] = useState("");
-  const [importText, setImportText] = useState("");
   const [importing, setImporting] = useState(false);
   const [importSuccess, setImportSuccess] = useState(false);
 
@@ -89,10 +88,7 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
       const res = await fetch("/api/agent/import-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: importUrl.trim(),
-          ...(importText.trim().length > 200 ? { text: importText.trim() } : {}),
-        }),
+        body: JSON.stringify({ url: importUrl.trim() }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -105,7 +101,6 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
 
       setImportSuccess(true);
       setImportUrl("");
-      setImportText("");
       router.refresh();
     } catch (err) {
       clearTimeout(timeoutId);
@@ -179,20 +174,8 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
               {importing ? "Importing..." : "Import Job"}
             </button>
           </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-              Job Text <span className="normal-case font-normal text-text-muted">(optional — paste full text if the page is login-protected)</span>
-            </label>
-            <textarea
-              placeholder="Paste the full job description here if the URL is behind Cloudflare or requires login..."
-              value={importText}
-              onChange={(e) => setImportText(e.target.value)}
-              rows={4}
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent resize-y"
-            />
-          </div>
           <p className="text-xs text-text-muted">
-            Works with most job boards and company career pages. For Cloudflare-protected pages, paste the job text above.
+            Works with most job boards and company career pages.
           </p>
           {importSuccess && (
             <div className="flex items-center gap-3 rounded-xl bg-success-lightest px-4 py-3">
@@ -205,7 +188,7 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          <div className="flex items-end gap-4">
+          <div className="flex flex-col md:flex-row md:items-end gap-3 md:gap-4">
             {/* Job Title */}
             <div className="flex-1 flex flex-col gap-1.5">
               <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
@@ -226,44 +209,45 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
               </div>
             </div>
 
-            {/* Location */}
-            <div className="flex-1 flex flex-col gap-1.5">
-              <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-                Location
-              </label>
-              <input
-                type="text"
-                placeholder="Remote, New York..."
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
-              />
-            </div>
+            {/* Location + Min Match — side by side on mobile, inline on md+ */}
+            <div className="flex items-end gap-3 md:contents">
+              <div className="flex-1 flex flex-col gap-1.5">
+                <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+                  Location
+                </label>
+                <input
+                  type="text"
+                  placeholder="Remote, New York..."
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  className="w-full px-3 py-2.5 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
+                />
+              </div>
 
-            {/* Min Match Score */}
-            <div className="flex flex-col gap-1.5 shrink-0">
-              <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
-                Min Match
-              </label>
-              <select
-                value={minScore}
-                onChange={(e) => setMinScore(Number(e.target.value))}
-                className="px-3 py-2.5 border border-border rounded-lg text-sm text-text-primary bg-surface focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
-              >
-                {[50, 60, 70].map((v) => (
-                  <option key={v} value={v}>
-                    {v}%
-                  </option>
-                ))}
-              </select>
+              <div className="flex flex-col gap-1.5 shrink-0">
+                <label className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+                  Min Match
+                </label>
+                <select
+                  value={minScore}
+                  onChange={(e) => setMinScore(Number(e.target.value))}
+                  className="px-3 py-2.5 border border-border rounded-lg text-sm text-text-primary bg-surface focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
+                >
+                  {[50, 60, 70].map((v) => (
+                    <option key={v} value={v}>
+                      {v}%
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Find Jobs Button */}
             <button
               onClick={handleSearch}
               disabled={loading || !jobTitle.trim()}
-              className="flex items-center gap-2 px-5 py-2.5 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent-dark transition-colors shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full md:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <SpinnerIcon className="w-4 h-4 animate-spin" />
@@ -281,14 +265,16 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
                 Recent Searches
               </p>
               <div className="flex flex-wrap gap-2">
-                {recentSearches.map((s, i) => (
+                {recentSearches.slice(0, 3).map((s, i) => (
                   <button
                     key={i}
                     onClick={() => {
                       setJobTitle(s.jobTitle);
                       setLocation(s.location);
                     }}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-surface-secondary border border-border rounded-lg text-sm text-text-primary hover:border-accent hover:text-accent transition-colors"
+                    className={`items-center gap-2 px-3 py-1.5 bg-surface-secondary border border-border rounded-lg text-sm text-text-primary hover:border-accent hover:text-accent transition-colors ${
+                      i === 0 ? "flex" : "hidden md:flex"
+                    }`}
                   >
                     <SearchIcon className="w-3.5 h-3.5 text-text-muted shrink-0" />
                     <span className="font-medium">{s.jobTitle}</span>

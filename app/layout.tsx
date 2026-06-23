@@ -4,7 +4,6 @@ import "./globals.css";
 import { PostHogIdentitySync } from "@/components/PostHogIdentitySync";
 import { SessionKeepAlive } from "@/components/SessionKeepAlive";
 import { Toaster } from "@/components/ui/Toaster";
-import { BulkOpsProvider } from "@/components/BulkOpsProvider";
 import { createInsforgeServer } from "@/lib/insforge-server";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -29,9 +28,7 @@ export default async function RootLayout({
         {user && <PostHogIdentitySync userId={user.id} email={user.email ?? null} />}
         {user && <SessionKeepAlive />}
         <Toaster />
-        <BulkOpsProvider>
-          {children}
-        </BulkOpsProvider>
+        {children}
       </body>
     </html>
   );

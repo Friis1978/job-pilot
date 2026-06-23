@@ -1,19 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { MATCH_THRESHOLD, formatDateAgo } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import type { JobRow } from "@/types";
 import { StatusBadge } from "@/components/find-jobs/StatusBadge";
 import type { JobStatus } from "@/components/find-jobs/StatusBadge";
-import { useBulkOps } from "@/components/BulkOpsProvider";
 import { Tooltip } from "@/components/ui/Tooltip";
 
 export type { JobRow };
 
 type FilterOption = "all" | "high" | "low";
-type SortCol = "company" | "title" | "location" | "match_score" | "researched" | "status" | "found_at";
+type SortCol = "company" | "title" | "location" | "match_score" | "status" | "found_at";
 type SortDir = "asc" | "desc";
 type StatusFilter = "all" | JobStatus;
 
@@ -34,6 +34,7 @@ const STATUS_FILTERS: Array<{ key: StatusFilter; label: string; dot: string }> =
   { key: "interviewing", label: "Interviewing", dot: "bg-accent" },
   { key: "offer",        label: "Offer",        dot: "bg-success" },
   { key: "rejected",     label: "Rejected",     dot: "bg-error" },
+  { key: "no_fit",       label: "No fit",       dot: "bg-warning" },
 ];
 
 function getBarColor(score: number): string {
@@ -44,22 +45,44 @@ function getBarColor(score: number): string {
 
 export function JobsTable({ jobs }: { jobs: JobRow[] }) {
   const router = useRouter();
-  const { rescoring, researching, rescoreAll, researchAll } = useBulkOps();
   const [filter, setFilter] = useState<FilterOption>("all");
   const [sortCol, setSortCol] = useState<SortCol>("match_score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [clearing, setClearing] = useState(false);
-  const [confirmClear, setConfirmClear] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [showNoFit, setShowNoFit] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterDropdownStyle, setFilterDropdownStyle] = useState<React.CSSProperties>({});
+  const filterBtnRef = useRef<HTMLButtonElement>(null);
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
 
-  function cycleFilter() {
-    setFilter((f) => FILTER_CYCLE[(FILTER_CYCLE.indexOf(f) + 1) % FILTER_CYCLE.length]);
-    setPage(1);
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      const t = e.target as Node;
+      if (
+        filterBtnRef.current && !filterBtnRef.current.contains(t) &&
+        filterDropdownRef.current && !filterDropdownRef.current.contains(t)
+      ) {
+        setFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function openFilterDropdown(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!filterOpen && filterBtnRef.current) {
+      const rect = filterBtnRef.current.getBoundingClientRect();
+      setFilterDropdownStyle({ position: "fixed", top: rect.bottom + 4, left: rect.left, minWidth: 260 });
+    }
+    setFilterOpen((v) => !v);
   }
+
+  const filterActiveCount = (filter !== "all" ? 1 : 0) + selectedSkills.size;
 
   function handleSort(col: SortCol) {
     setSortCol((prev) => {
@@ -82,25 +105,6 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
   function handleStatusFilter(s: StatusFilter) {
     setStatusFilter(s);
     setPage(1);
-  }
-
-  async function handleClearJobs() {
-    if (!confirmClear) {
-      setConfirmClear(true);
-      return;
-    }
-    setClearing(true);
-    try {
-      await fetch("/api/jobs/clear", { method: "DELETE" });
-      setConfirmClear(false);
-      router.refresh();
-    } finally {
-      setClearing(false);
-    }
-  }
-
-  function handleClearBlur() {
-    setConfirmClear(false);
   }
 
   async function handleDeleteJob(e: React.MouseEvent, jobId: string) {
@@ -146,6 +150,11 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
     return true;
   });
 
+  // Hide no_fit by default unless explicitly shown or filtered to
+  if (!showNoFit && statusFilter !== "no_fit") {
+    filtered = filtered.filter((job) => (job.status ?? "saved") !== "no_fit");
+  }
+
   // Status filter
   if (statusFilter !== "all") {
     filtered = filtered.filter((job) => (job.status ?? "saved") === statusFilter);
@@ -164,7 +173,8 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
     filtered = filtered.filter(
       (j) =>
         j.company.toLowerCase().includes(q) ||
-        j.title.toLowerCase().includes(q),
+        j.title.toLowerCase().includes(q) ||
+        (j.matched_skills ?? []).some((s) => s.toLowerCase().includes(q)),
     );
   }
 
@@ -176,7 +186,6 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
       case "title":     return mul * a.title.localeCompare(b.title);
       case "location":  return mul * (a.location ?? "").localeCompare(b.location ?? "");
       case "match_score": return mul * (a.match_score - b.match_score);
-      case "researched":  return mul * ((a.researched_at ? 1 : 0) - (b.researched_at ? 1 : 0));
       case "status":    return mul * ((a.status ?? "saved").localeCompare(b.status ?? "saved"));
       case "found_at":  return mul * (new Date(a.found_at).getTime() - new Date(b.found_at).getTime());
       default:          return 0;
@@ -197,60 +206,108 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
         <FilterSearchIcon className="w-4 h-4 text-text-muted shrink-0" />
         <input
           type="text"
-          placeholder="Filter by company or role..."
+          placeholder="Filter by company, role or skill..."
           value={search}
           onChange={(e) => handleSearch(e.target.value)}
           className="flex-1 text-sm text-text-primary placeholder:text-text-muted focus:outline-none bg-transparent"
         />
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={cycleFilter}
+            ref={filterBtnRef}
+            onClick={openFilterDropdown}
             className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-sm font-medium transition-colors ${
-              filter !== "all"
+              filterActiveCount > 0
                 ? "border-accent text-accent bg-accent-muted"
                 : "border-border text-text-primary hover:bg-surface-secondary"
             }`}
           >
-            {FILTER_LABELS[filter]}
+            <FilterIcon className="w-3.5 h-3.5" />
+            Filter
+            {filterActiveCount > 0 && (
+              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-accent text-accent-foreground text-[10px] font-bold">
+                {filterActiveCount}
+              </span>
+            )}
             <ChevronDownIcon className="w-3.5 h-3.5 text-text-muted" />
           </button>
-{jobs.length > 0 && (
-            <>
-              <button
-                onClick={rescoreAll}
-                disabled={rescoring}
-                title="Re-run skill matching on all saved jobs using your current profile"
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-sm font-medium text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <RefreshIcon className={`w-3.5 h-3.5 ${rescoring ? "animate-spin" : ""}`} />
-                {rescoring ? "Re-scoring..." : "Re-score all"}
-              </button>
-              <button
-                onClick={researchAll}
-                disabled={researching}
-                title="Research all companies that haven't been researched yet"
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-sm font-medium text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <SearchIcon className={`w-3.5 h-3.5 ${researching ? "animate-spin" : ""}`} />
-                {researching ? "Researching..." : "Research all"}
-              </button>
-              <button
-                onClick={handleClearJobs}
-                onBlur={handleClearBlur}
-                disabled={clearing}
-                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                  confirmClear
-                    ? "border-error text-error bg-surface-secondary"
-                    : "border-border text-text-secondary hover:bg-surface-secondary"
-                }`}
-              >
-                <TrashIcon className="w-3.5 h-3.5" />
-                {clearing ? "Clearing..." : confirmClear ? "Confirm clear" : "Clear all"}
-              </button>
-            </>
+          {jobs.some((j) => (j.status ?? "saved") === "no_fit") && (
+            <button
+              onClick={() => setShowNoFit((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-sm font-medium transition-colors ${
+                showNoFit
+                  ? "border-warning text-warning bg-warning/10"
+                  : "border-border text-text-secondary hover:bg-surface-secondary"
+              }`}
+            >
+              <EyeIcon className="w-3.5 h-3.5" showing={showNoFit} />
+              {showNoFit ? "Hide No fit" : "Show No fit"}
+            </button>
           )}
         </div>
       </div>
+
+      {typeof document !== "undefined" && filterOpen && createPortal(
+        <div
+          ref={filterDropdownRef}
+          style={filterDropdownStyle}
+          className="bg-surface border border-border rounded-xl shadow-lg p-3 z-[9999] flex flex-col gap-3"
+        >
+          {/* Match */}
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted px-1">Match</p>
+            <div className="flex gap-1.5">
+              {FILTER_CYCLE.map((f) => (
+                <button
+                  key={f}
+                  onClick={() => { setFilter(f); setPage(1); }}
+                  className={`flex-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    filter === f
+                      ? "bg-accent text-accent-foreground border-accent"
+                      : "border-border text-text-secondary hover:border-accent hover:text-accent"
+                  }`}
+                >
+                  {FILTER_LABELS[f]}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Skills */}
+          {allSkills.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between px-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Skills</p>
+                {selectedSkills.size > 0 && (
+                  <button
+                    onClick={() => { setSelectedSkills(new Set()); setPage(1); }}
+                    className="text-[10px] text-text-muted hover:text-error transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                {allSkills.map((skill) => {
+                  const active = selectedSkills.has(skill);
+                  return (
+                    <button
+                      key={skill}
+                      onClick={() => toggleSkill(skill)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
+                        active
+                          ? "bg-accent text-accent-foreground border-accent"
+                          : "bg-surface border-border text-text-secondary hover:border-accent hover:text-accent"
+                      }`}
+                    >
+                      {skill}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
 
       {/* Status Filter Pills */}
       <div className="flex flex-wrap items-center gap-2">
@@ -282,36 +339,6 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
         })}
       </div>
 
-      {/* Skill Filter Chips */}
-      {allSkills.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          {selectedSkills.size > 0 && (
-            <button
-              onClick={() => { setSelectedSkills(new Set()); setPage(1); }}
-              className="text-xs text-text-muted hover:text-error transition-colors"
-            >
-              Clear
-            </button>
-          )}
-          {allSkills.map((skill) => {
-            const active = selectedSkills.has(skill);
-            return (
-              <button
-                key={skill}
-                onClick={() => toggleSkill(skill)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors border ${
-                  active
-                    ? "bg-accent text-accent-foreground border-accent"
-                    : "bg-surface border-border text-text-secondary hover:border-accent hover:text-accent"
-                }`}
-              >
-                {skill}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
       {/* Jobs Table Card */}
       <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-sm">
         {jobs.length === 0 ? (
@@ -334,24 +361,23 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
           </div>
         ) : (
           <>
-            <table className="w-full">
+            <table className="w-full table-fixed">
               <thead>
                 <tr className="border-b border-border">
                   {(
                     [
-                      { col: "company",     label: "Company",     width: "w-[18%]" },
-                      { col: "title",       label: "Role",        width: "w-[20%]" },
-                      { col: "location",    label: "Location",    width: "w-[12%]" },
-                      { col: "match_score", label: "Match Score", width: "w-[16%]" },
-                      { col: "researched",  label: "Researched",  width: "w-[10%]" },
-                      { col: "status",      label: "Status",      width: "w-[10%]" },
-                      { col: "found_at",    label: "Date Found",  width: "w-[8%]" },
-                    ] as Array<{ col: SortCol; label: string; width: string }>
-                  ).map(({ col, label, width }) => (
+                      { col: "company",     label: "Company",     width: "",        hide: "",                     pad: "px-3 md:px-6" },
+                      { col: "title",       label: "Role",        width: "",        hide: "",                     pad: "px-3 md:px-6" },
+                      { col: "location",    label: "Location",    width: "w-[14%]", hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
+                      { col: "match_score", label: "Match",       width: "w-[14%]", hide: "",                     pad: "pl-2 pr-3 md:px-6" },
+                      { col: "status",      label: "Status",      width: "w-[12%]", hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
+                      { col: "found_at",    label: "Date Found",  width: "w-[10%]", hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
+                    ] as Array<{ col: SortCol; label: string; width: string; hide: string; pad: string }>
+                  ).map(({ col, label, width, hide, pad }) => (
                     <th
                       key={col}
                       onClick={() => handleSort(col)}
-                      className={`px-6 py-4 text-left text-xs font-medium uppercase tracking-wide cursor-pointer select-none whitespace-nowrap transition-colors ${width} ${
+                      className={`${pad} py-4 text-left text-xs font-medium uppercase tracking-wide cursor-pointer select-none whitespace-nowrap transition-colors ${width} ${hide} ${
                         sortCol === col ? "text-text-primary" : "text-text-secondary hover:text-text-primary"
                       }`}
                     >
@@ -361,7 +387,7 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                       </span>
                     </th>
                   ))}
-                  <th className="px-4 py-4 w-[6%]" />
+                  <th className="px-2 md:px-4 py-4 w-px" />
                 </tr>
               </thead>
               <tbody>
@@ -371,9 +397,9 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                     onClick={() => router.push(`/find-jobs/${job.id}`)}
                     className={`group hover:bg-surface-secondary transition-colors cursor-pointer${index < paginated.length - 1 ? " border-b border-border" : ""}`}
                   >
-                    <td className="px-6 py-4 max-w-0">
+                    <td className="px-3 md:px-6 py-4 max-w-0">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="shrink-0 w-9 h-9 bg-surface-secondary border border-border rounded-lg flex items-center justify-center">
+                        <div className="hidden md:flex shrink-0 w-9 h-9 bg-surface-secondary border border-border rounded-lg items-center justify-center">
                           <BuildingIcon className="w-5 h-5 text-text-muted" />
                         </div>
                         <div className="flex flex-col gap-1 min-w-0">
@@ -386,14 +412,14 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 max-w-0">
+                    <td className="px-3 md:px-6 py-4 max-w-0">
                       <Tooltip content={job.title}>
                         <span className="text-sm text-text-primary truncate block">
                           {job.title}
                         </span>
                       </Tooltip>
                     </td>
-                    <td className="px-6 py-4 max-w-0">
+                    <td className="px-6 py-4 max-w-0 hidden md:table-cell">
                       {job.location ? (
                         <Tooltip content={job.location}>
                           <span className="text-sm text-text-muted truncate block">
@@ -404,9 +430,9 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                         <span className="text-sm text-text-muted">—</span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="pl-2 pr-3 md:px-6 py-4 whitespace-nowrap overflow-hidden">
                       <div className="flex items-center gap-3">
-                        <div className="w-32 h-1 bg-border rounded-full overflow-hidden shrink-0">
+                        <div className="hidden md:block w-16 h-1 bg-border rounded-full overflow-hidden shrink-0">
                           <div
                             className={`h-full rounded-full ${getBarColor(job.match_score)}`}
                             style={{ width: `${job.match_score}%` }}
@@ -417,25 +443,15 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      {job.researched_at ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-success">
-                          <CheckCircleIcon className="w-4 h-4" />
-                          Done
-                        </span>
-                      ) : (
-                        <span className="text-sm text-text-muted">—</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 hidden md:table-cell">
                       <StatusBadge jobId={job.id} status={(job.status as JobStatus) ?? "saved"} />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap hidden md:table-cell">
                       <span className="text-sm text-text-muted">
                         {formatDateAgo(job.found_at)}
                       </span>
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-2 md:px-4 py-4">
                       <button
                         onClick={(e) => handleDeleteJob(e, job.id)}
                         disabled={deletingId === job.id}
@@ -555,6 +571,22 @@ function FilterSearchIcon({ className }: { className?: string }) {
   );
 }
 
+function FilterIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 5h14M6 10h8M9 15h2" />
+    </svg>
+  );
+}
+
 function ChevronDownIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -587,22 +619,6 @@ function BuildingIcon({ className }: { className?: string }) {
   );
 }
 
-function CheckCircleIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="10" cy="10" r="8" />
-      <path d="M6.5 10l2.5 2.5 4.5-4.5" />
-    </svg>
-  );
-}
 
 function TrashIcon({ className }: { className?: string }) {
   return (
@@ -620,35 +636,17 @@ function TrashIcon({ className }: { className?: string }) {
   );
 }
 
-function RefreshIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M4 4a8 8 0 0 1 12 0M4 16a8 8 0 0 0 12 0" />
-      <path d="M2 6l2-2 2 2M14 14l2 2 2-2" />
+function EyeIcon({ className, showing }: { className?: string; showing: boolean }) {
+  return showing ? (
+    <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z" />
+      <circle cx="10" cy="10" r="2.5" />
+      <path d="M3 3l14 14" />
     </svg>
-  );
-}
-
-function SearchIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      strokeLinecap="round"
-    >
-      <circle cx="8.5" cy="8.5" r="5.5" />
-      <path d="M13.5 13.5L17 17" />
+  ) : (
+    <svg className={className} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z" />
+      <circle cx="10" cy="10" r="2.5" />
     </svg>
   );
 }

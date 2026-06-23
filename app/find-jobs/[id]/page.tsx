@@ -10,6 +10,7 @@ import { CoverLetterSection } from "@/components/find-jobs/CoverLetterSection";
 import { TailoredResumeButton } from "@/components/find-jobs/TailoredResumeButton";
 import { StatusBadge } from "@/components/find-jobs/StatusBadge";
 import { RescoreButton } from "@/components/find-jobs/RescoreButton";
+import { RegenerateDescriptionButton } from "@/components/find-jobs/RegenerateDescriptionButton";
 import type { JobStatus } from "@/components/find-jobs/StatusBadge";
 
 type ContactInfo = {
@@ -261,43 +262,44 @@ export default async function JobDetailsPage({
 
               {/* Job Description */}
               {(job.description_summary || job.about_role) && (
-                <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <DocIcon className="w-5 h-5 text-text-muted shrink-0" />
-                      <h2 className="text-base font-semibold text-text-primary">
-                        Job Description
-                      </h2>
-                    </div>
+                <div className="bg-surface border border-border rounded-2xl shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-3 px-6 py-5 border-b border-border">
+                    <DocIcon className="w-5 h-5 text-text-muted shrink-0" />
+                    <h2 className="flex-1 text-base font-semibold text-text-primary">
+                      Job Description
+                    </h2>
+                    <RegenerateDescriptionButton jobId={job.id} hasSummary={!!job.description_summary} />
+                  </div>
+                  <div className="bg-surface-tertiary p-5 flex flex-col gap-4">
+                    {(() => {
+                      const raw = job.description_summary ?? job.about_role ?? "";
+                      const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => l.replace(/^[•\-\*]\s*/, ""));
+                      if (lines.length > 1) {
+                        return (
+                          <ul className="flex flex-col gap-2">
+                            {lines.map((text, i) => (
+                              <li key={i} className="flex items-start gap-2 text-sm text-text-primary leading-relaxed">
+                                <span className="mt-2 w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+                                {text}
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                      }
+                      return <p className="text-sm text-text-primary leading-relaxed">{raw}</p>;
+                    })()}
                     {job.external_apply_url && (
                       <a
                         href={job.external_apply_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 text-sm text-accent hover:text-accent-dark transition-colors shrink-0"
+                        className="self-start flex items-center gap-1.5 py-3 px-4 bg-surface border border-border-muted text-text-primary rounded-xl text-sm font-bold underline hover:bg-surface-secondary transition-colors"
                       >
                         Full posting
-                        <ExternalLinkIcon className="w-3.5 h-3.5" />
+                        <ExternalLinkIcon className="w-3.5 h-3.5 no-underline" />
                       </a>
                     )}
                   </div>
-                  {(() => {
-                    const raw = job.description_summary ?? job.about_role ?? "";
-                    const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => l.replace(/^[•\-\*]\s*/, ""));
-                    if (lines.length > 1) {
-                      return (
-                        <ul className="flex flex-col gap-2">
-                          {lines.map((text, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-text-primary leading-relaxed">
-                              <span className="mt-2 w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
-                              {text}
-                            </li>
-                          ))}
-                        </ul>
-                      );
-                    }
-                    return <p className="text-sm text-text-primary leading-relaxed">{raw}</p>;
-                  })()}
                 </div>
               )}
 
