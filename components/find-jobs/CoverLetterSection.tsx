@@ -6,81 +6,150 @@ import { toast } from "@/lib/toast";
 type Props = {
   jobId: string;
   initialCoverLetter: string | null;
+  initialAdvice: string | null;
   hasAvatar: boolean;
   tailoredSummary?: string | null;
 };
 
-export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar, tailoredSummary }: Props) {
-  const [coverLetter, setCoverLetter] = useState(initialCoverLetter);
-  const [generating, setGenerating] = useState(false);
-  const [extraInstructions, setExtraInstructions] = useState("");
-  const [editing, setEditing] = useState(false);
-  const [editText, setEditText] = useState("");
+// ── Simple markdown renderer for browser preview ───────────────────────────
+
+type InlineToken =
+  | { kind: "text"; text: string }
+  | { kind: "bold"; text: string }
+  | { kind: "italic"; text: string }
+  | { kind: "bold-italic"; text: string }
+  | { kind: "link"; text: string; url: string };
+
+const INLINE_RE = /\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|\[(.+?)\]\s*\(([^)]+)\)/g;
+
+function parseInline(text: string): InlineToken[] {
+  const tokens: InlineToken[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  INLINE_RE.lastIndex = 0;
+  while ((m = INLINE_RE.exec(text)) !== null) {
+    if (m.index > last) tokens.push({ kind: "text", text: text.slice(last, m.index) });
+    if (m[1] !== undefined)      tokens.push({ kind: "bold-italic", text: m[1] });
+    else if (m[2] !== undefined) tokens.push({ kind: "bold", text: m[2] });
+    else if (m[3] !== undefined) tokens.push({ kind: "italic", text: m[3] });
+    else                         tokens.push({ kind: "link", text: m[4], url: m[5] });
+    last = INLINE_RE.lastIndex;
+  }
+  if (last < text.length) tokens.push({ kind: "text", text: text.slice(last) });
+  return tokens;
+}
+
+function renderInline(tokens: InlineToken[], keyBase: string) {
+  return tokens.map((tok, i) => {
+    const key = `${keyBase}-${i}`;
+    if (tok.kind === "bold") return <strong key={key}>{tok.text}</strong>;
+    if (tok.kind === "italic") return <em key={key}>{tok.text}</em>;
+    if (tok.kind === "bold-italic") return <strong key={key}><em>{tok.text}</em></strong>;
+    if (tok.kind === "link")
+      return <a key={key} href={tok.url} target="_blank" rel="noopener noreferrer" className="text-accent underline hover:text-accent-dark transition-colors">{tok.text}</a>;
+    return <span key={key}>{tok.text}</span>;
+  });
+}
+
+type Block =
+  | { kind: "h1" | "h2" | "h3"; tokens: InlineToken[] }
+  | { kind: "paragraph"; tokens: InlineToken[] }
+  | { kind: "bullet"; items: InlineToken[][] };
+
+function parseBlocks(text: string): Block[] {
+  const blocks: Block[] = [];
+  const rawBlocks = text.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
+  for (const raw of rawBlocks) {
+    const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) continue;
+    if (lines[0].startsWith("### ")) { blocks.push({ kind: "h3", tokens: parseInline(lines[0].slice(4)) }); if (lines.length > 1) blocks.push({ kind: "paragraph", tokens: parseInline(lines.slice(1).join(" ")) }); continue; }
+    if (lines[0].startsWith("## "))  { blocks.push({ kind: "h2", tokens: parseInline(lines[0].slice(3)) }); if (lines.length > 1) blocks.push({ kind: "paragraph", tokens: parseInline(lines.slice(1).join(" ")) }); continue; }
+    if (lines[0].startsWith("# "))   { blocks.push({ kind: "h1", tokens: parseInline(lines[0].slice(2)) }); if (lines.length > 1) blocks.push({ kind: "paragraph", tokens: parseInline(lines.slice(1).join(" ")) }); continue; }
+    const isBullet = (l: string) => l.startsWith("- ") || l.startsWith("* ");
+    if (lines.every(isBullet)) { blocks.push({ kind: "bullet", items: lines.map((l) => parseInline(l.replace(/^[-*] /, ""))) }); continue; }
+    if (lines.some(isBullet)) {
+      let paraAcc: string[] = [], bulletAcc: string[] = [];
+      const flush = () => { if (paraAcc.length) { blocks.push({ kind: "paragraph", tokens: parseInline(paraAcc.join(" ")) }); paraAcc = []; } if (bulletAcc.length) { blocks.push({ kind: "bullet", items: bulletAcc.map((l) => parseInline(l.replace(/^[-*] /, ""))) }); bulletAcc = []; } };
+      for (const line of lines) { if (isBullet(line)) { if (paraAcc.length) flush(); bulletAcc.push(line); } else { if (bulletAcc.length) flush(); paraAcc.push(line); } }
+      flush();
+      continue;
+    }
+    blocks.push({ kind: "paragraph", tokens: parseInline(lines.join(" ")) });
+  }
+  return blocks;
+}
+
+function MarkdownPreview({ text, className }: { text: string; className?: string }) {
+  const blocks = parseBlocks(text);
+  return (
+    <div className={className}>
+      {blocks.map((block, i) => {
+        if (block.kind === "h1") return <h1 key={i} className="text-base font-bold text-text-primary mt-3 mb-1 first:mt-0">{renderInline(block.tokens, `h1-${i}`)}</h1>;
+        if (block.kind === "h2") return <h2 key={i} className="text-sm font-bold text-text-primary mt-3 mb-1 first:mt-0">{renderInline(block.tokens, `h2-${i}`)}</h2>;
+        if (block.kind === "h3") return <h3 key={i} className="text-sm font-semibold text-text-primary mt-2.5 mb-0.5 first:mt-0">{renderInline(block.tokens, `h3-${i}`)}</h3>;
+        if (block.kind === "bullet")
+          return (
+            <ul key={i} className="my-1 flex flex-col gap-0.5 pl-4">
+              {block.items.map((item, j) => (
+                <li key={j} className="text-sm text-text-primary leading-relaxed list-disc">{renderInline(item, `li-${i}-${j}`)}</li>
+              ))}
+            </ul>
+          );
+        return <p key={i} className="text-sm text-text-primary leading-relaxed mb-2 last:mb-0">{renderInline(block.tokens, `p-${i}`)}</p>;
+      })}
+    </div>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────
+
+export function CoverLetterSection({ jobId, initialCoverLetter, initialAdvice, hasAvatar, tailoredSummary }: Props) {
+  const [advice, setAdvice] = useState(initialAdvice);
+  const [loadingAdvice, setLoadingAdvice] = useState(false);
+
+  const [coverLetter, setCoverLetter] = useState(initialCoverLetter ?? "");
+  const [previewMode, setPreviewMode] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [includePhoto, setIncludePhoto] = useState(true);
   const [includeResume, setIncludeResume] = useState(false);
 
-  async function handleGenerate() {
-    setGenerating(true);
+  const isDirty = coverLetter !== (initialCoverLetter ?? "");
+
+  async function handleGetAdvice() {
+    setLoadingAdvice(true);
     try {
-      const res = await fetch("/api/agent/cover-letter", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobId, extraInstructions: extraInstructions.trim() || undefined }),
-      });
-      const json = await res.json();
-      if (!res.ok || json.error) {
-        toast(json.error ?? "Generation failed. Please try again.", "error");
-        return;
-      }
-      // Fetch the updated cover letter
-      const jobRes = await fetch(`/api/jobs/${jobId}/cover-letter-text`);
-      if (jobRes.ok) {
-        const { text } = await jobRes.json() as { text: string };
-        setCoverLetter(text);
-      } else {
-        // Fallback: reload page to pick up DB change
-        window.location.reload();
-      }
+      const res = await fetch(`/api/jobs/${jobId}/cover-letter-advice`, { method: "POST" });
+      const json = await res.json() as { advice?: string; error?: string };
+      if (!res.ok || json.error) { toast(json.error ?? "Failed to get advice. Please try again.", "error"); return; }
+      setAdvice(json.advice ?? null);
     } catch {
-      toast("Generation failed. Please try again.", "error");
+      toast("Failed to get advice. Please try again.", "error");
     } finally {
-      setGenerating(false);
+      setLoadingAdvice(false);
     }
   }
 
-  async function handleSaveEdit() {
+  async function handleSave() {
     setSaving(true);
+    setSaved(false);
     try {
       const res = await fetch(`/api/jobs/${jobId}/cover-letter`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: editText }),
+        body: JSON.stringify({ text: coverLetter }),
       });
-      if (!res.ok) {
-        toast("Failed to save. Please try again.", "error");
-        return;
-      }
-      setCoverLetter(editText);
-      setEditing(false);
+      if (!res.ok) { toast("Failed to save. Please try again.", "error"); return; }
+      setSaved(true);
       toast("Cover letter saved.", "success");
+      setTimeout(() => setSaved(false), 3000);
     } catch {
       toast("Failed to save. Please try again.", "error");
     } finally {
       setSaving(false);
     }
-  }
-
-  function handleStartEdit() {
-    setEditText(coverLetter ?? "");
-    setEditing(true);
-  }
-
-  function handleCancelEdit() {
-    setEditing(false);
-    setEditText("");
   }
 
   async function handleCopy() {
@@ -91,6 +160,7 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar, tailo
   }
 
   async function handleDownload() {
+    if (!coverLetter.trim()) { toast("Write your cover letter before downloading.", "error"); return; }
     setDownloading(true);
     try {
       const searchParams = new URLSearchParams();
@@ -106,12 +176,9 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar, tailo
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = `cover-letter.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      a.href = url; a.download = "cover-letter.pdf";
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
     } catch {
       toast("Download failed. Please try again.", "error");
     } finally {
@@ -121,177 +188,172 @@ export function CoverLetterSection({ jobId, initialCoverLetter, hasAvatar, tailo
 
   return (
     <div className="bg-surface border border-border rounded-2xl shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-border">
-        <LetterIcon className="w-5 h-5 text-text-muted shrink-0" />
-        <h2 className="flex-1 text-base font-semibold text-text-primary">Cover Letter</h2>
 
-        {coverLetter && !editing && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-secondary hover:bg-surface-secondary transition-colors"
-            >
-              {copied ? (
-                <><CheckIcon className="w-3.5 h-3.5 text-success" />Copied</>
-              ) : (
-                <><CopyIcon className="w-3.5 h-3.5" />Copy</>
-              )}
-            </button>
-            <button
-              onClick={handleStartEdit}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-secondary hover:bg-surface-secondary transition-colors"
-            >
-              <EditIcon className="w-3.5 h-3.5" />
-              Edit
-            </button>
-            {hasAvatar && (
+      {/* ── Advice section ─────────────────────────────────────────── */}
+      <div className="px-6 py-5 border-b border-border">
+        <div className="flex items-center justify-between gap-4 mb-3">
+          <div className="flex items-center gap-2.5">
+            <SparkleIcon className="w-4 h-4 text-accent shrink-0" />
+            <h2 className="text-sm font-semibold text-text-primary">Writing Advice</h2>
+          </div>
+          <button
+            onClick={handleGetAdvice}
+            disabled={loadingAdvice}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loadingAdvice ? (
+              <><SpinnerIcon className="w-3.5 h-3.5 animate-spin" />{advice ? "Regenerating..." : "Analysing..."}</>
+            ) : advice ? (
+              <><RefreshIcon className="w-3.5 h-3.5" />Regenerate</>
+            ) : (
+              <><SparkleIcon className="w-3.5 h-3.5" />Get Advice</>
+            )}
+          </button>
+        </div>
+
+        {advice ? (
+          <div className="rounded-xl bg-accent-muted border border-accent/10 px-4 py-3">
+            <MarkdownPreview text={advice} />
+          </div>
+        ) : (
+          <div className="rounded-xl bg-surface-secondary border border-border px-4 py-4 flex items-center gap-3">
+            <SparkleIcon className="w-4 h-4 text-text-muted shrink-0" />
+            <p className="text-sm text-text-muted">
+              Click &ldquo;Get Advice&rdquo; to receive a personalised writing brief — what to lead with, key points to hit, and how to frame any gaps.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Cover letter editor ────────────────────────────────────── */}
+      <div>
+        {/* Sub-header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
+          <LetterIcon className="w-4 h-4 text-text-muted shrink-0" />
+          <h2 className="flex-1 text-sm font-semibold text-text-primary">Your Cover Letter</h2>
+
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+            {/* Write / Preview toggle */}
+            <div className="flex items-center border border-border rounded-lg overflow-hidden text-xs font-medium">
+              <button
+                onClick={() => setPreviewMode(false)}
+                className={`px-3 py-1.5 transition-colors ${!previewMode ? "bg-surface-secondary text-text-primary" : "text-text-secondary hover:bg-surface-secondary"}`}
+              >
+                Write
+              </button>
+              <button
+                onClick={() => setPreviewMode(true)}
+                className={`px-3 py-1.5 transition-colors ${previewMode ? "bg-surface-secondary text-text-primary" : "text-text-secondary hover:bg-surface-secondary"}`}
+              >
+                Preview
+              </button>
+            </div>
+
+            {coverLetter && (
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-secondary hover:bg-surface-secondary transition-colors"
+              >
+                {copied ? <><CheckIcon className="w-3.5 h-3.5 text-success" />Copied</> : <><CopyIcon className="w-3.5 h-3.5" />Copy</>}
+              </button>
+            )}
+
+            {hasAvatar && coverLetter && (
               <button
                 onClick={() => setIncludePhoto((v) => !v)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-                  includePhoto
-                    ? "border-accent text-accent bg-accent/5 hover:bg-accent/10"
-                    : "border-border text-text-muted hover:bg-surface-secondary"
-                }`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${includePhoto ? "border-accent text-accent bg-accent/5 hover:bg-accent/10" : "border-border text-text-muted hover:bg-surface-secondary"}`}
                 title={includePhoto ? "Photo included in PDF" : "Photo excluded from PDF"}
               >
-                <PhotoIcon className="w-3.5 h-3.5" />
-                Photo
+                <PhotoIcon className="w-3.5 h-3.5" />Photo
                 {includePhoto && <CheckIcon className="w-3 h-3" />}
               </button>
             )}
-            {tailoredSummary && (
+
+            {tailoredSummary && coverLetter && (
               <button
                 onClick={() => setIncludeResume((v) => !v)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-                  includeResume
-                    ? "border-accent text-accent bg-accent/5 hover:bg-accent/10"
-                    : "border-border text-text-muted hover:bg-surface-secondary"
-                }`}
-                title={includeResume ? "Resume will be appended to PDF" : "Download cover letter only"}
+                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${includeResume ? "border-accent text-accent bg-accent/5 hover:bg-accent/10" : "border-border text-text-muted hover:bg-surface-secondary"}`}
+                title={includeResume ? "Resume appended to PDF" : "Cover letter only"}
               >
-                <SummaryIcon className="w-3.5 h-3.5" />
-                + Resume
+                <SummaryIcon className="w-3.5 h-3.5" />+ Resume
                 {includeResume && <CheckIcon className="w-3 h-3" />}
               </button>
             )}
+
+            <button
+              onClick={handleSave}
+              disabled={saving || (!isDirty && !saved)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                saved
+                  ? "border-success/30 bg-success/5 text-success"
+                  : "border-border text-text-secondary hover:bg-surface-secondary"
+              }`}
+            >
+              {saving ? <SpinnerIcon className="w-3.5 h-3.5 animate-spin" /> : saved ? <CheckIcon className="w-3.5 h-3.5" /> : <SaveIcon className="w-3.5 h-3.5" />}
+              {saving ? "Saving..." : saved ? "Saved" : "Save"}
+            </button>
+
             <button
               onClick={handleDownload}
-              disabled={downloading}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={downloading || !coverLetter.trim()}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-accent-foreground rounded-lg text-xs font-medium hover:bg-accent-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {downloading ? (
-                <SpinnerIcon className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <DownloadIcon className="w-3.5 h-3.5" />
-              )}
+              {downloading ? <SpinnerIcon className="w-3.5 h-3.5 animate-spin" /> : <DownloadIcon className="w-3.5 h-3.5" />}
               {downloading ? "Downloading..." : "Download PDF"}
             </button>
-            <button
-              onClick={() => {
-                if (!window.confirm("Regenerate will overwrite your current cover letter. Continue?")) return;
-                handleGenerate();
-              }}
-              disabled={generating}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-accent-foreground rounded-lg text-xs font-medium hover:bg-accent-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {generating ? (
-                <SpinnerIcon className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <RefreshIcon className="w-3.5 h-3.5" />
-              )}
-              {generating ? "Generating..." : "Regenerate"}
-            </button>
           </div>
-        )}
-
-        {!coverLetter && !editing && (
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {generating ? (
-              <SpinnerIcon className="w-4 h-4 animate-spin" />
-            ) : (
-              <SparkleIcon className="w-4 h-4" />
-            )}
-            {generating ? "Generating..." : "Generate Cover Letter"}
-          </button>
-        )}
-
-        {editing && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleCancelEdit}
-              disabled={saving}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSaveEdit}
-              disabled={saving}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-accent-foreground rounded-lg text-xs font-medium hover:bg-accent-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving && <SpinnerIcon className="w-3.5 h-3.5 animate-spin" />}
-              {saving ? "Saving..." : "Save"}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Extra instructions */}
-      {!editing && (
-        <div className="px-4 py-3 border-b border-border bg-surface">
-          <label className="block text-xs font-medium uppercase tracking-wide text-text-secondary mb-1.5">
-            Extra instructions
-          </label>
-          <textarea
-            value={extraInstructions}
-            onChange={(e) => setExtraInstructions(e.target.value)}
-            placeholder="e.g. emphasize Bandfolio, write in Danish, make it shorter"
-            rows={2}
-            className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-y"
-          />
         </div>
-      )}
 
-      {/* Body */}
-      <div className="bg-surface-secondary p-5">
-        {editing ? (
-          <textarea
-            value={editText}
-            onChange={(e) => setEditText(e.target.value)}
-            className="w-full min-h-[400px] px-4 py-3 bg-surface border border-border rounded-xl text-sm text-text-primary leading-relaxed focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent resize-y transition-colors font-[inherit]"
-            autoFocus
-          />
-        ) : coverLetter ? (
-          <div>
-            <p className="text-sm text-text-primary leading-relaxed whitespace-pre-wrap">
-              {coverLetter}
-            </p>
-            {!hasAvatar && (
-              <p className="mt-4 text-xs text-text-muted">
-                Tip: add a profile photo in{" "}
-                <a href="/profile" className="text-accent hover:text-accent-dark transition-colors underline">
-                  your Profile
-                </a>{" "}
-                to include it in the downloaded PDF.
+        {/* Editor body */}
+        <div className="bg-surface-secondary p-5">
+          {previewMode ? (
+            coverLetter.trim() ? (
+              <div className="bg-surface border border-border rounded-xl px-5 py-4 min-h-[320px]">
+                <MarkdownPreview text={coverLetter} />
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 gap-2 min-h-[320px]">
+                <LetterIcon className="w-8 h-8 text-border" />
+                <p className="text-sm text-text-muted">Nothing to preview yet — switch to Write and start typing.</p>
+              </div>
+            )
+          ) : (
+            <div className="flex flex-col gap-2">
+              <textarea
+                value={coverLetter}
+                onChange={(e) => { setCoverLetter(e.target.value); setSaved(false); }}
+                placeholder={"Write your cover letter here...\n\nYou can use markdown formatting:\n**bold**, *italic*, [link text](https://url.com)"}
+                rows={18}
+                className="w-full px-4 py-3 bg-surface border border-border rounded-xl text-sm text-text-primary leading-relaxed placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent resize-y transition-colors"
+              />
+              <p className="text-xs text-text-muted">
+                Supports markdown: <code className="bg-surface-tertiary px-1 rounded text-[11px]">**bold**</code>{" "}
+                <code className="bg-surface-tertiary px-1 rounded text-[11px]">*italic*</code>{" "}
+                <code className="bg-surface-tertiary px-1 rounded text-[11px]">[text](url)</code>
               </p>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-10 gap-3">
-            <LetterIcon className="w-8 h-8 text-border" />
-            <p className="text-sm font-medium text-text-primary">No cover letter yet</p>
-            <p className="text-sm text-text-muted text-center max-w-xs">
-              Click &ldquo;Generate Cover Letter&rdquo; to create a personalised letter tailored to this role.
+            </div>
+          )}
+
+          {!hasAvatar && coverLetter && (
+            <p className="mt-3 text-xs text-text-muted">
+              Tip: add a profile photo in{" "}
+              <a href="/profile" className="text-accent hover:text-accent-dark transition-colors underline">your Profile</a>{" "}
+              to include it in the downloaded PDF.
             </p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+// ── Icons ──────────────────────────────────────────────────────────────────
+
+function SparkleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2.25c-.28 3.48-1.35 6.3-3.31 8.19C6.74 12.36 4.01 13.72 0 14c4.01.28 6.74 1.64 8.69 3.56C10.65 19.45 11.72 22.27 12 25.75c.28-3.48 1.35-6.3 3.31-8.19C17.26 15.64 19.99 14.28 24 14c-4.01-.28-6.74-1.64-8.69-3.56C13.35 8.55 12.28 5.73 12 2.25z" />
+    </svg>
   );
 }
 
@@ -299,14 +361,6 @@ function LetterIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 4h16v16H4zM4 8l8 5 8-5" />
-    </svg>
-  );
-}
-
-function SparkleIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2.25c-.28 3.48-1.35 6.3-3.31 8.19C6.74 12.36 4.01 13.72 0 14c4.01.28 6.74 1.64 8.69 3.56C10.65 19.45 11.72 22.27 12 25.75c.28-3.48 1.35-6.3 3.31-8.19C17.26 15.64 19.99 14.28 24 14c-4.01-.28-6.74-1.64-8.69-3.56C13.35 8.55 12.28 5.73 12 2.25z" />
     </svg>
   );
 }
@@ -328,11 +382,12 @@ function CheckIcon({ className }: { className?: string }) {
   );
 }
 
-function EditIcon({ className }: { className?: string }) {
+function SaveIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+      <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+      <polyline points="17 21 17 13 7 13 7 21" />
+      <polyline points="7 3 7 8 15 8" />
     </svg>
   );
 }

@@ -53,6 +53,7 @@ type Job = {
   company_research: Record<string, unknown> | null;
   description_summary: string | null;
   cover_letter: string | null;
+  cover_letter_advice: string | null;
   tailored_summary: string | null;
   status: string;
   external_apply_url: string | null;
@@ -337,7 +338,7 @@ export default async function JobDetailsPage({
 
               {/* Cover Letter */}
               <div id="cover-letter">
-                <CoverLetterSection jobId={job.id} initialCoverLetter={job.cover_letter} hasAvatar={!!profileData?.avatar_url} tailoredSummary={job.tailored_summary} />
+                <CoverLetterSection jobId={job.id} initialCoverLetter={job.cover_letter} initialAdvice={job.cover_letter_advice} hasAvatar={!!profileData?.avatar_url} tailoredSummary={job.tailored_summary} />
               </div>
 
             </div>
