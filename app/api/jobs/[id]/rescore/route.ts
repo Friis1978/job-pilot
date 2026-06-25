@@ -31,7 +31,7 @@ export async function POST(
   // Load profile
   const { data: profileData, error: profileError } = await insforge.database
     .from("profiles")
-    .select("current_title, years_experience, experience_level, skills, work_experience")
+    .select("current_title, years_experience, experience_level, skills, work_experience, personal_projects, spoken_languages")
     .eq("id", user.id)
     .single();
 

@@ -42,6 +42,35 @@ type PersonalProjectEntry = {
   skillInput: string;
 };
 
+const LANGUAGE_LIST = [
+  "Afrikaans", "Albanian", "Amharic", "Arabic", "Armenian", "Azerbaijani",
+  "Basque", "Belarusian", "Bengali", "Bosnian", "Bulgarian",
+  "Catalan", "Cebuano", "Chinese (Mandarin)", "Chinese (Cantonese)", "Croatian", "Czech",
+  "Danish", "Dutch",
+  "English", "Esperanto", "Estonian",
+  "Finnish", "French",
+  "Galician", "Georgian", "German", "Greek", "Gujarati",
+  "Haitian Creole", "Hausa", "Hebrew", "Hindi", "Hmong", "Hungarian",
+  "Icelandic", "Igbo", "Indonesian", "Irish", "Italian",
+  "Japanese", "Javanese",
+  "Kannada", "Kazakh", "Khmer", "Korean", "Kurdish",
+  "Lao", "Latin", "Latvian", "Lithuanian",
+  "Macedonian", "Malagasy", "Malay", "Malayalam", "Maltese", "Maori", "Marathi", "Mongolian",
+  "Nepali", "Norwegian",
+  "Pashto", "Persian", "Polish", "Portuguese", "Punjabi",
+  "Romanian", "Russian",
+  "Serbian", "Sinhalese", "Slovak", "Slovenian", "Somali", "Spanish", "Sundanese", "Swahili", "Swedish",
+  "Tajik", "Tamil", "Telugu", "Thai", "Turkish",
+  "Ukrainian", "Urdu", "Uzbek",
+  "Vietnamese",
+  "Welsh",
+  "Xhosa",
+  "Yiddish", "Yoruba",
+  "Zulu",
+] as const;
+
+const LANGUAGE_LEVELS = ["Native", "Fluent", "Advanced", "Intermediate", "Basic"] as const;
+
 type FormData = {
   fullName: string;
   email: string;
@@ -55,6 +84,9 @@ type FormData = {
   skillInput: string;
   industries: string[];
   industryInput: string;
+  spokenLanguages: { language: string; level: string }[];
+  langInput: string;
+  langLevelInput: string;
   workExperience: WorkExperienceEntry[];
   personalProjects: PersonalProjectEntry[];
   educations: EducationEntry[];
@@ -97,6 +129,7 @@ const CHANGE_LABELS: Partial<Record<keyof FormData, string>> = {
   energyTasks:        "Energy Tasks",
   companyTypePreference: "Company Type",
   careerVision:       "Career Vision",
+  spokenLanguages:    "Spoken Languages",
 };
 
 function computeChangedFields(current: FormData, savedJson: string): string[] {
@@ -183,6 +216,7 @@ function profileToFormData(p: Profile | null | undefined): FormData {
       linkedinUrl: "", portfolioUrl: "",
       currentTitle: "", experienceLevel: "",
       skills: [], skillInput: "", industries: [], industryInput: "",
+      spokenLanguages: [], langInput: "", langLevelInput: "Native",
       workExperience: [], personalProjects: [], educations: [], jobTitlesSeeking: "",
       remotePreference: "", salaryExpectation: "", preferredLocations: "",
       coverLetterTone: "", coverLetterInstructions: "",
@@ -238,6 +272,9 @@ function profileToFormData(p: Profile | null | undefined): FormData {
       institution: e.institution ?? "",
       year: e.year ?? "",
     })),
+    spokenLanguages: p.spoken_languages ?? [],
+    langInput: "",
+    langLevelInput: "Native",
     jobTitlesSeeking: (p.job_titles_seeking ?? []).join(", "),
     remotePreference: p.remote_preference ?? "",
     salaryExpectation: p.salary_expectation ?? "",
@@ -307,6 +344,8 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
       ...d,
       skillInput: undefined,
       industryInput: undefined,
+      langInput: undefined,
+      langLevelInput: undefined,
       workExperience: d.workExperience.map(({ skillInput: _si, ...r }) => r),
       personalProjects: d.personalProjects.map(({ skillInput: _si, ...r }) => r),
     });
@@ -321,6 +360,8 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
       ...parsed,
       skillInput: "",
       industryInput: "",
+      langInput: "",
+      langLevelInput: "Native",
       workExperience: parsed.workExperience.map((r) => ({ ...r, skillInput: "" })),
       personalProjects: parsed.personalProjects.map((p) => ({ ...p, skillInput: "" })),
     });
@@ -372,6 +413,22 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
 
   function removeIndustry(industry: string) {
     setField("industries", data.industries.filter((i) => i !== industry));
+  }
+
+  function addLanguage() {
+    const lang = data.langInput.trim();
+    if (!lang || !data.langLevelInput) return;
+    if (data.spokenLanguages.some((l) => l.language === lang)) return;
+    setData((prev) => ({
+      ...prev,
+      spokenLanguages: [...prev.spokenLanguages, { language: lang, level: prev.langLevelInput }],
+      langInput: "",
+      langLevelInput: "Native",
+    }));
+  }
+
+  function removeLanguage(language: string) {
+    setField("spokenLanguages", data.spokenLanguages.filter((l) => l.language !== language));
   }
 
   function addRole() {
@@ -682,6 +739,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
               ({ id: _id, skillInput: _si, ...r }) => r,
             ),
             educations: data.educations.map(({ id: _id, ...e }) => e),
+            spokenLanguages: data.spokenLanguages,
           });
           setSaving(false);
           if (result.success) {
@@ -985,6 +1043,74 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                       onClick={() => removeIndustry(industry)}
                       className="text-text-muted hover:text-text-primary transition-colors"
                       aria-label={`Remove ${industry}`}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                        <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Spoken Languages */}
+          <div>
+            <label className={`${labelClass} flex items-center gap-1.5`}>Spoken Languages (Optional) <InfoIcon tip="Add languages you speak and your proficiency level — helps match you with roles that require specific languages" /></label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <select
+                  value={data.langInput}
+                  onChange={(e) => setField("langInput", e.target.value)}
+                  className={selectClass}
+                >
+                  <option value="">Select language…</option>
+                  {LANGUAGE_LIST.filter((lang) => !data.spokenLanguages.some((l) => l.language === lang)).map((lang) => (
+                    <option key={lang} value={lang}>{lang}</option>
+                  ))}
+                </select>
+                <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted" width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div className="relative shrink-0 w-36">
+                <select
+                  value={data.langLevelInput}
+                  onChange={(e) => setField("langLevelInput", e.target.value)}
+                  className={selectClass}
+                >
+                  {LANGUAGE_LEVELS.map((level) => (
+                    <option key={level} value={level}>{level}</option>
+                  ))}
+                </select>
+                <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted" width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <button
+                type="button"
+                onClick={addLanguage}
+                disabled={!data.langInput}
+                className="shrink-0 px-4 py-2 border border-border rounded-lg text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Add
+              </button>
+            </div>
+            {data.spokenLanguages.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {data.spokenLanguages.map((entry) => (
+                  <span
+                    key={entry.language}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-surface-secondary border border-border rounded-full text-xs font-medium text-text-primary"
+                  >
+                    {entry.language}
+                    <span className="text-text-muted">·</span>
+                    <span className="text-text-secondary">{entry.level}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeLanguage(entry.language)}
+                      className="text-text-muted hover:text-text-primary transition-colors"
+                      aria-label={`Remove ${entry.language}`}
                     >
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                         <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />

@@ -1,3 +1,8 @@
+export type SpokenLanguage = {
+  language: string;
+  level: string;
+};
+
 export type PersonalProject = {
   name: string;
   description: string;
@@ -53,6 +58,7 @@ export type Profile = {
   energy_tasks: string | null;
   company_type_preference: string[] | null;
   career_vision: string | null;
+  spoken_languages: SpokenLanguage[] | null;
   linkedin_url: string | null;
   portfolio_url: string | null;
   resume_pdf_url: string | null;
@@ -150,4 +156,5 @@ export type ProfileFormInput = {
   energyTasks: string;
   companyTypePreference: string[];
   careerVision: string;
+  spokenLanguages: { language: string; level: string }[];
 };

@@ -376,6 +376,14 @@ seniorityScore: How well the candidate's seniority level (junior/mid/senior/lead
 
 Language note: Job descriptions may be written in any language — Danish, Swedish, Norwegian, German, or others. Technical skill names (TypeScript, Vue.js, React, Nuxt, Node.js, Python, etc.) appear in English even inside non-English text. Read the full description regardless of language and match skills by their English name.
 
+Spoken language matching rules:
+- If the job description explicitly requires or strongly prefers a spoken/written language (e.g. "fluent Danish required", "German is a must", "Swedish language skills are a prerequisite"), check the candidate's spoken languages.
+- Native is equivalent to Fluent — a candidate with Native proficiency fully satisfies any "fluent" or "proficient" language requirement.
+- If the candidate has the required language at any level (Native, Fluent, Advanced, Intermediate, or Basic), include it in matchedSkills (e.g. "Danish"). Only flag it as missing if the candidate has no entry for that language at all.
+- If the candidate does NOT have the required language, include it in missingSkills and reduce matchScore significantly (by 20–40 points depending on how critical it appears).
+- A language listed only in a "nice to have" or "plus" context should reduce the score by at most 5 points if missing.
+- Do NOT penalise for language requirements that are clearly satisfied by English when the candidate speaks English.
+
 Skill matching rules:
 - matchedSkills must include EVERY skill from the candidate's profile that is explicitly named in the job description, or is a direct alias/variant of an explicitly named technology (e.g. "Tailwind" matches "Tailwind CSS"; "React Hooks" matches if "React" is named; "Node" matches "Node.js"; "Vue" matches "Vue 3"). Be exhaustive — do not skip skills that genuinely match.
 - A direct alias means a more specific or shortened form of the SAME technology. Word similarity alone is NOT a match: "graphing platform" does not match "GraphQL", "scripting" does not match "TypeScript". The technology name itself must appear.
@@ -401,7 +409,8 @@ Description: ${job.description}
 CANDIDATE:
 Current title: ${profile.current_title ?? "Not specified"}
 Experience: ${profile.years_experience ?? 0} years, ${profile.experience_level ?? "Not specified"}
-Skills: ${profile.skills?.join(", ") ?? "Not specified"}${(() => {
+Skills: ${profile.skills?.join(", ") ?? "Not specified"}
+Spoken languages: ${profile.spoken_languages?.length ? profile.spoken_languages.map((l) => `${l.language} (${l.level})`).join(", ") : "Not specified"}${(() => {
               const sy = computeSkillYears(profile.work_experience, profile.personal_projects as PersonalProject[] | null);
               const entries = Object.entries(sy).sort((a, b) => b[1] - a[1]);
               return entries.length > 0

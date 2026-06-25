@@ -91,6 +91,7 @@ export async function saveProfile(
       energy_tasks: input.energyTasks || null,
       company_type_preference: input.companyTypePreference.length > 0 ? input.companyTypePreference : null,
       career_vision: input.careerVision || null,
+      spoken_languages: input.spokenLanguages.length > 0 ? input.spokenLanguages : null,
       linkedin_url: input.linkedinUrl || null,
       portfolio_url: input.portfolioUrl || null,
     };
