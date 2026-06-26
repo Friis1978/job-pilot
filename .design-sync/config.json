@@ -1,0 +1,9 @@
+{
+  "projectId": "c9a905c8-87c3-49bf-bae7-c24aa30994de",
+  "pkg": "job_pilot",
+  "globalName": "JobPilot",
+  "shape": "package",
+  "srcDir": "components",
+  "tsconfig": "tsconfig.json",
+  "cssEntry": "app/globals.css"
+}

@@ -133,6 +133,7 @@ Work history: ${workExp.map((w) => `${w.title} at ${w.company}`).join("; ") || "
     return NextResponse.json({ advice, language, labels });
   } catch (err) {
     console.error("[api/jobs/cover-letter-advice POST]", err);
-    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: "Something went wrong. Please try again.", detail: message }, { status: 500 });
   }
 }
