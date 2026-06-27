@@ -5,5 +5,25 @@
   "shape": "package",
   "srcDir": "components",
   "tsconfig": "tsconfig.json",
-  "cssEntry": "app/globals.css"
+  "cssEntry": ".design-sync/compiled.css",
+  "runtimeFontPrefixes": ["Inter"],
+  "libOverrides": {
+    "bundle.mjs": "polyfill process.* for Next.js app (process.platform, process.nextTick, process.stdout accessed by recharts and other deps)"
+  },
+  "componentSrcMap": {
+    "BulkOpsProvider": null,
+    "PostHogIdentitySync": null,
+    "SessionKeepAlive": null
+  },
+  "overrides": {
+    "CompanyResearchChart": { "cardMode": "column" },
+    "JobsOverTimeChart": { "cardMode": "column" },
+    "OnboardingDialog": { "cardMode": "single", "primaryStory": "Step1" },
+    "SearchCard": { "cardMode": "column" },
+    "Toaster": { "cardMode": "single", "primaryStory": "SuccessToast" },
+    "Tooltip": { "cardMode": "column" },
+    "AvatarCropModal": { "cardMode": "single", "primaryStory": "Default" },
+    "ProfileForm": { "cardMode": "column" },
+    "ProfilePageShell": { "cardMode": "column" }
+  }
 }

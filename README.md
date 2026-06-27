@@ -4,6 +4,8 @@ An AI-powered job hunting assistant. Set up your profile once, then let the agen
 
 **Live:** [findjob.insforge.site](https://findjob.insforge.site)
 
+**Design System:** [claude.ai/design/p/c9a905c8-87c3-49bf-bae7-c24aa30994de](https://claude.ai/design/p/c9a905c8-87c3-49bf-bae7-c24aa30994de) — 33 components synced to the "JobPilot Design System" Claude Design project for AI-assisted UI design.
+
 ---
 
 ## What it does
