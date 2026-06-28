@@ -1,50 +1,51 @@
-# Memory — Design System Re-sync + Features Padding Fix
+# Memory — Custom Domain devjob.info Connected to InsForge
 
-Last updated: 2026-06-28
+Last updated: 2026-06-28 19:15
 
 ## What was built
 
-- **`components/homepage/Features.tsx`** — added `py-12` to the outer `<section>` (from design handoff `design_handoff_features_padding/README.md` in the Claude Design project). Provides vertical padding for standalone preview framing; does not change full homepage behaviour (Hero's `pt-5` already provides the top gutter there).
-- **`.design-sync/conventions.md`** (new) — conventions header for the Claude Design agent. Documents: no provider wrapper needed, full token vocabulary (`bg-background`, `bg-surface`, `bg-surface-muted`, `bg-accent`, `bg-accent-dark`, `text-text-primary`, `text-text-secondary`, `text-text-muted`, `border-border`, etc.), font setup (Inter via Google Fonts at runtime, `runtimeFontPrefixes`), and an idiomatic build snippet using Navbar + StatsBar + JobsTable.
-- **`.design-sync/config.json`** — added `"readmeHeader": ".design-sync/conventions.md"` so conventions are prepended to the generated README in every bundle build.
-- **`.design-sync/NOTES.md`** — added notes on: malformed-anchor warning (expected when scriptsSha changes between script versions), conventions.md authoring, Features py-12 decision, and "Known render warns: none".
-- **Full re-upload to Claude Design project** — 173 files, all 33 components, validate clean, 33/33 renders pass. Project: https://claude.ai/design/p/c9a905c8-87c3-49bf-bae7-c24aa30994de
+- **devjob.info** connected as the custom domain for the Job-pilot InsForge deployment (Vercel-backed). Domain ownership verified and DNS pointing to Vercel confirmed.
+- No code files were modified this session.
 
 ## Decisions made
 
-- **`py-12` not `py-6`** for Features padding — matches the generous interior rhythm of the inner content block (`py-12`/`lg:py-20` in the right column). `HowItWorks` and `Testimonial` are also candidates for the same fix if standalone framing matters for those.
-- **Design agent artifacts left untouched** — the design project contains `design_handoff_features_padding/`, `templates/`, `screenshots/`, `uploads/`, `images/`, and SVGs. These are not sync artifacts and are excluded from all `deletePaths`; they persist across re-syncs.
-- **Conventions header scope** — kept to ~2.5k characters. Token table names real classes verified against `ds-bundle/_ds_bundle.css`. Do not expand without re-verifying each name against the built CSS.
+- **devjob.info is the production domain** — replaces the previous `findjob.insforge.site` slug. The `insforge.toml` already had `https://devjob.info` and `https://www.devjob.info` in `[auth] allowed_redirect_urls`.
+- **Vercel apex domain uses `76.76.21.21`** — not the InsForge-provided A record (`216.150.16.1`, which was only for ownership verification). Root domain A record must be `76.76.21.21`; www uses CNAME `cname.vercel-dns.com`.
 
 ## Problems solved
 
-- **Remote anchor malformed on re-sync** — when bundled scripts update between syncs, the `scriptsSha` in the uploaded `_ds_sync.json` won't match. Driver logs `! remote sidecar malformed — treating as no anchor` and falls back to full scope. This is expected and harmless — all grades carry forward from `.design-sync/.cache/` and the full upload is idempotent.
-- **SVG logos** — `jobpilot-icon.svg`, `jobpilot-logo-horizontal.svg`, `jobpilot-logo-stacked.svg` ARE in the project (confirmed by `list_files`) and are NOT re-uploaded on re-sync. The `next-image-mock.mjs` rewrites `/`-prefixed paths to `../../../`-relative. If logos still don't show, check browser console for 404s.
+- **GoDaddy locked A records** — When buying a domain on GoDaddy, they auto-attach a Website Builder/hosting product that locks two A records (`15.197.225.128`, `3.33.251.168`). These cannot be deleted until the GoDaddy product is disconnected/cancelled from the domain under My Products. After disconnecting, the locked records became deletable.
+- **Two-step DNS process for InsForge custom domains**:
+  1. InsForge gives you their own A record (`216.150.16.1`) — add this first to verify domain ownership.
+  2. After ownership is verified, change the A record to Vercel's IP (`76.76.21.21`) for traffic routing.
+  3. InsForge will then show the domain as fully verified.
 
 ## Current state
 
-- **33 components** uploaded and validated. All render cleanly. All grades "good".
-- **conventions.md** live in the project (stitched into README at build time).
-- **Features.tsx** has `py-12` on the outer section — **not yet committed**.
-- **`.design-sync/config.json`**, **`.design-sync/conventions.md`**, **`.design-sync/NOTES.md`** updated locally — **not yet committed**.
-- **`app/api/jobs/[id]/cover-letter-advice/route.ts`** was modified before this session (unrelated to sync) — still uncommitted.
+- **devjob.info** is verified and live — pointing to the Job-pilot InsForge deployment.
+- `insforge.toml` has correct auth redirect URLs for `devjob.info` — but `npx @insforge/cli config apply` has **not been confirmed run yet**. Should be done next session if not already done.
+- **Uncommitted files from previous session still pending:**
+  - `components/homepage/Features.tsx` — `py-12` padding fix
+  - `.design-sync/config.json`, `.design-sync/conventions.md`, `.design-sync/NOTES.md`
+  - `app/api/jobs/[id]/cover-letter-advice/route.ts` — review before committing
+- Design system: 33 components, all validated and uploaded to Claude Design project.
 
 ## Next session starts with
 
-**Commit the durable sync files:**
-```
-git add components/homepage/Features.tsx \
-        .design-sync/config.json \
-        .design-sync/conventions.md \
-        .design-sync/NOTES.md
-```
-Commit message: "feat: apply Features section padding fix and add design system conventions header"
-
-Also decide whether to commit `app/api/jobs/[id]/cover-letter-advice/route.ts` (separate commit — check what changed there first).
+1. Run `npx @insforge/cli config apply` to push the `devjob.info` auth redirect URLs to the live backend.
+2. Commit the pending design-sync files:
+   ```
+   git add components/homepage/Features.tsx \
+           .design-sync/config.json \
+           .design-sync/conventions.md \
+           .design-sync/NOTES.md
+   ```
+   Commit message: "feat: apply Features section padding fix and add design system conventions header"
+3. Review `app/api/jobs/[id]/cover-letter-advice/route.ts` and commit separately if needed.
 
 ## Open questions
 
-- Should `HowItWorks` and `Testimonial` also get `py-12`? Design handoff says yes if standalone framing matters (they also lack vertical padding on the outer section). User applied only `Features` this session.
-- SVG logos — are they rendering in Navbar and Footer in the design project? The Image mock path-rewrite fix was shipped in the previous session. User confirmed the SVGs are in the project but didn't confirm they're rendering after the hard refresh.
-- `app/api/jobs/[id]/cover-letter-advice/route.ts` — what was changed there? Review before committing.
-- Emails not working in production (env vars + Resend `bandfolio.ai` verification needed — carried forward from June 25 session).
+- Has `npx @insforge/cli config apply` been run? The auth redirect URLs in `insforge.toml` need to be applied to the backend for `devjob.info` logins to work.
+- Emails not working in production — Resend + sender domain verification still pending (carried forward from June 25 session). Now that `devjob.info` is the production domain, decide whether to verify a `devjob.info` sender address with Resend instead of `bandfolio.ai`.
+- Should `HowItWorks` and `Testimonial` sections also get `py-12` outer padding for standalone design preview framing?
+- SVG logos rendering in the Claude Design project — not confirmed after the path-rewrite fix.
