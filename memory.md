@@ -1,51 +1,37 @@
-# Memory — Custom Domain devjob.info Connected to InsForge
+# Memory — DeveloperJobs Rebrand + Image & Auth Fixes
 
-Last updated: 2026-06-28 19:15
+Last updated: 2026-06-28 20:30
 
 ## What was built
 
-- **devjob.info** connected as the custom domain for the Job-pilot InsForge deployment (Vercel-backed). Domain ownership verified and DNS pointing to Vercel confirmed.
-- No code files were modified this session.
+- **Homepage images switched to WebP** — `Hero.tsx` → `onboarding-profile.webp`, `HowItWorks.tsx` → `onboarding-jobs.webp`, `Features.tsx` → `onboarding-research.webp`. WebP files live in `public/images/`. Old PNGs still present but no longer referenced.
+- **InsForge auth redirect URLs fixed** — `insforge.toml` `allowed_redirect_urls` updated to include the full `/auth/callback` path for all domains AND `http://localhost:3000/auth/callback`. Config applied to live backend via `npx @insforge/cli config apply --auto-approve`.
 
 ## Decisions made
 
-- **devjob.info is the production domain** — replaces the previous `findjob.insforge.site` slug. The `insforge.toml` already had `https://devjob.info` and `https://www.devjob.info` in `[auth] allowed_redirect_urls`.
-- **Vercel apex domain uses `76.76.21.21`** — not the InsForge-provided A record (`216.150.16.1`, which was only for ownership verification). Root domain A record must be `76.76.21.21`; www uses CNAME `cname.vercel-dns.com`.
+- **Use WebP for homepage preview images** — the PNG files were being served correctly by the server, but browser HTTP cache was stuck on old versions. Switching to WebP files gave new URLs that bypassed all cached responses. The PNGs (`onboarding-*.png`) are still in `public/images/` but unused.
+- **`allowed_redirect_urls` must use exact `/auth/callback` paths** — InsForge does exact URL matching, not prefix matching. Having just `https://devjob.info` was not sufficient; `https://devjob.info/auth/callback` was required. Same applies to all environments including localhost.
 
 ## Problems solved
 
-- **GoDaddy locked A records** — When buying a domain on GoDaddy, they auto-attach a Website Builder/hosting product that locks two A records (`15.197.225.128`, `3.33.251.168`). These cannot be deleted until the GoDaddy product is disconnected/cancelled from the domain under My Products. After disconnecting, the locked records became deletable.
-- **Two-step DNS process for InsForge custom domains**:
-  1. InsForge gives you their own A record (`216.150.16.1`) — add this first to verify domain ownership.
-  2. After ownership is verified, change the A record to Vercel's IP (`76.76.21.21`) for traffic routing.
-  3. InsForge will then show the domain as fully verified.
+- **Homepage images not updating despite `rm -rf .next/cache/images`** — The Next.js server was regenerating correctly, but the browser's HTTP disk cache was serving stale `/_next/image` responses. Hard refresh (`Cmd+Shift+R`) was insufficient. Solved permanently by switching to new WebP filenames (new URLs bypass all caches).
+- **Google OAuth failing on devjob.info and localhost** — `insforge.toml` had `https://devjob.info` without the path; the app sends `redirect_uri=https://devjob.info/auth/callback`. Fixed by adding full path to all allowed URLs and running config apply.
 
 ## Current state
 
-- **devjob.info** is verified and live — pointing to the Job-pilot InsForge deployment.
-- `insforge.toml` has correct auth redirect URLs for `devjob.info` — but `npx @insforge/cli config apply` has **not been confirmed run yet**. Should be done next session if not already done.
-- **Uncommitted files from previous session still pending:**
-  - `components/homepage/Features.tsx` — `py-12` padding fix
-  - `.design-sync/config.json`, `.design-sync/conventions.md`, `.design-sync/NOTES.md`
-  - `app/api/jobs/[id]/cover-letter-advice/route.ts` — review before committing
-- Design system: 33 components, all validated and uploaded to Claude Design project.
+- **devjob.info** — auth working, new DeveloperJobs branding live
+- **localhost:3000** — auth working, homepage images now show correctly via WebP
+- **Large uncommitted diff** — the full DeveloperJobs rebrand (logo swap, metadata, package name, component text) plus the WebP image swap and insforge.toml fix are all unstaged. Nothing has been committed this session.
+- **Resend sender domain** — still not verified. Emails not working in production. Deferred from last session.
 
 ## Next session starts with
 
-1. Run `npx @insforge/cli config apply` to push the `devjob.info` auth redirect URLs to the live backend.
-2. Commit the pending design-sync files:
-   ```
-   git add components/homepage/Features.tsx \
-           .design-sync/config.json \
-           .design-sync/conventions.md \
-           .design-sync/NOTES.md
-   ```
-   Commit message: "feat: apply Features section padding fix and add design system conventions header"
-3. Review `app/api/jobs/[id]/cover-letter-advice/route.ts` and commit separately if needed.
+Commit all pending changes in one or two logical commits:
+1. **Rebrand commit** — all `components/`, `app/`, `lib/`, `public/` logo/branding changes + `package.json` name + deleted `jobpilot-*.svg` + new `developerjobs-*.svg`
+2. **Infra/images commit** — `insforge.toml` (auth redirect fix), `public/images/onboarding-*.webp` (new files), updated image references in `Hero.tsx`, `HowItWorks.tsx`, `Features.tsx`
 
 ## Open questions
 
-- Has `npx @insforge/cli config apply` been run? The auth redirect URLs in `insforge.toml` need to be applied to the backend for `devjob.info` logins to work.
-- Emails not working in production — Resend + sender domain verification still pending (carried forward from June 25 session). Now that `devjob.info` is the production domain, decide whether to verify a `devjob.info` sender address with Resend instead of `bandfolio.ai`.
-- Should `HowItWorks` and `Testimonial` sections also get `py-12` outer padding for standalone design preview framing?
-- SVG logos rendering in the Claude Design project — not confirmed after the path-rewrite fix.
+- Should the old `onboarding-*.png` files be deleted from `public/images/` now that WebP versions are in use?
+- Resend sender domain verification — decide whether to verify a `devjob.info` sender address with Resend so production emails work.
+- The `[deployments] subdomain = "findjob"` in `insforge.toml` — should this be updated to `developerjobs` or similar?

@@ -36,7 +36,7 @@ export function Hero() {
       {/* Dashboard preview — gray background, no rounded corners, separate section */}
       <div className="w-full max-w-300 mx-auto bg-surface-muted p-4 sm:p-10">
         <Image
-          src="/images/onboarding-profile.png"
+          src="/images/onboarding-profile.webp"
           alt="DeveloperJobs profile page"
           width={1200}
           height={700}

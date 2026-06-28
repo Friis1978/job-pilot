@@ -31,7 +31,7 @@ export function Features() {
           {/* Left — agent log screenshot */}
           <div className="flex items-center justify-center p-8 sm:p-10 lg:p-12">
             <Image
-              src="/images/onboarding-research.png"
+              src="/images/onboarding-research.webp"
               alt="DeveloperJobs match score and company research"
               width={600}
               height={400}
