@@ -14,7 +14,7 @@ const features: Feature[] = [
   {
     title: "AI-Powered Job Matching",
     description:
-      "Stop guessing which jobs are worth applying to. JobPilot scores every role against your actual skills so you focus on the ones that matter.",
+      "Stop guessing which jobs are worth applying to. DeveloperJobs scores every role against your actual skills so you focus on the ones that matter.",
   },
   {
     title: "Focus on the right roles",
@@ -32,7 +32,7 @@ export function Features() {
           <div className="flex items-center justify-center p-8 sm:p-10 lg:p-12">
             <Image
               src="/images/onboarding-research.png"
-              alt="Job Pilot match score and company research"
+              alt="DeveloperJobs match score and company research"
               width={600}
               height={400}
               className="w-full h-auto"

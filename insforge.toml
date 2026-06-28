@@ -1,5 +1,5 @@
 [auth]
-allowed_redirect_urls = ["https://devjob.info", "https://www.devjob.info", "https://8kj4iaqv.insforge.site", "https://findjob.insforge.site"]
+allowed_redirect_urls = ["https://devjob.info/auth/callback", "https://www.devjob.info/auth/callback", "https://8kj4iaqv.insforge.site/auth/callback", "https://findjob.insforge.site/auth/callback"]
 require_email_verification = true
 verify_email_method = "code"
 reset_password_method = "code"

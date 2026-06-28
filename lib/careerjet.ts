@@ -35,12 +35,12 @@ export async function searchJobsCareerjet(
     locale_code: locale,
     pagesize: "10",
     user_ip: "1.0.0.1",
-    user_agent: "JobPilot/1.0",
+    user_agent: "DeveloperJobs/1.0",
   });
 
   const response = await fetch(
     `http://public.api.careerjet.net/search?${params}`,
-    { headers: { Referer: "https://jobpilot.app/" } },
+    { headers: { Referer: "https://devjob.info/" } },
   );
 
   if (!response.ok) {

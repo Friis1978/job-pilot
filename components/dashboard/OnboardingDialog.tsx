@@ -11,7 +11,7 @@ const STEPS = [
     cta: "Head to Profile to add your experience, skills, and resume.",
     ctaHref: "/profile",
     imageSrc: "/images/onboarding-profile.png",
-    imageAlt: "Job Pilot profile page",
+    imageAlt: "DeveloperJobs profile page",
     imageWidth: 1280,
     imageHeight: 860,
   },
@@ -64,7 +64,7 @@ export function OnboardingDialog({ show }: { show: boolean }) {
               Step {step + 1} of {STEPS.length}
             </p>
             <h2 className="text-lg font-semibold text-text-primary">
-              {step === 0 ? "Welcome to Job Pilot" : "Next up"}
+              {step === 0 ? "Welcome to DeveloperJobs" : "Next up"}
             </h2>
           </div>
           <button

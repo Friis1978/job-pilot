@@ -13,7 +13,7 @@ export function Hero() {
         </h1>
 
         <p className="mt-4 text-text-secondary text-sm max-w-sm leading-relaxed">
-          Stop applying blind. JobPilot finds the jobs, researches the companies, and gives you
+          Stop applying blind. DeveloperJobs finds the jobs, researches the companies, and gives you
           everything you need to stand out.
         </p>
 
@@ -37,7 +37,7 @@ export function Hero() {
       <div className="w-full max-w-300 mx-auto bg-surface-muted p-4 sm:p-10">
         <Image
           src="/images/onboarding-profile.png"
-          alt="Job Pilot profile page"
+          alt="DeveloperJobs profile page"
           width={1200}
           height={700}
           className="w-full h-auto"

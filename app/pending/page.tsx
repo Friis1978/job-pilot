@@ -19,8 +19,8 @@ export default async function PendingPage() {
       <div className="w-full max-w-md flex flex-col items-center gap-8 text-center">
         <Link href="/">
           <Image
-            src="/jobpilot-logo-horizontal.svg"
-            alt="JobPilot"
+            src="/developerjobs-logo-horizontal.svg"
+            alt="DeveloperJobs"
             width={160}
             height={40}
             className="h-8 w-auto"

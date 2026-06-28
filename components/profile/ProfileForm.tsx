@@ -1444,7 +1444,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                         type="text"
                         value={proj.name}
                         onChange={(e) => updateProject(proj.id, "name", e.target.value)}
-                        placeholder="Job Pilot, AI Resume Builder..."
+                        placeholder="DeveloperJobs, AI Resume Builder..."
                         className={inputClass}
                       />
                     </div>

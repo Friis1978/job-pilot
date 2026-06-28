@@ -14,7 +14,7 @@ const features: Feature[] = [
   {
     title: "Know the Company Before You Apply",
     description:
-      "Stop guessing what a company is about. JobPilot browses their site and gives you everything you need to apply with confidence.",
+      "Stop guessing what a company is about. DeveloperJobs browses their site and gives you everything you need to apply with confidence.",
   },
   {
     title: "Keep track of every application",
