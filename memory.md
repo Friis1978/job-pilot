@@ -1,56 +1,50 @@
-# Memory — Cover Letter Advice + User-Written Letters
+# Memory — Design System Re-sync + Features Padding Fix
 
-Last updated: 2026-06-25
+Last updated: 2026-06-28
 
 ## What was built
 
-### Spoken Languages (from earlier in session)
-- **DB** — `spoken_languages jsonb` column on `profiles`
-- **`types/index.ts`** — `SpokenLanguage` type, added to `Profile` and `ProfileFormInput`
-- **`actions/profile.ts`** — maps `spokenLanguages` → `spoken_languages`
-- **`components/profile/ProfileForm.tsx`** — full UI: language select from fixed list, level select (Native/Fluent/Advanced/Intermediate/Basic), removable pills, inside Professional Info accordion after Industries
-- **`agent/find-jobs.ts`** — `scoreJob` updated: language matching rules in system prompt (Native = Fluent), spoken languages in candidate context block
-- **`app/api/jobs/[id]/rescore/route.ts`** — added `spoken_languages, personal_projects` to profile select (was missing, causing null on rescore)
-- **`app/api/jobs/rescore-all/route.ts`** — same fix
-
-### Cover Letter — Advice + User-Written Flow
-- **DB** — `cover_letter_advice text` column added to `jobs` table
-- **`app/api/jobs/[id]/cover-letter-advice/route.ts`** (new) — POST: GPT-4o produces 4-section writing brief (opening angle, key points, gap handling, tone & company angle), saved to `cover_letter_advice`. Detects job language, writes brief in that language.
-- **`app/find-jobs/[id]/page.tsx`** — added `cover_letter_advice` to `Job` type, passes `initialAdvice={job.cover_letter_advice}` to `CoverLetterSection`
-- **`components/find-jobs/CoverLetterSection.tsx`** (full rewrite):
-  - Top section: Writing Advice panel — accent-tinted, shows stored advice as rendered markdown, "Get Advice" / "Regenerate" button
-  - Bottom section: Your Cover Letter — always-visible textarea, Write/Preview toggle (Preview renders markdown in browser with bold/italic/links), Save button (disabled until dirty, green on save), Download PDF button (disabled when empty), Copy/Photo/Resume toggles
-  - PDF download unchanged — `CoverLetterPDF` already had full markdown parser
+- **`components/homepage/Features.tsx`** — added `py-12` to the outer `<section>` (from design handoff `design_handoff_features_padding/README.md` in the Claude Design project). Provides vertical padding for standalone preview framing; does not change full homepage behaviour (Hero's `pt-5` already provides the top gutter there).
+- **`.design-sync/conventions.md`** (new) — conventions header for the Claude Design agent. Documents: no provider wrapper needed, full token vocabulary (`bg-background`, `bg-surface`, `bg-surface-muted`, `bg-accent`, `bg-accent-dark`, `text-text-primary`, `text-text-secondary`, `text-text-muted`, `border-border`, etc.), font setup (Inter via Google Fonts at runtime, `runtimeFontPrefixes`), and an idiomatic build snippet using Navbar + StatsBar + JobsTable.
+- **`.design-sync/config.json`** — added `"readmeHeader": ".design-sync/conventions.md"` so conventions are prepended to the generated README in every bundle build.
+- **`.design-sync/NOTES.md`** — added notes on: malformed-anchor warning (expected when scriptsSha changes between script versions), conventions.md authoring, Features py-12 decision, and "Known render warns: none".
+- **Full re-upload to Claude Design project** — 173 files, all 33 components, validate clean, 33/33 renders pass. Project: https://claude.ai/design/p/c9a905c8-87c3-49bf-bae7-c24aa30994de
 
 ## Decisions made
 
-- **AI advice stored in DB** (`cover_letter_advice` column on `jobs`) — persists across sessions, same pattern as `description_summary`
-- **Old "Generate Cover Letter" removed from UI** — `agent/generate-cover-letter.ts` and `/api/agent/cover-letter` route kept in codebase but no longer surfaced. Users write their own letters.
-- **Textarea always visible** — not gated behind any generation step. Empty textarea ready to type from the start.
-- **Same PDF rendering pipeline** — `CoverLetterPDF` markdown parser unchanged. User's markdown text renders correctly in downloaded PDF (bold, italic, links all work).
-- **Native = Fluent for language matching** — explicitly stated in `scoreJob` system prompt so rescores respect it.
-- **Rescore routes must fetch full profile** — both `/rescore` and `/rescore-all` now select `spoken_languages` and `personal_projects` so all context is available.
+- **`py-12` not `py-6`** for Features padding — matches the generous interior rhythm of the inner content block (`py-12`/`lg:py-20` in the right column). `HowItWorks` and `Testimonial` are also candidates for the same fix if standalone framing matters for those.
+- **Design agent artifacts left untouched** — the design project contains `design_handoff_features_padding/`, `templates/`, `screenshots/`, `uploads/`, `images/`, and SVGs. These are not sync artifacts and are excluded from all `deletePaths`; they persist across re-syncs.
+- **Conventions header scope** — kept to ~2.5k characters. Token table names real classes verified against `ds-bundle/_ds_bundle.css`. Do not expand without re-verifying each name against the built CSS.
 
 ## Problems solved
 
-- **Rescore routes used partial profile select** — `spoken_languages` was never fetched during rescore so model always saw "Not specified". Fixed by adding it to both rescore route selects.
-- **Pre-existing jobs had Danish as missing skill** — fixed two jobs manually in DB (`d77a199f`, `29fdf777`). Future rescores now work correctly.
-- **Job `29fdf777` kept reverting** — rescore route was overwriting our manual DB fix because it fetched incomplete profile. Root cause was the partial select, now fixed.
+- **Remote anchor malformed on re-sync** — when bundled scripts update between syncs, the `scriptsSha` in the uploaded `_ds_sync.json` won't match. Driver logs `! remote sidecar malformed — treating as no anchor` and falls back to full scope. This is expected and harmless — all grades carry forward from `.design-sync/.cache/` and the full upload is idempotent.
+- **SVG logos** — `jobpilot-icon.svg`, `jobpilot-logo-horizontal.svg`, `jobpilot-logo-stacked.svg` ARE in the project (confirmed by `list_files`) and are NOT re-uploaded on re-sync. The `next-image-mock.mjs` rewrites `/`-prefixed paths to `../../../`-relative. If logos still don't show, check browser console for 404s.
 
 ## Current state
 
-Everything working:
-- Spoken languages: profile UI, DB storage, job matching, rescore routes
-- Cover letter: advice generation + storage, user-written textarea, markdown preview, save + download
-- PDF download: markdown renders correctly (bold, italic, links)
+- **33 components** uploaded and validated. All render cleanly. All grades "good".
+- **conventions.md** live in the project (stitched into README at build time).
+- **Features.tsx** has `py-12` on the outer section — **not yet committed**.
+- **`.design-sync/config.json`**, **`.design-sync/conventions.md`**, **`.design-sync/NOTES.md`** updated locally — **not yet committed**.
+- **`app/api/jobs/[id]/cover-letter-advice/route.ts`** was modified before this session (unrelated to sync) — still uncommitted.
 
 ## Next session starts with
 
-No pending tasks. Ready for whatever the user brings.
+**Commit the durable sync files:**
+```
+git add components/homepage/Features.tsx \
+        .design-sync/config.json \
+        .design-sync/conventions.md \
+        .design-sync/NOTES.md
+```
+Commit message: "feat: apply Features section padding fix and add design system conventions header"
+
+Also decide whether to commit `app/api/jobs/[id]/cover-letter-advice/route.ts` (separate commit — check what changed there first).
 
 ## Open questions
 
-- Other pre-existing jobs may have incorrect language flags — user can rescore them individually or via "Rescore All"
-- Emails not working in production (env vars + Resend `bandfolio.ai` verification needed)
-- Should rejected users see a different message on `/pending`?
-- Should Admin nav link show badge count for pending users?
+- Should `HowItWorks` and `Testimonial` also get `py-12`? Design handoff says yes if standalone framing matters (they also lack vertical padding on the outer section). User applied only `Features` this session.
+- SVG logos — are they rendering in Navbar and Footer in the design project? The Image mock path-rewrite fix was shipped in the previous session. User confirmed the SVGs are in the project but didn't confirm they're rendering after the hard refresh.
+- `app/api/jobs/[id]/cover-letter-advice/route.ts` — what was changed there? Review before committing.
+- Emails not working in production (env vars + Resend `bandfolio.ai` verification needed — carried forward from June 25 session).

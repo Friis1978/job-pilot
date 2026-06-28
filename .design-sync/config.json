@@ -15,6 +15,7 @@
     "PostHogIdentitySync": null,
     "SessionKeepAlive": null
   },
+  "readmeHeader": ".design-sync/conventions.md",
   "overrides": {
     "CompanyResearchChart": { "cardMode": "column" },
     "JobsOverTimeChart": { "cardMode": "column" },

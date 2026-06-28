@@ -35,6 +35,18 @@ context. Solved with mock modules aliased via esbuild in the bundle.mjs override
 - `.design-sync/next-link-mock.mjs` → aliased as `next/link`
 - `.design-sync/next-image-mock.mjs` → aliased as `next/image`
 
+### Anchor malformed warning on re-sync
+When the bundled scripts update between syncs, the `scriptsSha` in the remote `_ds_sync.json` won't match the current scripts. The driver logs `! remote sidecar malformed — treating as no anchor` and falls back to full scope (33 components "added"). This is expected — all grades carry forward from the `.cache/` and the full upload is idempotent.
+
+### conventions.md
+`.design-sync/conventions.md` was authored in the June 2026 re-sync and wired via `readmeHeader` in config. On future re-syncs, validate it: every class/token enumerated must still exist in `ds-bundle/_ds_bundle.css` and the component folders.
+
+### Features section py-12 (applied June 2026)
+`components/homepage/Features.tsx` — outer `<section>` got `py-12` added. Design handoff (`design_handoff_features_padding/README.md` in the project) notes this is cosmetic for standalone preview framing; Hero already provides the top gutter in the full homepage stack. `HowItWorks` and `Testimonial` are similar candidates if standalone framing matters there too.
+
+### Known render warns
+(none recorded — all 33 previews pass clean with zero bad/thin/overflow flags after the June 2026 sync)
+
 ### build command
 ```
 node .ds-sync/package-build.mjs \

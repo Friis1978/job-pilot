@@ -25,7 +25,7 @@ const features: Feature[] = [
 
 export function Features() {
   return (
-    <section className="w-full bg-background px-6">
+    <section className="w-full bg-background px-6 py-12">
       <div className="w-full max-w-300 mx-auto bg-surface-muted overflow-hidden">
         <div className="grid grid-cols-1 lg:grid-cols-2 items-stretch">
           {/* Left — agent log screenshot */}
