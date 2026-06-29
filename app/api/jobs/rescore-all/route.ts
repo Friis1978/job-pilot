@@ -71,6 +71,8 @@ export async function POST() {
           missing_skills: scored.missingSkills,
           match_score: scored.matchScore,
           match_reason: scored.matchReason,
+          experience_score: scored.experienceScore,
+          seniority_score: scored.seniorityScore,
         })
         .eq("id", job.id)
         .eq("user_id", user.id);

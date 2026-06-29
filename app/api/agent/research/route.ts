@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { researchCompany } from "@/agent/research-company";
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, warning: result.warning ?? null });
   } catch (err) {
+    Sentry.captureException(err);
     console.error("[api/agent/research]", err);
     return NextResponse.json(
       { error: "Internal server error" },

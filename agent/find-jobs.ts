@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import OpenAI from "openai";
 import { Stagehand } from "@browserbasehq/stagehand";
 import { createInsforgeServer } from "@/lib/insforge-server";
@@ -435,7 +436,8 @@ Recent work: ${JSON.stringify(
 
     const scored = JSON.parse(raw) as ScoredJob;
     return { ...scored, job };
-  } catch {
+  } catch (err) {
+    Sentry.captureException(err, { extra: { jobId: job.id, jobTitle: job.title, company: job.company } });
     console.error(`[agent/find-jobs] scoring failed for job ${job.id}`);
     return null;
   }

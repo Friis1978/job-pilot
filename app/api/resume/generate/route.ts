@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { renderToBuffer } from "@react-pdf/renderer";
 import OpenAI from "openai";
@@ -231,6 +232,7 @@ export async function POST(): Promise<NextResponse> {
     // Stream the PDF directly — client receives bytes, no auth-gated URL needed
     return pdfResponse(buffer.buffer as ArrayBuffer);
   } catch (err) {
+    Sentry.captureException(err);
     console.error("[api/resume/generate]", err);
     return NextResponse.json(
       { error: "Something went wrong. Please try again." },

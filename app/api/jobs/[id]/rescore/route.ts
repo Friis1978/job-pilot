@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
@@ -57,10 +58,11 @@ export async function POST(
     },
     profile,
     openai,
-    jobData.location ?? "",
+    "", // use profile's remote_preference + preferred_locations, not job's location
   );
 
   if (!scored) {
+    Sentry.captureMessage("scoreJob returned null", { level: "error", extra: { jobId: id } });
     return NextResponse.json({ error: "Scoring failed. Please try again." }, { status: 500 });
   }
 
@@ -71,6 +73,8 @@ export async function POST(
       missing_skills: scored.missingSkills,
       match_score: scored.matchScore,
       match_reason: scored.matchReason,
+      experience_score: scored.experienceScore,
+      seniority_score: scored.seniorityScore,
     })
     .eq("id", id)
     .eq("user_id", user.id);

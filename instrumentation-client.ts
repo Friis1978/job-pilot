@@ -1,3 +1,4 @@
+import "./sentry.client.config";
 import posthog from "posthog-js";
 
 posthog.init(process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN!, {

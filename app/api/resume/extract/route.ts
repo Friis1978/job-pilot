@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { PDFParse } from "pdf-parse";
 import OpenAI from "openai";
@@ -153,6 +154,7 @@ export async function POST(): Promise<NextResponse> {
 
     return NextResponse.json({ data: parsed });
   } catch (err) {
+    Sentry.captureException(err);
     console.error("[api/resume/extract]", err);
     return NextResponse.json(
       { error: "Something went wrong. Please try again." },

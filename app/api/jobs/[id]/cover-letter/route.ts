@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement, type ReactElement } from "react";
@@ -124,6 +125,7 @@ export async function GET(
       },
     });
   } catch (err) {
+    Sentry.captureException(err);
     console.error("[api/jobs/cover-letter GET]", err);
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
@@ -173,6 +175,7 @@ export async function PATCH(
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    Sentry.captureException(err);
     console.error("[api/jobs/cover-letter PATCH]", err);
     return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
   }

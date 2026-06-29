@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createInsforgeServer } from "@/lib/insforge-server";
@@ -58,6 +59,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       data: { jobsFound: result.jobsFound, jobsSaved: result.jobsSaved, jobsSkipped: result.jobsSkipped },
     });
   } catch (err) {
+    Sentry.captureException(err);
     console.error("[api/agent/find]", err);
     return NextResponse.json(
       { error: "Something went wrong. Please try again." },
