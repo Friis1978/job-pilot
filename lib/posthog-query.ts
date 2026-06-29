@@ -120,7 +120,7 @@ export async function getDashboardStats(userId: string): Promise<DashboardStats>
   };
 }
 
-// ── Jobs Found Over Time (last 30 days, daily, split by source) ─────────────
+// ── Jobs Found Over Time (last 14 days, daily, split by source) ─────────────
 
 export type JobsOverTimePoint = { label: string; search: number; imported: number };
 
@@ -134,7 +134,7 @@ export async function getJobsOverTime(userId: string): Promise<JobsOverTimePoint
      FROM events
      WHERE event = 'job_found'
        AND distinct_id = '${userId}'
-       AND timestamp >= now() - INTERVAL 30 DAY
+       AND timestamp >= now() - INTERVAL 14 DAY
      GROUP BY day, source
      ORDER BY day`,
   );
@@ -149,8 +149,8 @@ export async function getJobsOverTime(userId: string): Promise<JobsOverTimePoint
   }
 
   const now = Date.now();
-  return Array.from({ length: 30 }, (_, i) => {
-    const d = new Date(now - (29 - i) * 24 * 60 * 60 * 1000);
+  return Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(now - (13 - i) * 24 * 60 * 60 * 1000);
     const key = utcDateKey(d);
     const label = `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} ${d.getUTCDate()}`;
     return { label, ...(byDay.get(key) ?? { search: 0, imported: 0 }) };

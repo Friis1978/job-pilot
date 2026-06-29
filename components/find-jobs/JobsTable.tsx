@@ -51,6 +51,7 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [showNoFit, setShowNoFit] = useState(false);
@@ -107,8 +108,15 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
     setPage(1);
   }
 
-  async function handleDeleteJob(e: React.MouseEvent, jobId: string) {
+  function handleDeleteJob(e: React.MouseEvent, jobId: string) {
     e.stopPropagation();
+    setConfirmDeleteId(jobId);
+  }
+
+  async function handleConfirmDelete() {
+    if (!confirmDeleteId) return;
+    const jobId = confirmDeleteId;
+    setConfirmDeleteId(null);
     setDeletingId(jobId);
     try {
       const res = await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
@@ -387,7 +395,7 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                       </span>
                     </th>
                   ))}
-                  <th className="px-2 md:px-4 py-4 w-px" />
+                  <th className="py-4 w-10 md:w-14" />
                 </tr>
               </thead>
               <tbody>
@@ -451,7 +459,7 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                         {formatDateAgo(job.found_at)}
                       </span>
                     </td>
-                    <td className="px-2 md:px-4 py-4">
+                    <td className="py-4 pr-3 md:pr-4 text-right">
                       <button
                         onClick={(e) => handleDeleteJob(e, job.id)}
                         disabled={deletingId === job.id}
@@ -520,6 +528,38 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
           </>
         )}
       </div>
+
+      {confirmDeleteId !== null && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={() => setConfirmDeleteId(null)}
+        >
+          <div
+            className="bg-surface border border-border rounded-2xl shadow-xl p-6 w-full max-w-sm mx-4 flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col gap-1">
+              <h2 className="text-base font-semibold text-text-primary">Delete job?</h2>
+              <p className="text-sm text-text-muted">This will permanently remove the job and all associated data. This cannot be undone.</p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                className="px-4 py-2 rounded-lg border border-border text-sm text-text-secondary hover:bg-surface-secondary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 rounded-lg bg-error text-white text-sm font-medium hover:opacity-90 transition-opacity"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

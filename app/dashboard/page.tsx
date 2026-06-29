@@ -73,7 +73,7 @@ export default async function DashboardPage() {
       .select("researched_at, source")
       .eq("user_id", user.id)
       .not("researched_at", "is", null)
-      .gte("researched_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+      .gte("researched_at", new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()),
     insforge.database
       .from("jobs")
       .select("status")
@@ -101,7 +101,6 @@ export default async function DashboardPage() {
         ? ((companyResearchResult.value.data as ResearchRow[] | null) ?? [])
         : [];
 
-    const DAY_LABELS_LOCAL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
     const byDay = new Map<string, { search: number; imported: number }>();
     for (const row of rows) {
       const d = new Date(row.researched_at);
@@ -112,11 +111,12 @@ export default async function DashboardPage() {
       byDay.set(key, entry);
     }
 
-    return Array.from({ length: 7 }, (_, i): CompanyResearchPoint => {
-      const d = new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000);
+    return Array.from({ length: 14 }, (_, i): CompanyResearchPoint => {
+      const d = new Date(Date.now() - (13 - i) * 24 * 60 * 60 * 1000);
       const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+      const label = `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} ${d.getUTCDate()}`;
       return {
-        label: DAY_LABELS_LOCAL[d.getUTCDay()],
+        label,
         ...(byDay.get(key) ?? { search: 0, imported: 0 }),
       };
     });
