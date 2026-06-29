@@ -63,6 +63,10 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
         toast(`${jobsSkipped} job${jobsSkipped === 1 ? " was" : "s were"} skipped — no direct apply link available.`, "warning");
       }
 
+      if (jobsSaved > 0) {
+        fetch("/api/jobs/research-all", { method: "POST" });
+      }
+
       router.refresh();
     } catch (err) {
       clearTimeout(timeoutId);

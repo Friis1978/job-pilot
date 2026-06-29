@@ -274,6 +274,34 @@ URL saved to profiles table
 | job_id     | uuid        | Optional — related job           |
 | created_at | timestamptz |                                  |
 
+### `connections`
+
+| Column       | Type        | Notes                                          |
+| ------------ | ----------- | ---------------------------------------------- |
+| id           | uuid        |                                                |
+| user_id      | uuid        | References auth.users                          |
+| first_name   | text        |                                                |
+| last_name    | text        |                                                |
+| linkedin_url | text        | LinkedIn profile URL                           |
+| email        | text        | Optional                                       |
+| company      | text        | Company from LinkedIn CSV                      |
+| position     | text        | Job title from LinkedIn CSV                    |
+| connected_on | date        | Date connected on LinkedIn                     |
+| is_favorite  | boolean     | User-starred contact                           |
+| notes        | text        | User notes on this contact                     |
+| imported_at  | timestamptz | Timestamp of the import that created this row  |
+| created_at   | timestamptz |                                                |
+
+### `network_imports`
+
+| Column           | Type        | Notes                              |
+| ---------------- | ----------- | ---------------------------------- |
+| id               | uuid        |                                    |
+| user_id          | uuid        | References auth.users              |
+| imported_at      | timestamptz |                                    |
+| connection_count | integer     | Total rows imported                |
+| file_name        | text        | Original CSV filename              |
+
 ---
 
 ## InsForge Storage

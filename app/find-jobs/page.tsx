@@ -3,7 +3,8 @@ import { createInsforgeServer } from "@/lib/insforge-server";
 import { Navbar } from "@/components/layout/Navbar";
 import { SearchCard } from "@/components/find-jobs/SearchCard";
 import { JobsTable } from "@/components/find-jobs/JobsTable";
-import type { JobRow } from "@/types";
+import type { JobRow, Connection } from "@/types";
+import { buildConnectionMap } from "@/lib/network-utils";
 
 export default async function FindJobsPage() {
   const insforge = await createInsforgeServer();
@@ -14,7 +15,7 @@ export default async function FindJobsPage() {
   if (!user) redirect("/");
   const userMeta = user.metadata as { full_name?: string; name?: string; avatar_url?: string } | null;
 
-  const [jobsResult, searchesResult, profileResult] = await Promise.allSettled([
+  const [jobsResult, searchesResult, profileResult, connectionsResult] = await Promise.allSettled([
     insforge.database
       .from("jobs")
       .select("id, company, title, location, match_score, found_at, researched_at, matched_skills, status, source")
@@ -31,6 +32,10 @@ export default async function FindJobsPage() {
       .select("avatar_url, location, is_admin")
       .eq("id", user.id)
       .maybeSingle(),
+    insforge.database
+      .from("connections")
+      .select("id, first_name, last_name, company, position, is_favorite, linkedin_url, email, notes, connected_on, imported_at, created_at, user_id")
+      .eq("user_id", user.id),
   ]);
 
   const jobs =
@@ -59,13 +64,17 @@ export default async function FindJobsPage() {
     ? (profileResult.value.data as { avatar_url?: string | null; location?: string | null; is_admin?: boolean } | null)
     : null;
 
+  const connections: Connection[] =
+    connectionsResult.status === "fulfilled" ? (connectionsResult.value.data ?? []) : [];
+  const connectionMap = buildConnectionMap(connections);
+
   return (
     <>
       <Navbar user={{ name: userMeta?.full_name ?? userMeta?.name, email: user.email, avatarUrl: profileRow?.avatar_url ?? userMeta?.avatar_url }} isAdmin={profileRow?.is_admin ?? false} />
       <main className="min-h-screen bg-background py-8">
         <div className="w-full max-w-360 mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-6 pb-12">
           <SearchCard recentSearches={recentSearches} defaultLocation={profileRow?.location ?? ""} />
-          <JobsTable jobs={jobs} />
+          <JobsTable jobs={jobs} connectionMap={Object.fromEntries(connectionMap)} />
         </div>
       </main>
     </>

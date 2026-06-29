@@ -1,37 +1,52 @@
-# Memory — DeveloperJobs Rebrand + Image & Auth Fixes
+# Memory — LinkedIn Network Feature
 
-Last updated: 2026-06-28 20:30
+Last updated: 2026-06-29
 
 ## What was built
 
-- **Homepage images switched to WebP** — `Hero.tsx` → `onboarding-profile.webp`, `HowItWorks.tsx` → `onboarding-jobs.webp`, `Features.tsx` → `onboarding-research.webp`. WebP files live in `public/images/`. Old PNGs still present but no longer referenced.
-- **InsForge auth redirect URLs fixed** — `insforge.toml` `allowed_redirect_urls` updated to include the full `/auth/callback` path for all domains AND `http://localhost:3000/auth/callback`. Config applied to live backend via `npx @insforge/cli config apply --auto-approve`.
+Full LinkedIn network intelligence layer:
+
+- **`lib/csv-parser.ts`** — parses LinkedIn `Connections.csv` (skips preamble, handles quoted fields)
+- **`lib/network-utils.ts`** — `isRecruiter()`, `isManager()`, `calculateOpportunityScore()`, `networkStrength()`, `buildConnectionMap()`, `getConnectionsForCompany()`
+- **DB tables** — `connections` and `network_imports` created in InsForge with RLS
+- **`/api/network/import`** — POST: full-replace import, logs to network_imports
+- **`/api/network/connections/[id]/notes`** — PUT: update notes
+- **`/api/network/connections/[id]/favorite`** — POST: toggle favorite
+- **`agent/suggest-contact.ts`** + **`/api/agent/suggest-contact`** — GPT-4o picks best contact from company connections
+- **`agent/linkedin-message.ts`** + **`/api/agent/linkedin-message`** — GPT-4o generates personalised connection request
+- **`/network` page** with 6 tabs: Connections, Recruiters, Companies, Favorites, Notes, Import History
+- **`NetworkBadge`** — shown on job cards in `JobsTable` when user has connections at that company
+- **`OpportunityScore`** — shown on job detail right sidebar (match_score + network bonus ≤25, capped 100)
+- **`ContactSuggestion`** — lazy AI card on job detail right sidebar
+- **`LinkedInMessage`** — lazy AI card on job detail right sidebar
+- **Navbar** — Network added as 4th nav item
 
 ## Decisions made
 
-- **Use WebP for homepage preview images** — the PNG files were being served correctly by the server, but browser HTTP cache was stuck on old versions. Switching to WebP files gave new URLs that bypassed all cached responses. The PNGs (`onboarding-*.png`) are still in `public/images/` but unused.
-- **`allowed_redirect_urls` must use exact `/auth/callback` paths** — InsForge does exact URL matching, not prefix matching. Having just `https://devjob.info` was not sufficient; `https://devjob.info/auth/callback` was required. Same applies to all environments including localhost.
-
-## Problems solved
-
-- **Homepage images not updating despite `rm -rf .next/cache/images`** — The Next.js server was regenerating correctly, but the browser's HTTP disk cache was serving stale `/_next/image` responses. Hard refresh (`Cmd+Shift+R`) was insufficient. Solved permanently by switching to new WebP filenames (new URLs bypass all caches).
-- **Google OAuth failing on devjob.info and localhost** — `insforge.toml` had `https://devjob.info` without the path; the app sends `redirect_uri=https://devjob.info/auth/callback`. Fixed by adding full path to all allowed URLs and running config apply.
+- **No companies table** — companies derived by `GROUP BY company` at query time
+- **Exact match, case-insensitive** — company-to-job linking via trimmed lowercase string comparison
+- **Full replace on re-import** — all previous connections deleted; notes/favorites lost on re-import
+- **Opportunity Score not stored** — computed at render from `match_score + connections[]`
+- **Recruiter auto-detected** from position keywords (recruiter, talent acquisition, headhunter, TA, HR, hiring manager)
+- **Manager auto-detected** from position keywords (manager, director, VP, head of, CTO, etc.)
 
 ## Current state
 
-- **devjob.info** — auth working, new DeveloperJobs branding live
-- **localhost:3000** — auth working, homepage images now show correctly via WebP
-- **Large uncommitted diff** — the full DeveloperJobs rebrand (logo swap, metadata, package name, component text) plus the WebP image swap and insforge.toml fix are all unstaged. Nothing has been committed this session.
-- **Resend sender domain** — still not verified. Emails not working in production. Deferred from last session.
+- Build passes, TypeScript clean
+- All 6 routes and all components compiled successfully
+- Feature is wired end-to-end but not yet tested in browser
+- Two small pre-existing uncommitted changes: `.design-sync/compiled.css` and `JobsTable.tsx` default status filter (now `"saved"`)
 
 ## Next session starts with
 
-Commit all pending changes in one or two logical commits:
-1. **Rebrand commit** — all `components/`, `app/`, `lib/`, `public/` logo/branding changes + `package.json` name + deleted `jobpilot-*.svg` + new `developerjobs-*.svg`
-2. **Infra/images commit** — `insforge.toml` (auth redirect fix), `public/images/onboarding-*.webp` (new files), updated image references in `Hero.tsx`, `HowItWorks.tsx`, `Features.tsx`
+1. Commit the network feature (staged separately from the pre-existing changes)
+2. Test the import flow in browser: upload a real `Connections.csv`, verify preview modal, confirm import
+3. Verify NetworkBadge appears on job cards for matched companies
+4. Verify OpportunityScore, ContactSuggestion, LinkedInMessage on job details page
+5. (Optional) Delete old `onboarding-*.png` files that are unused since WebP switch
 
 ## Open questions
 
-- Should the old `onboarding-*.png` files be deleted from `public/images/` now that WebP versions are in use?
-- Resend sender domain verification — decide whether to verify a `devjob.info` sender address with Resend so production emails work.
-- The `[deployments] subdomain = "findjob"` in `insforge.toml` — should this be updated to `developerjobs` or similar?
+- Resend sender domain verification for production emails — still pending from last session
+- `insforge.toml` subdomain still `"findjob"` — update to something current?
+- Should re-import warn the user before wiping notes/favorites if they have any set?

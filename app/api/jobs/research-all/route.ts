@@ -15,7 +15,8 @@ export async function POST() {
   const { data: jobs, error: jobsError } = await insforge.database
     .from("jobs")
     .select("id, company")
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .is("company_research", null);
 
   if (jobsError) {
     return NextResponse.json({ error: "Failed to load jobs." }, { status: 500 });

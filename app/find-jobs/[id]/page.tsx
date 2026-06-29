@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { formatDateAgo, computeSkillYears } from "@/lib/utils";
 import { SalaryDisplay } from "@/components/find-jobs/SalaryDisplay";
-import type { Profile } from "@/types";
+import type { Profile, Connection } from "@/types";
 import { Navbar } from "@/components/layout/Navbar";
 import { ResearchButton } from "@/components/find-jobs/ResearchButton";
 import { CoverLetterSection } from "@/components/find-jobs/CoverLetterSection";
@@ -12,6 +12,8 @@ import { StatusBadge } from "@/components/find-jobs/StatusBadge";
 import { RescoreButton } from "@/components/find-jobs/RescoreButton";
 import { RegenerateDescriptionButton } from "@/components/find-jobs/RegenerateDescriptionButton";
 import type { JobStatus } from "@/components/find-jobs/StatusBadge";
+import { ContactSuggestion } from "@/components/network/ContactSuggestion";
+import { getConnectionsForCompany, buildConnectionMap } from "@/lib/network-utils";
 
 type ContactInfo = {
   name: string | null;
@@ -121,11 +123,23 @@ export default async function JobDetailsPage({
   if (error || !data) notFound();
   const job = data as Job;
 
-  const { data: profileData } = await insforge.database
-    .from("profiles")
-    .select("work_experience, avatar_url, is_admin")
-    .eq("id", user.id)
-    .maybeSingle();
+  const [profileResult, connectionsResult] = await Promise.allSettled([
+    insforge.database
+      .from("profiles")
+      .select("work_experience, avatar_url, is_admin")
+      .eq("id", user.id)
+      .maybeSingle(),
+    insforge.database
+      .from("connections")
+      .select("*")
+      .eq("user_id", user.id),
+  ]);
+
+  const profileData = profileResult.status === "fulfilled" ? profileResult.value.data : null;
+  const allConnections: Connection[] =
+    connectionsResult.status === "fulfilled" ? (connectionsResult.value.data ?? []) : [];
+  const connectionMap = buildConnectionMap(allConnections);
+  const jobConnections = getConnectionsForCompany(job.company, connectionMap);
 
   const skillYears = computeSkillYears(
     (profileData as Pick<Profile, "work_experience"> | null)?.work_experience,
@@ -318,6 +332,9 @@ export default async function JobDetailsPage({
                   {job.company_research ? (
                     <CompanyDossierDisplay
                       dossier={job.company_research as unknown as CompanyDossier}
+                      connections={jobConnections}
+                      company={job.company}
+                      jobTitle={job.title}
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center py-10 gap-3">
@@ -406,6 +423,8 @@ export default async function JobDetailsPage({
                 </div>
               )}
 
+
+
             </div>
           </div>
         </div>
@@ -480,7 +499,9 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-function CompanyDossierDisplay({ dossier }: { dossier: CompanyDossier }) {
+function CompanyDossierDisplay({ dossier, connections = [], company = "", jobTitle = "" }: { dossier: CompanyDossier; connections?: import("@/types").Connection[]; company?: string; jobTitle?: string }) {
+  const count = connections.length;
+
   return (
     <div className="flex flex-col gap-4">
 
@@ -493,6 +514,10 @@ function CompanyDossierDisplay({ dossier }: { dossier: CompanyDossier }) {
           </div>
           <p className="text-sm text-text-secondary leading-relaxed">{dossier.companyOverview}</p>
         </div>
+      )}
+
+      {count > 0 && (
+        <ContactSuggestion jobTitle={jobTitle} company={company} connections={connections} />
       )}
 
       {/* Address & Contact Info */}
@@ -702,6 +727,19 @@ function ContactRow({ label, value, suffix, href }: { label: string; value: stri
 }
 
 // ── Icons ──────────────────────────────────────────────────────────────
+
+function NetworkIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden className="shrink-0">
+      <circle cx="7.5" cy="4.5" r="2.25" fill="currentColor" />
+      <circle cx="2.5" cy="9" r="1.75" fill="currentColor" opacity="0.7" />
+      <circle cx="12.5" cy="9" r="1.75" fill="currentColor" opacity="0.7" />
+      <path d="M1 14c0-1.1.67-2 1.5-2s1.5.9 1.5 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.7" />
+      <path d="M14 14c0-1.1-.67-2-1.5-2S11 12.9 11 14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" opacity="0.7" />
+      <path d="M5 14c0-1.38 1.12-2.5 2.5-2.5S10 12.62 10 14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 function ChevronLeftIcon({ className }: { className?: string }) {
   return (

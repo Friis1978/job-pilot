@@ -9,6 +9,8 @@ import type { JobRow } from "@/types";
 import { StatusBadge } from "@/components/find-jobs/StatusBadge";
 import type { JobStatus } from "@/components/find-jobs/StatusBadge";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { NetworkBadge } from "@/components/network/NetworkBadge";
+import type { Connection } from "@/types";
 
 export type { JobRow };
 
@@ -43,7 +45,7 @@ function getBarColor(score: number): string {
   return "bg-warning";
 }
 
-export function JobsTable({ jobs }: { jobs: JobRow[] }) {
+export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connectionMap?: Record<string, Connection[]> }) {
   const router = useRouter();
   const [filter, setFilter] = useState<FilterOption>("all");
   const [sortCol, setSortCol] = useState<SortCol>("match_score");
@@ -53,7 +55,7 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("saved");
   const [showNoFit, setShowNoFit] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterDropdownStyle, setFilterDropdownStyle] = useState<React.CSSProperties>({});
@@ -406,19 +408,32 @@ export function JobsTable({ jobs }: { jobs: JobRow[] }) {
                     className={`group hover:bg-surface-secondary transition-colors cursor-pointer${index < paginated.length - 1 ? " border-b border-border" : ""}`}
                   >
                     <td className="px-3 md:px-6 py-4 max-w-0">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="hidden md:flex shrink-0 w-9 h-9 bg-surface-secondary border border-border rounded-lg items-center justify-center">
-                          <BuildingIcon className="w-5 h-5 text-text-muted" />
-                        </div>
-                        <div className="flex flex-col gap-1 min-w-0">
-                          <Tooltip content={job.company}>
-                            <span className="text-sm font-semibold text-text-primary truncate block">
-                              {job.company}
-                            </span>
-                          </Tooltip>
-                          <SourceBadge source={job.source} />
-                        </div>
-                      </div>
+                      {(() => {
+                        const jobConnections = connectionMap[job.company.toLowerCase().trim()] ?? [];
+                        return (
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="relative hidden md:flex shrink-0 w-9 h-9 bg-surface-secondary border border-border rounded-lg items-center justify-center">
+                              <BuildingIcon className="w-5 h-5 text-text-muted" />
+                              {jobConnections.length > 0 && (
+                                <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-linkedin text-linkedin-foreground text-[9px] font-bold leading-none">
+                                  {jobConnections.length}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex flex-col gap-1 min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <Tooltip content={job.company}>
+                                  <span className="text-sm font-semibold text-text-primary truncate block">
+                                    {job.company}
+                                  </span>
+                                </Tooltip>
+                                <NetworkBadge connections={jobConnections} />
+                              </div>
+                              <SourceBadge source={job.source} />
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 md:px-6 py-4 max-w-0">
                       <Tooltip content={job.title}>

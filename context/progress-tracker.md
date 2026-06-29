@@ -53,6 +53,15 @@ Update this file after every completed feature. Any AI agent reading this should
 - [x] 20 Application Status Tracking
 - [ ] 21 Scheduled Job Alert Emails
 
+### Phase 7 — Network Intelligence
+
+- [x] 22 LinkedIn CSV Import (parse, preview, full-replace import, import history)
+- [x] 23 Network Page (`/network`) — Connections, Recruiters, Companies, Favorites, Notes, Import History tabs
+- [x] 24 Network Badge on job cards (connection count + recruiter indicator)
+- [x] 25 Opportunity Score on job details (match_score + network bonus, capped 100)
+- [x] 26 AI: Best Contact Suggestion (`/api/agent/suggest-contact`)
+- [x] 27 AI: LinkedIn Message Generator (`/api/agent/linkedin-message`)
+
 ---
 
 ## Decisions Made During Build

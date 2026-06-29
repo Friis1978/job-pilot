@@ -113,6 +113,38 @@ After building any component — update this file with the component name, file 
 **Last updated:** 2026-06-13
 **Pattern:** Client component (`"use client"`). Props: `{ jobId: string; companyName: string; hasResearch: boolean }`. Button: `flex items-center gap-2 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium transition-colors hover:bg-accent-dark disabled:opacity-60 disabled:cursor-not-allowed`. Icon swaps: `DocumentIcon` → `SpinnerIcon` (`w-4 h-4 animate-spin`) while loading. Text: "Download Tailored Resume" → "Generating...". On success: triggers file download via `URL.createObjectURL(blob)` + temporary `<a>` element. Filename pattern: `resume-{company-slug}.pdf`. Optional tip text below: `text-xs text-text-muted` when `!hasResearch`.
 
+### NetworkBadge
+**File:** `components/network/NetworkBadge.tsx`
+**Pattern:** Inline badge, `inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium`. Two color variants: recruiter (`bg-linkedin-light text-linkedin`), default (`bg-info-lightest text-info-foreground`). Shows connection count and recruiter flag. Returns null when no connections.
+
+### NetworkTabs
+**File:** `components/network/NetworkTabs.tsx`
+**Pattern:** Client component. Tab bar uses `bg-surface border border-border rounded-xl p-1` pill container. Active tab: `bg-accent text-accent-foreground`. Inactive: `text-text-secondary hover:text-text-primary`. Count badge on each tab. Import button in top-right.
+
+### ConnectionsTable
+**File:** `components/network/ConnectionsTable.tsx`
+**Pattern:** Client component. Searchable + paginated table. `bg-surface border border-border rounded-2xl overflow-hidden shadow-sm`. Avatar initials: `w-8 h-8 rounded-full bg-accent-light text-accent`. Inline note editing (click to activate input). Favorite star toggle (optimistic update). RoleBadge: recruiter (`bg-linkedin-light text-linkedin`), manager (`bg-accent-light text-accent`).
+
+### CompaniesView
+**File:** `components/network/CompaniesView.tsx`
+**Pattern:** Derives company groups from connections via `GROUP BY company`. Strength bar: 3 segments (`h-1.5 w-5 rounded-full`), colors: none=`bg-border`, weak=`bg-warning`, moderate=`bg-info`, strong=`bg-success`.
+
+### OpportunityScore
+**File:** `components/network/OpportunityScore.tsx`
+**Pattern:** Card: `bg-surface border border-border rounded-2xl p-6 shadow-sm`. Score as large number (`text-4xl font-semibold`), progress bar, strength label, connection detail. Formula: match_score + network bonus (≤25), capped 100.
+
+### ContactSuggestion
+**File:** `components/network/ContactSuggestion.tsx`
+**Pattern:** Client component, lazy trigger ("Suggest" button). Shows avatar initials, name, position, LinkedIn link, AI reasoning. GPT-4o via `/api/agent/suggest-contact`.
+
+### LinkedInMessage
+**File:** `components/network/LinkedInMessage.tsx`
+**Pattern:** Client component, lazy trigger ("Generate" button). Shows message in `bg-surface-secondary border border-border-light rounded-lg p-4`. Copy to clipboard. Character count. GPT-4o via `/api/agent/linkedin-message`.
+
+### ImportPreview (modal)
+**File:** `components/network/ImportPreview.tsx`
+**Pattern:** Portal modal. Backdrop `bg-overlay/40`. Modal `bg-surface border border-border rounded-2xl shadow-xl max-w-2xl`. Stats grid (4 cols), preview table (first 5 rows), warning text about full replace. Confirm button triggers POST to `/api/network/import`.
+
 ### Toaster (UI Infrastructure)
 **File:** `components/ui/Toaster.tsx`
 **Last updated:** 2026-06-13

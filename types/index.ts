@@ -158,3 +158,27 @@ export type ProfileFormInput = {
   careerVision: string;
   spokenLanguages: { language: string; level: string }[];
 };
+
+export type Connection = {
+  id: string;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  linkedin_url: string | null;
+  email: string | null;
+  company: string;
+  position: string;
+  connected_on: string | null;
+  is_favorite: boolean;
+  notes: string | null;
+  imported_at: string;
+  created_at: string;
+};
+
+export type NetworkImport = {
+  id: string;
+  user_id: string;
+  imported_at: string;
+  connection_count: number;
+  file_name: string | null;
+};
