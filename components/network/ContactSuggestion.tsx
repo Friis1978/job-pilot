@@ -109,7 +109,7 @@ export function ContactSuggestion({ jobTitle, company, connections }: Props) {
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-      <p className="text-base font-semibold text-text-primary">Best contact to reach out</p>
+      <p className="text-base font-semibold text-text-primary">Select contact to reach out to</p>
       <p className="text-sm text-text-muted mt-0.5 mb-4">
         {connections.length} {connections.length === 1 ? "contact" : "contacts"} in {company}
       </p>
