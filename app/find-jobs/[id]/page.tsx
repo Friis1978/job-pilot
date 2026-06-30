@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createInsforgeServer } from "@/lib/insforge-server";
-import { formatDateAgo, computeSkillYears } from "@/lib/utils";
+import { formatDateAgo, computeSkillYears, shortenLocation } from "@/lib/utils";
 import { SalaryDisplay } from "@/components/find-jobs/SalaryDisplay";
 import type { Profile, Connection } from "@/types";
 import { Navbar } from "@/components/layout/Navbar";
@@ -182,7 +182,7 @@ export default async function JobDetailsPage({
                   <h1 className="text-xl font-bold text-text-primary leading-tight">{job.title}</h1>
                   <p className="mt-0.5 text-sm text-text-secondary">
                     {job.company}
-                    {job.location && <> &middot; {job.location}</>}
+                    {job.location && <> &middot; {shortenLocation(job.location)}</>}
                     {job.job_type && <> &middot; {formatJobType(job.job_type)}</>}
                   </p>
                   {(job.matched_skills?.length ?? 0) > 0 && (
@@ -318,6 +318,21 @@ export default async function JobDetailsPage({
                 </div>
               )}
 
+              {/* Contacts to Reach Out To */}
+              {jobConnections.length > 0 && (
+                <div className="bg-surface border border-border rounded-2xl shadow-sm overflow-hidden">
+                  <div className="flex items-center gap-3 px-6 py-5 border-b border-border">
+                    <NetworkIcon className="w-5 h-5 text-text-muted shrink-0" />
+                    <h2 className="flex-1 text-base font-semibold text-text-primary">
+                      Contacts to reach out to
+                    </h2>
+                  </div>
+                  <div className="bg-surface-tertiary p-5">
+                    <ContactSuggestion jobTitle={job.title} company={job.company} connections={jobConnections} />
+                  </div>
+                </div>
+              )}
+
               {/* Company Research */}
               <div className="bg-surface border border-border rounded-2xl shadow-sm overflow-hidden">
                 <div className="flex items-center gap-3 px-6 py-5 border-b border-border">
@@ -332,9 +347,6 @@ export default async function JobDetailsPage({
                   {job.company_research ? (
                     <CompanyDossierDisplay
                       dossier={job.company_research as unknown as CompanyDossier}
-                      connections={jobConnections}
-                      company={job.company}
-                      jobTitle={job.title}
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center py-10 gap-3">
@@ -499,9 +511,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-function CompanyDossierDisplay({ dossier, connections = [], company = "", jobTitle = "" }: { dossier: CompanyDossier; connections?: import("@/types").Connection[]; company?: string; jobTitle?: string }) {
-  const count = connections.length;
-
+function CompanyDossierDisplay({ dossier }: { dossier: CompanyDossier }) {
   return (
     <div className="flex flex-col gap-4">
 
@@ -514,10 +524,6 @@ function CompanyDossierDisplay({ dossier, connections = [], company = "", jobTit
           </div>
           <p className="text-sm text-text-secondary leading-relaxed">{dossier.companyOverview}</p>
         </div>
-      )}
-
-      {count > 0 && (
-        <ContactSuggestion jobTitle={jobTitle} company={company} connections={connections} />
       )}
 
       {/* Address & Contact Info */}
@@ -728,9 +734,9 @@ function ContactRow({ label, value, suffix, href }: { label: string; value: stri
 
 // ── Icons ──────────────────────────────────────────────────────────────
 
-function NetworkIcon() {
+function NetworkIcon({ className }: { className?: string }) {
   return (
-    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden className="shrink-0">
+    <svg viewBox="0 0 15 15" fill="none" aria-hidden className={className ?? "shrink-0"}>
       <circle cx="7.5" cy="4.5" r="2.25" fill="currentColor" />
       <circle cx="2.5" cy="9" r="1.75" fill="currentColor" opacity="0.7" />
       <circle cx="12.5" cy="9" r="1.75" fill="currentColor" opacity="0.7" />

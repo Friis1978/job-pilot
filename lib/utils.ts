@@ -55,6 +55,73 @@ const LOCATION_TO_ENGLISH: Record<string, string> = {
   "danmark":      "Denmark",
 };
 
+const CITY_COUNTRY_DEFAULTS: Record<string, string> = {
+  "Copenhagen":    "Denmark",
+  "Aarhus":        "Denmark",
+  "Odense":        "Denmark",
+  "Aalborg":       "Denmark",
+  "Frederiksberg": "Denmark",
+  "Roskilde":      "Denmark",
+  "Kolding":       "Denmark",
+  "Esbjerg":       "Denmark",
+  "Elsinore":      "Denmark",
+  "Helsingør":     "Denmark",
+};
+
+const CITY_SUFFIXES = [
+  " Metropolitan Area",
+  " Metro Area",
+  " Municipality",
+  " County",
+  " Province",
+  " District",
+  " Region",
+];
+
+const CITY_PREFIXES = ["Greater ", "City of "];
+
+const REGION_SEGMENT = /\b(region|municipality|metropolitan|metro|capital|prefecture|area)\b/i;
+
+/**
+ * Collapses verbose location strings to "City, Country" form.
+ * Strips geographic suffixes/prefixes ("Metropolitan Area", "Municipality", etc.),
+ * drops intermediate region segments, and normalises city names to English.
+ * Examples:
+ *   "Copenhagen Municipality, Capital Region of Denmark, Denmark" → "Copenhagen, Denmark"
+ *   "Copenhagen Metropolitan Area" → "Copenhagen"
+ *   "København, Denmark" → "Copenhagen, Denmark"
+ */
+export function shortenLocation(location: string | null | undefined): string | null {
+  if (!location) return location ?? null;
+
+  const parts = location.split(",").map((p) => p.trim()).filter(Boolean);
+  if (!parts.length) return null;
+
+  let city = parts[0];
+
+  for (const suffix of CITY_SUFFIXES) {
+    if (city.toLowerCase().endsWith(suffix.toLowerCase())) {
+      city = city.slice(0, -suffix.length).trim();
+      break;
+    }
+  }
+  for (const prefix of CITY_PREFIXES) {
+    if (city.toLowerCase().startsWith(prefix.toLowerCase())) {
+      city = city.slice(prefix.length).trim();
+      break;
+    }
+  }
+
+  city = LOCATION_TO_ENGLISH[city.toLowerCase()] ?? city;
+
+  const last = parts.length > 1 ? parts[parts.length - 1] : null;
+  const country = (last && !REGION_SEGMENT.test(last) ? last : null)
+    ?? CITY_COUNTRY_DEFAULTS[city]
+    ?? null;
+
+  return country ? `${city}, ${country}` : city;
+}
+
 /**
  * Translates non-English location names to English.
  * Handles full strings like "København, Denmark" and partial matches within

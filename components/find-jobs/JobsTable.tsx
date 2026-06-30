@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { MATCH_THRESHOLD, formatDateAgo } from "@/lib/utils";
+import { MATCH_THRESHOLD, formatDateAgo, shortenLocation } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import type { JobRow } from "@/types";
 import { StatusBadge } from "@/components/find-jobs/StatusBadge";
@@ -371,17 +371,17 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
           </div>
         ) : (
           <>
-            <table className="w-full table-fixed">
+            <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
                   {(
                     [
                       { col: "company",     label: "Company",     width: "",        hide: "",                     pad: "px-3 md:px-6" },
-                      { col: "title",       label: "Role",        width: "",        hide: "",                     pad: "px-3 md:px-6" },
-                      { col: "location",    label: "Location",    width: "w-[14%]", hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
-                      { col: "match_score", label: "Match",       width: "w-[14%]", hide: "",                     pad: "pl-2 pr-3 md:px-6" },
-                      { col: "status",      label: "Status",      width: "w-[12%]", hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
-                      { col: "found_at",    label: "Date Found",  width: "w-[10%]", hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
+                      { col: "title",       label: "Role",        width: "w-full",  hide: "",                     pad: "px-3 md:px-6" },
+                      { col: "location",    label: "Location",    width: "w-36",    hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
+                      { col: "match_score", label: "Match",       width: "w-32",    hide: "",                     pad: "pl-2 pr-3 md:px-6" },
+                      { col: "status",      label: "Status",      width: "w-28",    hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
+                      { col: "found_at",    label: "Date Found",  width: "w-28",    hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
                     ] as Array<{ col: SortCol; label: string; width: string; hide: string; pad: string }>
                   ).map(({ col, label, width, hide, pad }) => (
                     <th
@@ -407,46 +407,34 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
                     onClick={() => router.push(`/find-jobs/${job.id}`)}
                     className={`group hover:bg-surface-secondary transition-colors cursor-pointer${index < paginated.length - 1 ? " border-b border-border" : ""}`}
                   >
-                    <td className="px-3 md:px-6 py-4 max-w-0">
+                    <td className="px-3 md:px-6 py-4 whitespace-nowrap">
                       {(() => {
                         const jobConnections = connectionMap[job.company.toLowerCase().trim()] ?? [];
                         return (
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="relative hidden md:flex shrink-0 w-9 h-9 bg-surface-secondary border border-border rounded-lg items-center justify-center">
-                              <BuildingIcon className="w-5 h-5 text-text-muted" />
-                              {jobConnections.length > 0 && (
-                                <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-linkedin text-linkedin-foreground text-[9px] font-bold leading-none">
-                                  {jobConnections.length}
-                                </span>
-                              )}
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-semibold text-text-primary">
+                                {job.company}
+                              </span>
+                              <NetworkBadge connections={jobConnections} />
                             </div>
-                            <div className="flex flex-col gap-1 min-w-0">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <Tooltip content={job.company}>
-                                  <span className="text-sm font-semibold text-text-primary truncate block">
-                                    {job.company}
-                                  </span>
-                                </Tooltip>
-                                <NetworkBadge connections={jobConnections} />
-                              </div>
-                              <SourceBadge source={job.source} />
-                            </div>
+                            <SourceBadge source={job.source} />
                           </div>
                         );
                       })()}
                     </td>
-                    <td className="px-3 md:px-6 py-4 max-w-0">
+                    <td className="px-3 md:px-6 py-4 w-full max-w-0">
                       <Tooltip content={job.title}>
                         <span className="text-sm text-text-primary truncate block">
                           {job.title}
                         </span>
                       </Tooltip>
                     </td>
-                    <td className="px-6 py-4 max-w-0 hidden md:table-cell">
+                    <td className="px-6 py-4 hidden md:table-cell">
                       {job.location ? (
                         <Tooltip content={job.location}>
                           <span className="text-sm text-text-muted truncate block">
-                            {job.location}
+                            {shortenLocation(job.location)}
                           </span>
                         </Tooltip>
                       ) : (
@@ -654,22 +642,6 @@ function ChevronDownIcon({ className }: { className?: string }) {
       strokeLinejoin="round"
     >
       <path d="M4 6l4 4 4-4" />
-    </svg>
-  );
-}
-
-function BuildingIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21V12h6v9" />
     </svg>
   );
 }

@@ -138,10 +138,10 @@ export function ContactSuggestion({ jobTitle, company, connections }: Props) {
                 <button
                   key={c.id}
                   onClick={() => handleSelect(c.id)}
-                  className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-xl border text-left transition-all ${
+                  className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
                     isSelected
-                      ? "border-accent bg-accent-light/20"
-                      : "border-border bg-surface-secondary hover:border-border-focus"
+                      ? "border-2 border-accent bg-accent-light/20"
+                      : "border border-border bg-surface-secondary hover:border-border-focus"
                   }`}
                 >
                   <div className="w-8 h-8 rounded-full bg-accent-light flex items-center justify-center text-xs font-semibold text-accent shrink-0 mt-0.5">
@@ -171,7 +171,7 @@ export function ContactSuggestion({ jobTitle, company, connections }: Props) {
                     <p className="text-xs text-text-secondary truncate">{c.position}</p>
                   </div>
                   {isSelected && (
-                    <CheckIcon className="w-4 h-4 text-accent shrink-0 mt-1" />
+                    <CheckIcon className="w-4 h-4 text-accent shrink-0 self-center" />
                   )}
                 </button>
               );
