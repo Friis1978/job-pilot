@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-import { createInsforgeServer } from "@/lib/insforge-server";
+import { createInsforgeServer, fetchAllConnections } from "@/lib/insforge-server";
 import { Navbar } from "@/components/layout/Navbar";
 import { NetworkTabs } from "@/components/network/NetworkTabs";
-import type { Connection, NetworkImport } from "@/types";
+import type { NetworkImport } from "@/types";
 
 export default async function NetworkPage() {
   const insforge = await createInsforgeServer();
@@ -11,12 +11,8 @@ export default async function NetworkPage() {
 
   const userMeta = user.metadata as { full_name?: string; name?: string; avatar_url?: string } | null;
 
-  const [connectionsResult, importsResult, profileResult] = await Promise.allSettled([
-    insforge.database
-      .from("connections")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("company", { ascending: true }),
+  const [connections, importsResult, profileResult] = await Promise.allSettled([
+    fetchAllConnections(insforge, user.id),
     insforge.database
       .from("network_imports")
       .select("*")
@@ -29,8 +25,7 @@ export default async function NetworkPage() {
       .maybeSingle(),
   ]);
 
-  const connections: Connection[] =
-    connectionsResult.status === "fulfilled" ? (connectionsResult.value.data ?? []) : [];
+  const allConnections = connections.status === "fulfilled" ? connections.value : [];
   const imports: NetworkImport[] =
     importsResult.status === "fulfilled" ? (importsResult.value.data ?? []) : [];
   const profileRow = profileResult.status === "fulfilled"
@@ -47,13 +42,13 @@ export default async function NetworkPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-semibold text-text-primary">Network</h1>
           <p className="text-sm text-text-secondary mt-1">
-            {connections.length > 0
-              ? `${connections.length} LinkedIn connections imported`
+            {allConnections.length > 0
+              ? `${allConnections.length} LinkedIn connections imported`
               : "Import your LinkedIn connections to see who you know at target companies."}
           </p>
         </div>
 
-        <NetworkTabs connections={connections} imports={imports} />
+        <NetworkTabs connections={allConnections} imports={imports} />
       </main>
     </div>
   );

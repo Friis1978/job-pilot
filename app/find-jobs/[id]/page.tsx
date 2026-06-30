@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { createInsforgeServer } from "@/lib/insforge-server";
+import { createInsforgeServer, fetchAllConnections } from "@/lib/insforge-server";
 import { formatDateAgo, computeSkillYears, shortenLocation } from "@/lib/utils";
 import { SalaryDisplay } from "@/components/find-jobs/SalaryDisplay";
 import type { Profile, Connection } from "@/types";
@@ -129,15 +129,12 @@ export default async function JobDetailsPage({
       .select("work_experience, avatar_url, is_admin")
       .eq("id", user.id)
       .maybeSingle(),
-    insforge.database
-      .from("connections")
-      .select("*")
-      .eq("user_id", user.id),
+    fetchAllConnections(insforge, user.id),
   ]);
 
   const profileData = profileResult.status === "fulfilled" ? profileResult.value.data : null;
   const allConnections: Connection[] =
-    connectionsResult.status === "fulfilled" ? (connectionsResult.value.data ?? []) : [];
+    connectionsResult.status === "fulfilled" ? connectionsResult.value : [];
   const connectionMap = buildConnectionMap(allConnections);
   const jobConnections = getConnectionsForCompany(job.company, connectionMap);
 

@@ -12,16 +12,16 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 export async function sendPendingEmail(to: string, name: string): Promise<void> {
   try {
     await resend.emails.send({
-      from: `DeveloperJobs <${FROM}>`,
+      from: `DevJobInfo <${FROM}>`,
       to,
-      subject: "Your DeveloperJobs account is pending approval",
+      subject: "Your DevJobInfo account is pending approval",
       html: `
         <p>Hi ${name},</p>
-        <p>Thanks for signing up to <strong>DeveloperJobs</strong>.</p>
+        <p>Thanks for signing up to <strong>DevJobInfo</strong>.</p>
         <p>Your account is currently <strong>pending admin approval</strong>. You'll receive an email as soon as you're approved and ready to go.</p>
         <p>We'll be in touch shortly.</p>
         <br />
-        <p>— The DeveloperJobs team</p>
+        <p>— The DevJobInfo team</p>
       `,
     });
   } catch (err) {
@@ -36,16 +36,16 @@ export async function sendPendingEmail(to: string, name: string): Promise<void> 
 export async function sendApprovedEmail(to: string, name: string): Promise<void> {
   try {
     await resend.emails.send({
-      from: `DeveloperJobs <${FROM}>`,
+      from: `DevJobInfo <${FROM}>`,
       to,
-      subject: "You're approved — welcome to DeveloperJobs",
+      subject: "You're approved — welcome to DevJobInfo",
       html: `
         <p>Hi ${name},</p>
-        <p>Great news — your <strong>DeveloperJobs</strong> account has been approved!</p>
+        <p>Great news — your <strong>DevJobInfo</strong> account has been approved!</p>
         <p>You can now log in and start finding jobs:</p>
-        <p><a href="${APP_URL}/auth/login" style="background:#18181b;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin:8px 0;">Log in to DeveloperJobs</a></p>
+        <p><a href="${APP_URL}/auth/login" style="background:#18181b;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;margin:8px 0;">Log in to DevJobInfo</a></p>
         <br />
-        <p>— The DeveloperJobs team</p>
+        <p>— The DevJobInfo team</p>
       `,
     });
   } catch (err) {
@@ -65,11 +65,11 @@ export async function sendAdminNotificationEmail(
   if (!adminEmail) return;
   try {
     await resend.emails.send({
-      from: `DeveloperJobs <${FROM}>`,
+      from: `DevJobInfo <${FROM}>`,
       to: adminEmail,
       subject: `New sign-up: ${newUserName || newUserEmail}`,
       html: `
-        <p>A new user has signed up to <strong>DeveloperJobs</strong> and is awaiting your approval.</p>
+        <p>A new user has signed up to <strong>DevJobInfo</strong> and is awaiting your approval.</p>
         <ul>
           <li><strong>Name:</strong> ${newUserName || "—"}</li>
           <li><strong>Email:</strong> ${newUserEmail}</li>

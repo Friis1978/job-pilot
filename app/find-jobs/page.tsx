@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createInsforgeServer } from "@/lib/insforge-server";
+import { createInsforgeServer, fetchAllConnections } from "@/lib/insforge-server";
 import { Navbar } from "@/components/layout/Navbar";
 import { SearchCard } from "@/components/find-jobs/SearchCard";
 import { JobsTable } from "@/components/find-jobs/JobsTable";
@@ -32,10 +32,7 @@ export default async function FindJobsPage() {
       .select("avatar_url, location, is_admin")
       .eq("id", user.id)
       .maybeSingle(),
-    insforge.database
-      .from("connections")
-      .select("id, first_name, last_name, company, position, is_favorite, linkedin_url, email, notes, connected_on, imported_at, created_at, user_id")
-      .eq("user_id", user.id),
+    fetchAllConnections(insforge, user.id, "id, first_name, last_name, company, position, is_favorite, linkedin_url, email, notes, connected_on, imported_at, created_at, user_id"),
   ]);
 
   const jobs =
@@ -64,8 +61,8 @@ export default async function FindJobsPage() {
     ? (profileResult.value.data as { avatar_url?: string | null; location?: string | null; is_admin?: boolean } | null)
     : null;
 
-  const connections: Connection[] =
-    connectionsResult.status === "fulfilled" ? (connectionsResult.value.data ?? []) : [];
+  const connections =
+    connectionsResult.status === "fulfilled" ? connectionsResult.value : [];
   const connectionMap = buildConnectionMap(connections);
 
   return (

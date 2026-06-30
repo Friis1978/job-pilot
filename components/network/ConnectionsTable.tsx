@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
 import type { Connection } from "@/types";
 import { isRecruiter, isManager } from "@/lib/network-utils";
+import { SortIcon } from "@/components/ui/SortIcon";
 
 type Props = {
   connections: Connection[];
@@ -122,9 +123,25 @@ function NotesCell({ connection }: { connection: Connection }) {
 
 const PAGE_SIZE = 25;
 
+type SortKey = "name" | "company" | "position";
+type SortDir = "asc" | "desc";
+
+
 export function ConnectionsTable({ connections }: Props) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+    setPage(1);
+  }
 
   const filtered = connections.filter((c) => {
     if (!search) return true;
@@ -137,8 +154,16 @@ export function ConnectionsTable({ connections }: Props) {
     );
   });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const sorted = [...filtered].sort((a, b) => {
+    let av = "", bv = "";
+    if (sortKey === "name") { av = `${a.first_name} ${a.last_name}`; bv = `${b.first_name} ${b.last_name}`; }
+    else if (sortKey === "company") { av = a.company; bv = b.company; }
+    else if (sortKey === "position") { av = a.position; bv = b.position; }
+    return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+  });
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="space-y-4">
@@ -148,7 +173,7 @@ export function ConnectionsTable({ connections }: Props) {
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           placeholder="Search by name, company, or position…"
-          className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:border-accent transition-colors"
+          className="flex-1 text-sm border-2 border-border rounded-lg px-3 py-2 bg-surface outline-none focus:border-accent transition-colors"
         />
         <span className="text-sm text-text-muted shrink-0">{filtered.length} connections</span>
       </div>
@@ -157,9 +182,21 @@ export function ConnectionsTable({ connections }: Props) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-secondary">
-              <th className="text-left px-4 py-3 text-xs font-medium text-text-secondary uppercase tracking-wide">Name</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-text-secondary uppercase tracking-wide">Company</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-text-secondary uppercase tracking-wide">Position</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-text-secondary uppercase tracking-wide">
+                <button onClick={() => handleSort("name")} className="flex items-center hover:text-text-primary transition-colors">
+                  Name <SortIcon active={sortKey === "name"} dir={sortDir} />
+                </button>
+              </th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-text-secondary uppercase tracking-wide">
+                <button onClick={() => handleSort("company")} className="flex items-center hover:text-text-primary transition-colors">
+                  Company <SortIcon active={sortKey === "company"} dir={sortDir} />
+                </button>
+              </th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-text-secondary uppercase tracking-wide">
+                <button onClick={() => handleSort("position")} className="flex items-center hover:text-text-primary transition-colors">
+                  Position <SortIcon active={sortKey === "position"} dir={sortDir} />
+                </button>
+              </th>
               <th className="text-left px-4 py-3 text-xs font-medium text-text-secondary uppercase tracking-wide">Notes</th>
               <th className="px-4 py-3" />
             </tr>

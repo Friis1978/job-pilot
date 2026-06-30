@@ -9,6 +9,7 @@ import type { JobRow } from "@/types";
 import { StatusBadge } from "@/components/find-jobs/StatusBadge";
 import type { JobStatus } from "@/components/find-jobs/StatusBadge";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { SortIcon } from "@/components/ui/SortIcon";
 import { NetworkBadge } from "@/components/network/NetworkBadge";
 import type { Connection } from "@/types";
 
@@ -585,18 +586,6 @@ function SourceBadge({ source }: { source: string }) {
   );
 }
 
-function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
-  return (
-    <span className={`inline-flex flex-col gap-[2px] ${active ? "text-text-primary" : "text-text-muted"}`}>
-      <svg width="7" height="4" viewBox="0 0 7 4" fill="currentColor" className={active && dir === "asc" ? "opacity-100" : "opacity-30"}>
-        <path d="M3.5 0L7 4H0L3.5 0Z" />
-      </svg>
-      <svg width="7" height="4" viewBox="0 0 7 4" fill="currentColor" className={active && dir === "desc" ? "opacity-100" : "opacity-30"}>
-        <path d="M3.5 4L0 0H7L3.5 4Z" />
-      </svg>
-    </span>
-  );
-}
 
 function FilterSearchIcon({ className }: { className?: string }) {
   return (
