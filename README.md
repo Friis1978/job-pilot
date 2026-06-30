@@ -1,6 +1,6 @@
-# Job Pilot
+# DevJobInfo
 
-An AI-powered job hunting assistant. Set up your profile once, then let the agent find relevant jobs, score them against your actual skills, research each company, and generate a tailored cover letter — all before you click Apply.
+An AI-powered job hunting assistant. Set up your profile once, then let the agent find relevant jobs, score them against your actual skills, research each company, generate a tailored cover letter, and tell you who in your network to reach out to — all before you click Apply.
 
 **Live:** [findjob.insforge.site](https://findjob.insforge.site)
 
@@ -8,17 +8,54 @@ An AI-powered job hunting assistant. Set up your profile once, then let the agen
 
 ---
 
+![Profile page](public/images/profile-2026-06-30.jpeg)
+
+---
+
 ## What it does
 
-- **Job discovery** — searches Adzuna, JobTech, Jooble, CareerJet, and Glassdoor in parallel for roles matching your title and location
-- **AI matching** — GPT-4o scores every job 0–100 against your profile and explains why it fits, with matched and missing skills highlighted
-- **Company research** — Browserbase + Stagehand autonomously browses the company's public website and builds a structured dossier: overview, tech stack, culture signals, why the role exists, and interview prep talking points
-- **Cover letter generation** — GPT-4o writes a personalised letter from your profile, the job description, and the company research; detects the job's language and writes in it (Danish, Swedish, Norwegian, German, Dutch, French, Spanish, English)
-- **Resume generation** — generates a clean PDF resume from your profile, or a job-tailored version for a specific role
-- **Resume extraction** — upload an existing PDF and GPT-4o pre-fills your profile fields from it
-- **Application pipeline** — track jobs through Saved → Applied → Interviewing → Offer
-- **Dashboard analytics** — PostHog-powered charts for jobs over time, match score distribution, and company research activity
-- **User approval gate** — new sign-ups are held in a pending state until an admin approves them; automated emails via Resend notify both the user and the admin
+### Find jobs that match your real skills
+
+Search by title and location across Adzuna, JobTech, Jooble, CareerJet, and Glassdoor simultaneously. GPT-4o scores every job 0–100 against your profile and explains exactly which skills match and which are missing — so you spend time on roles worth applying to.
+
+![Jobs list with match scores](public/images/jobs-2026-06-30.jpeg)
+
+### Research any company in one click
+
+Browserbase + Stagehand autonomously browses the company's public website and builds a structured dossier: business overview, tech stack, culture signals, why the role exists, and smart interview prep talking points. Falls back to GPT-4o synthesis if the site can't be reached.
+
+![Company research dossier](public/images/research-2026-06-30.jpeg)
+
+### AI cover letter and tailored resume
+
+One click generates a personalised cover letter using your profile, the job description, and the company research. The letter is always written in the detected language of the job posting (Danish, Swedish, Norwegian, German, Dutch, French, Spanish, English). Download as PDF or copy as plain text. Tailored resume PDFs are generated per role from the same source.
+
+### Network intelligence
+
+Import your LinkedIn connections once. DevJobInfo cross-references them against every job in your list so you always know when a warm intro is possible. For each job, the AI recommends the single best contact to reach out to and generates a ready-to-send, under-300-character LinkedIn message.
+
+![Network contacts and message generation](public/images/network-contacts-2026-06-30.jpeg)
+
+### Full application pipeline
+
+Move jobs through Saved → Applied → Interviewing → Offer. Dashboard analytics (PostHog-powered) show jobs over time, match score distribution, and company research activity.
+
+---
+
+## Feature summary
+
+| Feature | Details |
+|---|---|
+| Job discovery | Adzuna, JobTech, Jooble, CareerJet, Glassdoor searched in parallel |
+| AI scoring | GPT-4o scores 0–100 with matched + missing skills per job |
+| Company research | Browserbase live browsing → structured dossier with interview prep |
+| Cover letter | GPT-4o, language-detected, PDF + plain text download |
+| Tailored resume | Job-specific PDF generated per role |
+| Resume extraction | Upload existing PDF — GPT-4o pre-fills your profile |
+| Network intelligence | LinkedIn connection import, AI contact selection, message generation |
+| Application tracking | Saved → Applied → Interviewing → Offer pipeline |
+| Dashboard analytics | Charts for activity, scores, and research via PostHog |
+| User approval gate | Admin-controlled sign-up approval with Resend email notifications |
 
 ---
 
@@ -47,7 +84,8 @@ An AI-powered job hunting assistant. Set up your profile once, then let the agen
 /auth/login        Google + GitHub OAuth
 /dashboard         Stats, activity feed, analytics
 /find-jobs         Search + job list with filters
-/find-jobs/[id]    Job details, company research, cover letter, tailored resume
+/find-jobs/[id]    Job details, company research, cover letter, tailored resume, network contacts
+/network           LinkedIn connection import and management
 /profile           Profile builder, resume upload and generation
 /pending           Waiting-for-approval page (shown to unapproved users)
 /admin             Admin panel — approve or reject pending users
@@ -162,17 +200,20 @@ Open [http://localhost:3000](http://localhost:3000).
 │   ├── auth/                   # OAuth login + callback handler
 │   ├── dashboard/              # Stats, activity feed, analytics charts
 │   ├── find-jobs/              # Search form + job list + job details
+│   ├── network/                # LinkedIn connection import and management
 │   ├── profile/                # Profile builder + resume management
 │   ├── pending/                # Pending approval page
 │   ├── admin/                  # Admin panel (approve/reject users)
 │   └── api/                    # API routes (agent triggers, resume, jobs, admin)
 ├── actions/                    # Next.js Server Actions (profile save/update)
 ├── components/                 # UI components — no DB calls, no business logic
-│   ├── admin/                  # AdminUsersTable
+│   ├── network/                # ContactSuggestion, NetworkTabs, ConnectionsTable
+│   ├── find-jobs/              # JobsTable, JobDetail, CompanyDossierDisplay
+│   ├── dashboard/              # OnboardingDialog, analytics charts
 │   └── ...
 ├── lib/                        # Third-party client init + shared utilities
 │   ├── resend.ts               # Email functions (pending, approved, admin notification)
-│   └── ...
+│   └── utils.ts                # shortenLocation and other shared helpers
 ├── types/                      # Shared TypeScript types
 └── context/                    # Architecture docs and AI agent guidelines
 ```
@@ -204,6 +245,13 @@ See [`context/app-map.md`](context/app-map.md) for a full reference of every rou
 1. Upload an existing PDF on the Profile page — GPT-4o extracts your details and pre-fills the form
 2. Edit any field manually, then generate a clean PDF resume from your current profile
 3. From any job detail page, generate a job-tailored version optimised for that role
+
+### Network intelligence
+1. Go to the Network page and import your LinkedIn connections CSV (exported from LinkedIn Settings → Data Privacy)
+2. DevJobInfo parses and stores all connections, indexed by company
+3. On any job detail page, the **Contacts to reach out to** section shows which connections work at that company
+4. The AI selects the best contact (recruiter, hiring manager, or relevant colleague) and explains why
+5. Click **Generate message** to get a personalised, under-300-character LinkedIn outreach message
 
 ### User approval
 1. New user signs in via Google or GitHub OAuth
@@ -253,6 +301,7 @@ Remember to set all required environment variables in your InsForge deployment s
 - **Browserbase** is required for company research. Without it the agent falls back to GPT-4o synthesis only (no live browsing).
 - **Agent routes** (`/api/agent/*`) can run for up to 5 minutes. On short-timeout serverless platforms, max execution time may need to be increased.
 - **Job language detection** covers Danish, Swedish, Norwegian, German, Dutch, French, Spanish, and English. Letters are always written in the detected language of the job posting.
+- **LinkedIn CSV import** — export from LinkedIn → Settings → Data Privacy → Get a copy of your data → Connections. The CSV is parsed client-side; raw files are not stored.
 - **Adzuna** always searches with `category=it-jobs`. Change this in `lib/adzuna.ts` for non-tech roles.
 - **RLS** — all database queries are scoped to the authenticated user via InsForge Row Level Security. Never query without a `user_id` filter in application code.
 - **Approval cookie lifetime** — `jp_approved` is a 7-day httpOnly cookie. If an admin revokes a user's approval, they retain access until the cookie expires or they log out.
