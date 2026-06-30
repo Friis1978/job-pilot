@@ -7,19 +7,19 @@ type Feature = {
 
 const features: Feature[] = [
   {
-    title: "Understand your match score",
+    title: "Skills, experience, and seniority — all scored",
     description:
-      "See how your profile lines up with each role before you apply. Get a clear breakdown of what fits and what's missing.",
+      "Every job gets three separate scores so you can see exactly where you match and where you don't before spending an hour on an application.",
   },
   {
-    title: "AI-Powered Job Matching",
+    title: "Your profile powers everything",
     description:
-      "Stop guessing which jobs are worth applying to. DeveloperJobs scores every role against your actual skills so you focus on the ones that matter.",
+      "Add your work history, skills, and resume once. The AI uses it to score jobs, write cover letters, tailor your resume, and brief you on company fit — automatically.",
   },
   {
-    title: "Focus on the right roles",
+    title: "Gaps surfaced before the interview",
     description:
-      "Filter out low fit jobs and stay on the ones that actually matter. Spend less time sorting and more time applying.",
+      "See which skills are missing and get specific interview prep questions so you walk in knowing exactly what to address.",
   },
 ];
 
@@ -31,8 +31,8 @@ export function Features() {
           {/* Left — agent log screenshot */}
           <div className="flex items-center justify-center p-8 sm:p-10 lg:p-12">
             <Image
-              src="/images/onboarding-research.webp"
-              alt="DeveloperJobs match score and company research"
+              src="/images/research-2026-06-30.jpeg"
+              alt="DevJobInfo match score and company research"
               width={600}
               height={400}
               className="w-full h-auto"

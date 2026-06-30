@@ -1,34 +1,24 @@
 import Image from "next/image";
 
-type Feature = {
-  title: string;
-  description: string;
-};
-
-const features: Feature[] = [
+const features = [
   {
-    title: "Find jobs that actually fit",
+    title: "See who you know at every company",
     description:
-      "Search by title and location or paste a job URL. The AI scores every result against your real skills so you only spend time on roles worth applying to.",
+      "Import your LinkedIn connections once. DevJobInfo cross-references them against every job in your list so you always know when a warm intro is possible.",
   },
   {
-    title: "Research the company in one click",
+    title: "AI picks the best person to reach out to",
     description:
-      "Get a full dossier on any company — overview, tech stack, culture, smart interview questions, and your personal edge — all generated from public sources.",
+      "From all your contacts at a company, the AI recommends one — the recruiter, the hiring manager, or whoever is most relevant — and explains why.",
   },
   {
-    title: "AI writes your cover letter and tailored resume",
+    title: "A ready-to-send LinkedIn message in seconds",
     description:
-      "One click generates a cover letter and a customised resume PDF for the specific role. You review and download — no copy-pasting, no blank page.",
-  },
-  {
-    title: "Track every application in one place",
-    description:
-      "Move jobs through Saved, Applied, Interviewing, and Offer. Your full pipeline stays visible so nothing falls through the cracks.",
+      "One click generates a personalised, under-300-character outreach message for the chosen contact. Copy it straight into LinkedIn.",
   },
 ];
 
-export function HowItWorks() {
+export function Network() {
   return (
     <section className="w-full bg-background px-6">
       <div className="w-full max-w-300 mx-auto bg-surface-muted overflow-hidden">
@@ -36,9 +26,9 @@ export function HowItWorks() {
           {/* Left — text */}
           <div className="bg-surface px-8 py-12 sm:px-10 sm:py-16 lg:px-12 lg:py-20">
             <h2 className="font-bold text-text-primary text-3xl sm:text-4xl leading-tight">
-              Manage Your Job
+              Your Network,
               <br />
-              Search With Ease
+              Working For You
             </h2>
 
             <div className="mt-10 flex flex-col gap-7">
@@ -56,12 +46,12 @@ export function HowItWorks() {
             </div>
           </div>
 
-          {/* Right — jobs list screenshot */}
+          {/* Right — screenshot */}
           <div className="flex items-center justify-center p-8 sm:p-10 lg:p-12">
             <div className="overflow-hidden w-full">
               <Image
-                src="/images/jobs-2026-06-30.jpeg"
-                alt="Jobs list with match scores"
+                src="/images/network-contacts-2026-06-30.jpeg"
+                alt="AI-recommended contact and LinkedIn message generation"
                 width={800}
                 height={560}
                 className="w-full h-auto"

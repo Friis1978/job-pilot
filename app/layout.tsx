@@ -9,9 +9,9 @@ import { createInsforgeServer } from "@/lib/insforge-server";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "DeveloperJobs — AI-Powered Job Hunting Assistant",
+  title: "DevJobInfo — AI-Powered Job Hunting Assistant",
   description:
-    "DeveloperJobs finds the jobs, researches the companies, and gives you everything you need to stand out.",
+    "DevJobInfo finds the jobs, researches the companies, and gives you everything you need to stand out.",
 };
 
 export default async function RootLayout({

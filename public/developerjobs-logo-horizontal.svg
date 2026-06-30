@@ -19,6 +19,6 @@
 
   <!-- Wordmark -->
   <text x="200" y="118" font-family="Helvetica Neue, Arial, sans-serif" font-size="56" font-weight="700">
-    <tspan fill="#1E293B">Developer</tspan><tspan fill="#2563EB">Jobs</tspan>
+    <tspan fill="#1E293B">DevJob</tspan><tspan fill="#2563EB">Info</tspan>
   </text>
 </svg>

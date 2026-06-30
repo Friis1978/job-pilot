@@ -118,7 +118,7 @@ export default function LoginPage() {
           <div className="mb-8">
             <p className="text-sm text-text-secondary mb-1">Welcome to</p>
             <h2 className="text-[2rem] font-bold text-text-primary leading-tight">
-              DeveloperJobs
+              DevJobInfo
             </h2>
             <p className="text-sm text-text-secondary mt-3">
               Choose your preferred provider to continue.

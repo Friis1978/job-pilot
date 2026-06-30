@@ -10,8 +10,8 @@ const STEPS = [
     body: "Your profile is the foundation of everything — the AI uses it to score jobs, write cover letters, and tailor your resume to each role.",
     cta: "Head to Profile to add your experience, skills, and resume.",
     ctaHref: "/profile",
-    imageSrc: "/images/onboarding-profile.png",
-    imageAlt: "DeveloperJobs profile page",
+    imageSrc: "/images/profile-2026-06-30.jpeg",
+    imageAlt: "DevJobInfo profile page",
     imageWidth: 1280,
     imageHeight: 860,
   },
@@ -20,7 +20,7 @@ const STEPS = [
     body: "Enter a job title and location on the Find Jobs page. The AI searches multiple sources in parallel and scores every result against your profile.",
     cta: "Go to Find Jobs to run your first search.",
     ctaHref: "/find-jobs",
-    imageSrc: "/images/onboarding-jobs.png",
+    imageSrc: "/images/jobs-2026-06-30.jpeg",
     imageAlt: "Jobs list with match scores",
     imageWidth: 800,
     imageHeight: 560,
@@ -64,7 +64,7 @@ export function OnboardingDialog({ show }: { show: boolean }) {
               Step {step + 1} of {STEPS.length}
             </p>
             <h2 className="text-lg font-semibold text-text-primary">
-              {step === 0 ? "Welcome to DeveloperJobs" : "Next up"}
+              {step === 0 ? "Welcome to DevJobInfo" : "Next up"}
             </h2>
           </div>
           <button

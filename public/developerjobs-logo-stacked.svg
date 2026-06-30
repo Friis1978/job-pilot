@@ -19,7 +19,7 @@
 
   <!-- Wordmark -->
   <text text-anchor="middle" font-family="Helvetica Neue, Arial, sans-serif" font-weight="700">
-    <tspan x="160" y="290" font-size="46" fill="#1E293B">Developer</tspan>
-    <tspan x="160" y="348" font-size="46" fill="#2563EB">Jobs</tspan>
+    <tspan x="160" y="290" font-size="46" fill="#1E293B">DevJob</tspan>
+    <tspan x="160" y="348" font-size="46" fill="#2563EB">Info</tspan>
   </text>
 </svg>

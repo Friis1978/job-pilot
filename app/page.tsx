@@ -4,7 +4,7 @@ import { Footer } from "@/components/layout/Footer";
 import { Hero } from "@/components/homepage/Hero";
 import { HowItWorks } from "@/components/homepage/HowItWorks";
 import { Features } from "@/components/homepage/Features";
-import { Testimonial } from "@/components/homepage/Testimonial";
+import { Network } from "@/components/homepage/Network";
 import { BottomCTA } from "@/components/homepage/BottomCTA";
 
 export default async function HomePage() {
@@ -17,7 +17,7 @@ export default async function HomePage() {
       <Hero />
       <HowItWorks />
       <Features />
-      <Testimonial />
+      <Network />
       <BottomCTA />
       <Footer />
     </main>

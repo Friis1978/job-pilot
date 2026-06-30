@@ -7,14 +7,15 @@ export function Hero() {
       {/* Gradient card — rounded, text + CTAs only */}
       <div className="hero-gradient w-full max-w-300 mx-auto flex flex-col items-center text-center px-4 sm:px-8 pt-12 sm:pt-16 pb-10 sm:pb-14">
         <h1 className="font-bold text-text-primary max-w-2xl text-3xl sm:text-5xl leading-tight tracking-tight">
-          Job hunting is hard.
+          Find the jobs.
           <br />
-          Your tools shouldn&apos;t be.
+          Research the companies.
+          <br />
+          Land the role.
         </h1>
 
         <p className="mt-4 text-text-secondary text-sm max-w-sm leading-relaxed">
-          Stop applying blind. DeveloperJobs finds the jobs, researches the companies, and gives you
-          everything you need to stand out.
+          AI scores every role against your real skills, researches the company, writes your cover letter, and tells you who in your network to reach out to.
         </p>
 
         <div className="mt-8 flex w-full max-w-xl flex-col sm:flex-row items-center gap-3">
@@ -36,8 +37,8 @@ export function Hero() {
       {/* Dashboard preview — gray background, no rounded corners, separate section */}
       <div className="w-full max-w-300 mx-auto bg-surface-muted p-4 sm:p-10">
         <Image
-          src="/images/onboarding-profile.webp"
-          alt="DeveloperJobs profile page"
+          src="/images/profile-2026-06-30.jpeg"
+          alt="DevJobInfo profile page"
           width={1200}
           height={700}
           className="w-full h-auto"
