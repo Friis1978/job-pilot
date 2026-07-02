@@ -28,7 +28,7 @@ export function Toaster() {
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium max-w-sm pointer-events-auto ${
+          className={`flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg border-2 text-sm font-medium max-w-sm pointer-events-auto ${
             t.type === "error"
               ? "bg-surface border-error text-error"
               : t.type === "warning"
