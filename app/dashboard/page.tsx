@@ -123,7 +123,7 @@ export default async function DashboardPage() {
   })();
 
   const pipelineData = (() => {
-    const counts = { saved: 0, applied: 0, interviewing: 0, offer: 0, rejected: 0, no_fit: 0 };
+    const counts = { saved: 0, applied: 0, interviewing: 0, offer: 0, rejected: 0, rejected_after_interview: 0, no_fit: 0 };
     if (pipelineResult.status === "fulfilled" && pipelineResult.value.data) {
       for (const row of pipelineResult.value.data as { status: string }[]) {
         const s = row.status as keyof typeof counts;

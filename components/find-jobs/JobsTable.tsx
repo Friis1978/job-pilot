@@ -31,14 +31,20 @@ const FILTER_LABELS: Record<FilterOption, string> = {
 const FILTER_CYCLE: FilterOption[] = ["all", "high", "low"];
 
 const STATUS_FILTERS: Array<{ key: StatusFilter; label: string; dot: string }> = [
-  { key: "all",          label: "All",          dot: "" },
-  { key: "saved",        label: "Saved",        dot: "bg-border" },
-  { key: "applied",      label: "Applied",      dot: "bg-info" },
-  { key: "interviewing", label: "Interviewing", dot: "bg-accent" },
-  { key: "offer",        label: "Offer",        dot: "bg-success" },
-  { key: "rejected",     label: "Rejected",     dot: "bg-error" },
-  { key: "no_fit",       label: "No fit",       dot: "bg-warning" },
+  { key: "all",                      label: "All",                    dot: "" },
+  { key: "offer",                    label: "Offer",                  dot: "bg-success" },
+  { key: "interviewing",             label: "Interviewing",           dot: "bg-success/60" },
+  { key: "applied",                  label: "Applied",                dot: "bg-warning" },
+  { key: "rejected",                 label: "Rejected",               dot: "bg-error" },
+  { key: "rejected_after_interview", label: "Rej. after interview",   dot: "bg-error/70" },
+  { key: "saved",                    label: "Saved",                  dot: "bg-border" },
+  { key: "no_fit",                   label: "No fit",                 dot: "bg-text-muted" },
 ];
+
+const STATUS_ORDER: Record<string, number> = {
+  offer: 0, interviewing: 1, applied: 2,
+  rejected: 3, rejected_after_interview: 4, saved: 5, no_fit: 6,
+};
 
 function getBarColor(score: number): string {
   if (score >= 90) return "bg-success";
@@ -197,7 +203,7 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
       case "title":     return mul * a.title.localeCompare(b.title);
       case "location":  return mul * (a.location ?? "").localeCompare(b.location ?? "");
       case "match_score": return mul * (a.match_score - b.match_score);
-      case "status":    return mul * ((a.status ?? "saved").localeCompare(b.status ?? "saved"));
+      case "status":    return mul * ((STATUS_ORDER[a.status ?? "saved"] ?? 99) - (STATUS_ORDER[b.status ?? "saved"] ?? 99));
       case "found_at":  return mul * (new Date(a.found_at).getTime() - new Date(b.found_at).getTime());
       default:          return 0;
     }
@@ -321,7 +327,7 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
       )}
 
       {/* Status Filter Pills */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-2 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none" }}>
         {STATUS_FILTERS.map(({ key, label, dot }) => {
           const active = statusFilter === key;
           const count = key === "all"
@@ -332,7 +338,7 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
             <button
               key={key}
               onClick={() => handleStatusFilter(key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                 active
                   ? "bg-accent text-accent-foreground border-accent"
                   : "bg-surface border-border text-text-secondary hover:border-accent hover:text-accent"
@@ -381,7 +387,7 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
                       { col: "title",       label: "Role",        width: "w-full",  hide: "",                     pad: "px-3 md:px-6" },
                       { col: "location",    label: "Location",    width: "w-36",    hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
                       { col: "match_score", label: "Match",       width: "w-32",    hide: "",                     pad: "pl-2 pr-3 md:px-6" },
-                      { col: "status",      label: "Status",      width: "w-28",    hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
+                      { col: "status",      label: "Status",      width: "w-44",    hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
                       { col: "found_at",    label: "Date Found",  width: "w-28",    hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
                     ] as Array<{ col: SortCol; label: string; width: string; hide: string; pad: string }>
                   ).map(({ col, label, width, hide, pad }) => (

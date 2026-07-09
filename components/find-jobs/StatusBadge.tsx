@@ -5,15 +5,16 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
 
-export type JobStatus = "saved" | "applied" | "interviewing" | "offer" | "rejected" | "no_fit";
+export type JobStatus = "saved" | "applied" | "interviewing" | "offer" | "rejected" | "rejected_after_interview" | "no_fit";
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; pill: string }> = {
-  saved:        { label: "Saved",        pill: "bg-surface-secondary text-text-secondary border border-border" },
-  applied:      { label: "Applied",      pill: "bg-info-lightest text-info-foreground border border-info-light" },
-  interviewing: { label: "Interviewing", pill: "bg-accent-muted text-accent border border-accent-light" },
-  offer:        { label: "Offer",        pill: "bg-success-lightest text-success-foreground border border-success-light" },
-  rejected:     { label: "Rejected",     pill: "bg-surface-secondary text-error border border-border" },
-  no_fit:       { label: "No fit",       pill: "bg-warning/10 text-warning border border-warning/30" },
+  saved:                    { label: "Saved",                     pill: "bg-surface-secondary text-text-secondary border border-border" },
+  applied:                  { label: "Applied",                   pill: "bg-warning/10 text-warning border border-warning/30" },
+  interviewing:             { label: "Interviewing",              pill: "bg-success/15 text-success border border-success/30" },
+  offer:                    { label: "Offer",                     pill: "bg-success-lightest text-success-foreground border border-success-light" },
+  rejected:                 { label: "Rejected",                  pill: "bg-error/10 text-error border border-error/30" },
+  rejected_after_interview: { label: "Rejected after interview",  pill: "bg-error/10 text-error border border-error/30" },
+  no_fit:                   { label: "No fit",                    pill: "bg-text-muted/10 text-text-muted border border-text-muted/20" },
 };
 
 const ALL_STATUSES = Object.keys(STATUS_CONFIG) as JobStatus[];
@@ -109,7 +110,7 @@ export function StatusBadge({ jobId, status }: Props) {
         ref={buttonRef}
         onClick={handleOpen}
         disabled={saving}
-        className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${config.pill} disabled:opacity-60`}
+        className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${config.pill} disabled:opacity-60`}
       >
         {config.label}
         <ChevronIcon className="w-3 h-3 opacity-60" />
