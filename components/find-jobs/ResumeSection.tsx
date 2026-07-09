@@ -30,23 +30,25 @@ function renderInline(tokens: InlineToken[], keyBase: string) {
   });
 }
 type Block = { kind: "h1" | "h2" | "h3"; tokens: InlineToken[] } | { kind: "paragraph"; tokens: InlineToken[] } | { kind: "bullet"; items: InlineToken[][] };
+function pushMixed(blocks: Block[], lines: string[]) {
+  if (!lines.length) return;
+  const isBullet = (l: string) => l.startsWith("- ") || l.startsWith("* ");
+  if (lines.every(isBullet)) { blocks.push({ kind: "bullet", items: lines.map((l) => parseInline(l.replace(/^[-*] /, ""))) }); return; }
+  if (!lines.some(isBullet)) { blocks.push({ kind: "paragraph", tokens: parseInline(lines.join(" ")) }); return; }
+  let paraAcc: string[] = [], bulletAcc: string[] = [];
+  const flush = () => { if (paraAcc.length) { blocks.push({ kind: "paragraph", tokens: parseInline(paraAcc.join(" ")) }); paraAcc = []; } if (bulletAcc.length) { blocks.push({ kind: "bullet", items: bulletAcc.map((l) => parseInline(l.replace(/^[-*] /, ""))) }); bulletAcc = []; } };
+  for (const line of lines) { if (isBullet(line)) { if (paraAcc.length) flush(); bulletAcc.push(line); } else { if (bulletAcc.length) flush(); paraAcc.push(line); } }
+  flush();
+}
 function parseBlocks(text: string): Block[] {
   const blocks: Block[] = [];
   for (const raw of text.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean)) {
     const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
     if (!lines.length) continue;
-    if (lines[0].startsWith("### ")) { blocks.push({ kind: "h3", tokens: parseInline(lines[0].slice(4)) }); if (lines.length > 1) blocks.push({ kind: "paragraph", tokens: parseInline(lines.slice(1).join(" ")) }); continue; }
-    if (lines[0].startsWith("## "))  { blocks.push({ kind: "h2", tokens: parseInline(lines[0].slice(3)) }); if (lines.length > 1) blocks.push({ kind: "paragraph", tokens: parseInline(lines.slice(1).join(" ")) }); continue; }
-    if (lines[0].startsWith("# "))   { blocks.push({ kind: "h1", tokens: parseInline(lines[0].slice(2)) }); if (lines.length > 1) blocks.push({ kind: "paragraph", tokens: parseInline(lines.slice(1).join(" ")) }); continue; }
-    const isBullet = (l: string) => l.startsWith("- ") || l.startsWith("* ");
-    if (lines.every(isBullet)) { blocks.push({ kind: "bullet", items: lines.map((l) => parseInline(l.replace(/^[-*] /, ""))) }); continue; }
-    if (lines.some(isBullet)) {
-      let paraAcc: string[] = [], bulletAcc: string[] = [];
-      const flush = () => { if (paraAcc.length) { blocks.push({ kind: "paragraph", tokens: parseInline(paraAcc.join(" ")) }); paraAcc = []; } if (bulletAcc.length) { blocks.push({ kind: "bullet", items: bulletAcc.map((l) => parseInline(l.replace(/^[-*] /, ""))) }); bulletAcc = []; } };
-      for (const line of lines) { if (isBullet(line)) { if (paraAcc.length) flush(); bulletAcc.push(line); } else { if (bulletAcc.length) flush(); paraAcc.push(line); } }
-      flush(); continue;
-    }
-    blocks.push({ kind: "paragraph", tokens: parseInline(lines.join(" ")) });
+    if (lines[0].startsWith("### ")) { blocks.push({ kind: "h3", tokens: parseInline(lines[0].slice(4)) }); pushMixed(blocks, lines.slice(1)); continue; }
+    if (lines[0].startsWith("## "))  { blocks.push({ kind: "h2", tokens: parseInline(lines[0].slice(3)) }); pushMixed(blocks, lines.slice(1)); continue; }
+    if (lines[0].startsWith("# "))   { blocks.push({ kind: "h1", tokens: parseInline(lines[0].slice(2)) }); pushMixed(blocks, lines.slice(1)); continue; }
+    pushMixed(blocks, lines);
   }
   return blocks;
 }

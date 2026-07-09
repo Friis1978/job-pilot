@@ -61,22 +61,43 @@ type GeneratedContent = {
   }[];
 };
 
-function generatedToText(g: GeneratedContent): string {
+const SECTION_HEADERS: Record<string, { summary: string; experience: string; reference: string; present: string }> = {
+  da: { summary: "Professionel Profil", experience: "Erhvervserfaring", reference: "Reference", present: "Nu" },
+  sv: { summary: "Professionell Profil", experience: "Arbetslivserfarenhet", reference: "Referens", present: "Nu" },
+  no: { summary: "Profesjonell Profil", experience: "Arbeidserfaring", reference: "Referanse", present: "Nå" },
+  de: { summary: "Berufliches Profil", experience: "Berufserfahrung", reference: "Referenz", present: "Heute" },
+  nl: { summary: "Professioneel Profiel", experience: "Werkervaring", reference: "Referentie", present: "Heden" },
+  fr: { summary: "Profil Professionnel", experience: "Expérience Professionnelle", reference: "Référence", present: "Aujourd'hui" },
+  es: { summary: "Perfil Profesional", experience: "Experiencia Profesional", reference: "Referencia", present: "Actualidad" },
+  en: { summary: "Professional Summary", experience: "Work Experience", reference: "Reference", present: "Present" },
+};
+
+type ProfileWorkExp = { company: string; reference?: { name: string; title: string; phone: string; linkedinUrl: string } | null } | null;
+
+function generatedToText(g: GeneratedContent, lang = "en", profileWorkExp: ProfileWorkExp[] = []): string {
+  const h = SECTION_HEADERS[lang] ?? SECTION_HEADERS.en;
   const sections: string[] = [];
 
   if (g.summary) {
-    sections.push(`## Professional Summary\n\n${g.summary}`);
+    sections.push(`## ${h.summary}\n\n${g.summary}`);
   }
 
   if (g.workExperience?.length) {
-    const roles = g.workExperience.map((role) => {
-      const dates = role.currentlyWorking ? `${role.startDate} – Present` : `${role.startDate} – ${role.endDate}`;
+    const roles = g.workExperience.map((role, i) => {
+      const dates = role.currentlyWorking ? `${role.startDate} – ${h.present}` : `${role.startDate} – ${role.endDate}`;
       const lines: string[] = [`### ${role.company}`, `**${role.title}** · ${dates}`];
       if (role.skills?.length) lines.push(`*${role.skills.join(" · ")}*`);
       for (const bullet of role.bullets ?? []) lines.push(`- ${bullet}`);
+      const ref = profileWorkExp[i]?.reference;
+      if (ref?.name) {
+        const refParts = [ref.name, ref.title].filter(Boolean).join(", ");
+        const phonePart = ref.phone ? `  ·  ${ref.phone}` : "";
+        const linkedinPart = ref.linkedinUrl ? `  ·  [LinkedIn](${ref.linkedinUrl})` : "";
+        lines.push(`\n*${h.reference}: ${refParts}${phonePart}*${linkedinPart}`);
+      }
       return lines.join("\n");
     });
-    sections.push(`## Work Experience\n\n${roles.join("\n\n")}`);
+    sections.push(`## ${h.experience}\n\n${roles.join("\n\n")}`);
   }
 
   return sections.join("\n\n");
@@ -241,8 +262,8 @@ WHAT DRIVES THIS CANDIDATE:${(profile.motivation as string | null) ? `\nMotivati
       ];
     }
 
-    // Convert generated JSON to editable text
-    const resumeText = generatedToText(generated);
+    // Convert generated JSON to editable text (with localised headers + references)
+    const resumeText = generatedToText(generated, detectedLang, profile.work_experience ?? []);
 
     // Persist summary + full generated content (after post-processing so Required group is included)
     await insforge.database

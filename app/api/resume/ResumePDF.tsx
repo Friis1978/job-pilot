@@ -86,6 +86,13 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
+  h2Heading: {
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    color: TEXT,
+    marginTop: 8,
+    marginBottom: 3,
+  },
   divider: {
     borderBottomWidth: 0.5,
     borderBottomColor: "#E5E7EB",
@@ -346,23 +353,25 @@ function parseInline(text: string): InlineToken[] {
   return tokens;
 }
 type MdBlock = { kind: "h1" | "h2" | "h3"; tokens: InlineToken[] } | { kind: "paragraph"; tokens: InlineToken[] } | { kind: "bullet"; items: InlineToken[][] };
+function pushMixedPdf(blocks: MdBlock[], lines: string[]) {
+  if (!lines.length) return;
+  const isBullet = (l: string) => l.startsWith("- ") || l.startsWith("* ");
+  if (lines.every(isBullet)) { blocks.push({ kind: "bullet", items: lines.map((l) => parseInline(l.replace(/^[-*] /, ""))) }); return; }
+  if (!lines.some(isBullet)) { blocks.push({ kind: "paragraph", tokens: parseInline(lines.join(" ")) }); return; }
+  let paraAcc: string[] = [], bulletAcc: string[] = [];
+  const flush = () => { if (paraAcc.length) { blocks.push({ kind: "paragraph", tokens: parseInline(paraAcc.join(" ")) }); paraAcc = []; } if (bulletAcc.length) { blocks.push({ kind: "bullet", items: bulletAcc.map((l) => parseInline(l.replace(/^[-*] /, ""))) }); bulletAcc = []; } };
+  for (const line of lines) { if (isBullet(line)) { if (paraAcc.length) flush(); bulletAcc.push(line); } else { if (bulletAcc.length) flush(); paraAcc.push(line); } }
+  flush();
+}
 function parseMdBlocks(text: string): MdBlock[] {
   const blocks: MdBlock[] = [];
   for (const raw of text.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean)) {
     const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
     if (!lines.length) continue;
-    if (lines[0].startsWith("### ")) { blocks.push({ kind: "h3", tokens: parseInline(lines[0].slice(4)) }); if (lines.length > 1) blocks.push({ kind: "paragraph", tokens: parseInline(lines.slice(1).join(" ")) }); continue; }
-    if (lines[0].startsWith("## "))  { blocks.push({ kind: "h2", tokens: parseInline(lines[0].slice(3)) }); if (lines.length > 1) blocks.push({ kind: "paragraph", tokens: parseInline(lines.slice(1).join(" ")) }); continue; }
-    if (lines[0].startsWith("# "))   { blocks.push({ kind: "h1", tokens: parseInline(lines[0].slice(2)) }); if (lines.length > 1) blocks.push({ kind: "paragraph", tokens: parseInline(lines.slice(1).join(" ")) }); continue; }
-    const isBullet = (l: string) => l.startsWith("- ") || l.startsWith("* ");
-    if (lines.every(isBullet)) { blocks.push({ kind: "bullet", items: lines.map((l) => parseInline(l.replace(/^[-*] /, ""))) }); continue; }
-    if (lines.some(isBullet)) {
-      let paraAcc: string[] = [], bulletAcc: string[] = [];
-      const flush = () => { if (paraAcc.length) { blocks.push({ kind: "paragraph", tokens: parseInline(paraAcc.join(" ")) }); paraAcc = []; } if (bulletAcc.length) { blocks.push({ kind: "bullet", items: bulletAcc.map((l) => parseInline(l.replace(/^[-*] /, ""))) }); bulletAcc = []; } };
-      for (const line of lines) { if (isBullet(line)) { if (paraAcc.length) flush(); bulletAcc.push(line); } else { if (bulletAcc.length) flush(); paraAcc.push(line); } }
-      flush(); continue;
-    }
-    blocks.push({ kind: "paragraph", tokens: parseInline(lines.join(" ")) });
+    if (lines[0].startsWith("### ")) { blocks.push({ kind: "h3", tokens: parseInline(lines[0].slice(4)) }); pushMixedPdf(blocks, lines.slice(1)); continue; }
+    if (lines[0].startsWith("## "))  { blocks.push({ kind: "h2", tokens: parseInline(lines[0].slice(3)) }); pushMixedPdf(blocks, lines.slice(1)); continue; }
+    if (lines[0].startsWith("# "))   { blocks.push({ kind: "h1", tokens: parseInline(lines[0].slice(2)) }); pushMixedPdf(blocks, lines.slice(1)); continue; }
+    pushMixedPdf(blocks, lines);
   }
   return blocks;
 }
@@ -447,29 +456,30 @@ export function ResumePDF({ profile, generated, skillYears = {}, motivation, res
           </View>
         </View>
 
-        {/* Motivation (shown first if present) */}
+        {/* Motivation (shown first if present) — same ## heading style as resume content */}
         {motivation ? (
           <View>
-            <Text style={styles.sectionLabel}>Motivation</Text>
-            <View style={styles.divider} />
-            <MdPdf text={motivation} baseStyle={styles.summaryText} />
+            <MdPdf text={`## Motivation\n\n${motivation}`} baseStyle={styles.summaryText} />
           </View>
         ) : null}
 
-        {/* Summary — only shown when not using free-text resumeText */}
-        {!resumeText && generated.summary ? (
-          <View>
-            <Text style={styles.sectionLabel}>Professional Summary</Text>
-            <View style={styles.divider} />
-            <MdPdf text={generated.summary} baseStyle={styles.summaryText} />
-          </View>
+        {/* Professional Summary — rendered above skills; from resumeText summary part or generated.summary */}
+        {resumeText ? (
+          (() => {
+            const bodyStart = resumeText.startsWith("## ") || resumeText.startsWith("# ")
+              ? resumeText.indexOf("\n\n## ")
+              : (() => { const f = resumeText.indexOf("\n\n## "); return f > -1 ? resumeText.indexOf("\n\n## ", f + 1) : -1; })();
+            const summaryPart = bodyStart > -1 ? resumeText.slice(0, bodyStart).trim() : resumeText.trim();
+            return summaryPart ? <MdPdf text={summaryPart} baseStyle={styles.summaryText} /> : null;
+          })()
+        ) : generated.summary ? (
+          <MdPdf text={`## Professional Summary\n\n${generated.summary}`} baseStyle={styles.summaryText} />
         ) : null}
 
-        {/* Skills */}
+        {/* Skills — ## heading style matching resume content headers */}
         {(generated.skillGroups?.length ?? 0) > 0 ? (
           <View>
-            <Text style={styles.sectionLabel}>Skills</Text>
-            <View style={styles.divider} />
+            <Text style={styles.h2Heading}>Skills</Text>
             {generated.skillGroups!.map((group, gi) => {
               // "Required" group preserves the route's custom order (frontend frameworks first).
               // All other groups sort by years of experience descending.
@@ -505,8 +515,7 @@ export function ResumePDF({ profile, generated, skillYears = {}, motivation, res
           </View>
         ) : (profile.skills ?? []).length > 0 ? (
           <View>
-            <Text style={styles.sectionLabel}>Skills</Text>
-            <View style={styles.divider} />
+            <Text style={styles.h2Heading}>Skills</Text>
             {(() => {
               const skills = (profile.skills ?? [])
                 .slice()
@@ -537,11 +546,19 @@ export function ResumePDF({ profile, generated, skillYears = {}, motivation, res
           </View>
         ) : null}
 
-        {/* Free-text resume body (from textarea) — replaces structured Work Experience + Projects */}
+        {/* Free-text resume body — Work Experience part rendered after skills with page break */}
         {resumeText ? (
-          <View break>
-            <MdPdf text={resumeText} baseStyle={styles.summaryText} />
-          </View>
+          (() => {
+            const bodyStart2 = resumeText.startsWith("## ") || resumeText.startsWith("# ")
+              ? resumeText.indexOf("\n\n## ")
+              : (() => { const f = resumeText.indexOf("\n\n## "); return f > -1 ? resumeText.indexOf("\n\n## ", f + 1) : -1; })();
+            const bodyPart = bodyStart2 > -1 ? resumeText.slice(bodyStart2 + 2).trim() : null;
+            return bodyPart ? (
+              <View break>
+                <MdPdf text={bodyPart} baseStyle={styles.summaryText} />
+              </View>
+            ) : null;
+          })()
         ) : null}
 
         {/* Work Experience — only when no free-text override */}
@@ -567,13 +584,31 @@ export function ResumePDF({ profile, generated, skillYears = {}, motivation, res
                     <Text style={styles.bulletText}>{bullet}</Text>
                   </View>
                 ))}
+                {(() => {
+                  const ref = (profile.work_experience ?? []).find((r) => r.company === role.company)?.reference;
+                  if (!ref?.name) return null;
+                  const refParts = [ref.name, ref.title].filter(Boolean).join(", ");
+                  return (
+                    <View style={{ marginTop: 4 }}>
+                      <Text style={{ fontSize: 7.5, color: MUTED, fontFamily: "Helvetica-Oblique" }}>
+                        {"Reference: "}{refParts}
+                        {ref.phone ? `  ·  ${ref.phone}` : ""}
+                      </Text>
+                      {ref.linkedinUrl ? (
+                        <Link src={ref.linkedinUrl} style={{ fontSize: 7.5, color: BLUE, textDecoration: "none" }}>
+                          {ref.linkedinUrl}
+                        </Link>
+                      ) : null}
+                    </View>
+                  );
+                })()}
               </View>
             ))}
           </View>
         ) : null}
 
-        {/* Personal Projects — only when no free-text override */}
-        {!resumeText && (profile.personal_projects ?? []).length > 0 ? (
+        {/* Personal Projects */}
+        {(profile.personal_projects ?? []).length > 0 ? (
           <View break>
             <Text style={styles.sectionLabel}>Personal Projects</Text>
             <View style={styles.divider} />

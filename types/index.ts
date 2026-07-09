@@ -24,6 +24,12 @@ export type WorkExperience = {
   currentlyWorking: boolean;
   responsibilities: string;
   skills?: string[];
+  reference?: {
+    name: string;
+    title: string;
+    phone: string;
+    linkedinUrl: string;
+  } | null;
 };
 
 export type Education = {

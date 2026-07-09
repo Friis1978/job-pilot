@@ -18,6 +18,7 @@ type WorkExperienceEntry = {
   responsibilities: string;
   skills: string[];
   skillInput: string;
+  reference?: { name: string; title: string; phone: string; linkedinUrl: string } | null;
 };
 
 type EducationEntry = {
@@ -257,6 +258,7 @@ function profileToFormData(p: Profile | null | undefined): FormData {
       responsibilities: r.responsibilities ?? "",
       skills: r.skills ?? [],
       skillInput: "",
+      reference: r.reference ?? null,
     })),
     personalProjects: (p.personal_projects ?? []).map((proj) => ({
       id: crypto.randomUUID(),
@@ -455,6 +457,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
           responsibilities: "",
           skills: [],
           skillInput: "",
+          reference: null,
         },
       ],
     }));
@@ -545,6 +548,15 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
     setField(
       "workExperience",
       data.workExperience.map((r) => (r.id === id ? { ...r, [field]: value } : r)),
+    );
+  }
+
+  function updateRoleReference(id: string, field: keyof NonNullable<WorkExperienceEntry["reference"]>, value: string) {
+    setField(
+      "workExperience",
+      data.workExperience.map((r) =>
+        r.id === id ? { ...r, reference: { name: "", title: "", phone: "", linkedinUrl: "", ...r.reference, [field]: value } } : r,
+      ),
     );
   }
 
@@ -1306,6 +1318,40 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                         rows={3}
                         className="w-full px-3 py-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-y"
                       />
+                    </div>
+
+                    <div>
+                      <label className={labelClass}>Reference Person</label>
+                      <div className="grid grid-cols-2 gap-2 mt-1">
+                        <input
+                          type="text"
+                          value={role.reference?.name ?? ""}
+                          onChange={(e) => updateRoleReference(role.id, "name", e.target.value)}
+                          placeholder="Name"
+                          className={inputClass}
+                        />
+                        <input
+                          type="text"
+                          value={role.reference?.title ?? ""}
+                          onChange={(e) => updateRoleReference(role.id, "title", e.target.value)}
+                          placeholder="Title"
+                          className={inputClass}
+                        />
+                        <input
+                          type="tel"
+                          value={role.reference?.phone ?? ""}
+                          onChange={(e) => updateRoleReference(role.id, "phone", e.target.value)}
+                          placeholder="Phone number"
+                          className={inputClass}
+                        />
+                        <input
+                          type="url"
+                          value={role.reference?.linkedinUrl ?? ""}
+                          onChange={(e) => updateRoleReference(role.id, "linkedinUrl", e.target.value)}
+                          placeholder="LinkedIn URL"
+                          className={inputClass}
+                        />
+                      </div>
                     </div>
 
                     <div>
