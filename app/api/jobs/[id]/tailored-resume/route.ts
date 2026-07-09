@@ -62,29 +62,24 @@ type GeneratedContent = {
 };
 
 function generatedToText(g: GeneratedContent): string {
-  const lines: string[] = [];
+  const sections: string[] = [];
+
   if (g.summary) {
-    lines.push("PROFESSIONAL SUMMARY", g.summary, "");
+    sections.push(`## Professional Summary\n\n${g.summary}`);
   }
-  if (g.skillGroups?.length) {
-    lines.push("SKILLS");
-    for (const group of g.skillGroups) {
-      lines.push(`${group.label}: ${group.skills.join(", ")}`);
-    }
-    lines.push("");
-  }
+
   if (g.workExperience?.length) {
-    lines.push("EXPERIENCE");
-    for (const role of g.workExperience) {
+    const roles = g.workExperience.map((role) => {
       const dates = role.currentlyWorking ? `${role.startDate} – Present` : `${role.startDate} – ${role.endDate}`;
-      lines.push(`${role.company} | ${role.title} | ${dates}`);
-      for (const bullet of role.bullets ?? []) {
-        lines.push(`• ${bullet}`);
-      }
-      lines.push("");
-    }
+      const lines: string[] = [`### ${role.company}`, `**${role.title}** · ${dates}`];
+      if (role.skills?.length) lines.push(`*${role.skills.join(" · ")}*`);
+      for (const bullet of role.bullets ?? []) lines.push(`- ${bullet}`);
+      return lines.join("\n");
+    });
+    sections.push(`## Work Experience\n\n${roles.join("\n\n")}`);
   }
-  return lines.join("\n").trim();
+
+  return sections.join("\n\n");
 }
 
 export async function POST(
@@ -386,7 +381,7 @@ export async function GET(
 
     const element = createElement(
       ResumePDF,
-      { profile, generated, skillYears, motivation: motivation ?? undefined, recommendations: localizedRecs, avatarUrl },
+      { profile, generated, skillYears, motivation: motivation ?? undefined, resumeText: resumeText ?? undefined, recommendations: localizedRecs, avatarUrl },
     ) as unknown as ReactElement<DocumentProps>;
     const buffer = await renderToBuffer(element);
 

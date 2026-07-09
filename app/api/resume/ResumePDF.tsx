@@ -31,6 +31,7 @@ type Props = {
   generated: GeneratedContent;
   skillYears?: Record<string, number>;
   motivation?: string;
+  resumeText?: string;
   recommendations?: LinkedInRecommendation[];
   avatarUrl?: string;
 };
@@ -407,7 +408,7 @@ function fmtRecDate(d: string) {
   return `${months[parseInt(month, 10) - 1]} ${year}`;
 }
 
-export function ResumePDF({ profile, generated, skillYears = {}, motivation, recommendations = [], avatarUrl }: Props) {
+export function ResumePDF({ profile, generated, skillYears = {}, motivation, resumeText, recommendations = [], avatarUrl }: Props) {
   const contactParts: { text: string; isUrl: boolean }[] = [];
   if (profile.email) contactParts.push({ text: profile.email, isUrl: false });
   if (profile.phone) contactParts.push({ text: profile.phone, isUrl: false });
@@ -455,8 +456,8 @@ export function ResumePDF({ profile, generated, skillYears = {}, motivation, rec
           </View>
         ) : null}
 
-        {/* Summary */}
-        {generated.summary ? (
+        {/* Summary — only shown when not using free-text resumeText */}
+        {!resumeText && generated.summary ? (
           <View>
             <Text style={styles.sectionLabel}>Professional Summary</Text>
             <View style={styles.divider} />
@@ -536,8 +537,15 @@ export function ResumePDF({ profile, generated, skillYears = {}, motivation, rec
           </View>
         ) : null}
 
-        {/* Work Experience */}
-        {generated.workExperience && generated.workExperience.length > 0 ? (
+        {/* Free-text resume body (from textarea) — replaces structured Work Experience + Projects */}
+        {resumeText ? (
+          <View break>
+            <MdPdf text={resumeText} baseStyle={styles.summaryText} />
+          </View>
+        ) : null}
+
+        {/* Work Experience — only when no free-text override */}
+        {!resumeText && generated.workExperience && generated.workExperience.length > 0 ? (
           <View break>
             <Text style={styles.sectionLabel}>Work Experience</Text>
             <View style={styles.divider} />
@@ -564,8 +572,8 @@ export function ResumePDF({ profile, generated, skillYears = {}, motivation, rec
           </View>
         ) : null}
 
-        {/* Personal Projects */}
-        {(profile.personal_projects ?? []).length > 0 ? (
+        {/* Personal Projects — only when no free-text override */}
+        {!resumeText && (profile.personal_projects ?? []).length > 0 ? (
           <View break>
             <Text style={styles.sectionLabel}>Personal Projects</Text>
             <View style={styles.divider} />
