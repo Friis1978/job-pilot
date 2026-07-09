@@ -10,15 +10,6 @@
         "API_KEY": "ik_fc95f415aecae55336385babe40b7fbd",
         "API_BASE_URL": "https://8kj4iaqv.eu-central.insforge.app"
       }
-    },
-    "ptc-agent": {
-      "type": "stdio",
-      "command": "python3",
-      "args": ["~/Documents/GitHub/open-ptc-agent/mcp_servers/claude_code_ptc_server.py"],
-      "env": {
-        "PTC_CONFIG_FILE": "~/.ptc-agent/config.yaml",
-        "PYTHONPATH": "~/Documents/GitHub/open-ptc-agent/libs/ptc-agent:~/Documents/GitHub/open-ptc-agent/libs/ptc-cli"
-      }
     }
   }
 }

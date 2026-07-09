@@ -15,15 +15,16 @@ export async function POST(req: NextRequest) {
     const jobId = typeof body?.jobId === "string" ? body.jobId.trim() : "";
     if (!jobId) return NextResponse.json({ error: "jobId required" }, { status: 400 });
     const extraInstructions = typeof body?.extraInstructions === "string" ? body.extraInstructions : undefined;
+    const style = body?.style === "detailed" ? "detailed" : "compact";
 
-    const result = await generateCoverLetter(user.id, jobId, extraInstructions);
+    const result = await generateCoverLetter(user.id, jobId, extraInstructions, undefined, style);
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }
 
     revalidatePath(`/find-jobs/${jobId}`);
     revalidatePath("/dashboard");
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, text: result.text });
   } catch (err) {
     console.error("[api/agent/cover-letter]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

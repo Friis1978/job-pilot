@@ -1,55 +1,89 @@
-# Memory — Network Intelligence Polish + Jobs Table Layout
+# Memory — Resume PDF Overhaul (Session 2)
 
-Last updated: 2026-06-30
+Last updated: 2026-07-09
 
 ## What was built
 
-### Files modified this session
-- `app/find-jobs/[id]/page.tsx` — Moved `ContactSuggestion` out of `CompanyDossierDisplay` into its own standalone section in the left column, just above Company Research. Same card-with-header pattern (network icon + "Contacts to reach out to" title). Only renders when `jobConnections.length > 0`. Cleaned up `CompanyDossierDisplay` props (removed `connections`, `company`, `jobTitle`). Fixed `NetworkIcon` to accept `className` prop. Applied `shortenLocation` to job detail header location.
-- `components/network/ContactSuggestion.tsx` — Check icon on selected row changed from `mt-1` to `self-center` (vertically centered). Selected border changed from `border` to `border-2`.
-- `components/find-jobs/JobsTable.tsx` — Removed building icon box entirely from company cell. Switched table from `table-fixed` to natural layout: company column is `whitespace-nowrap` (shrinks to content, no truncation), role column is `w-full max-w-0` (expands to fill remaining space, truncates), fixed columns use explicit rem widths (`w-36` location, `w-32` match, `w-28` status/date). Removed `max-w-0` from location td. Applied `shortenLocation` to location display (tooltip still shows raw value).
-- `lib/utils.ts` — Added `shortenLocation()` function. Strips city suffixes (Municipality, Metropolitan Area, County, etc.), city prefixes (Greater, City of), drops intermediate region segments (Capital Region of Denmark etc.), normalises city names to English via existing `LOCATION_TO_ENGLISH`, falls back to `CITY_COUNTRY_DEFAULTS` map when no country segment present (so "Copenhagen Metropolitan Area" → "Copenhagen, Denmark").
+### Resume PDF (`app/api/resume/ResumePDF.tsx`)
+- **User photo in header** — `avatarUrl` prop added; renders circular 56×56px image left of name/title/contact when included.
+- **Professional title color** — `#2563EB` (BLUE constant). Name bottom margin increased to 9px.
+- **Skill pills** — skills now render as individual pills with light blue bg (`#eff6ff`). Years badge is a rounded-full inner pill (`#dbeafe` bg, blue text, `lineHeight: 1`, equal padding) showing e.g. `3 y`. Both paths (skillGroups + fallback profile.skills) updated.
+- **Blue URLs** — contact line URLs (linkedin/portfolio/website) render as `<Link>` in blue; email/phone/location stay muted gray. `contactParts` changed from `string[]` to `{ text, isUrl }[]`. Project links and recommender names also blue.
+- **Motivation first** — Motivation section moved above Professional Summary.
+- **Work Experience + Personal Projects** — both start with `<View break>` (new page).
+- **Recommendations masonry** — two independent vertical column stacks (left=odd index, right=even index) with `marginRight: 10` on left column, `marginBottom: 10` between cards in each column. No flex gap (unreliable in react-pdf).
+- **Project images full-width** — no fixed height, `width: "100%"`, `borderRadius: 4`. No objectFit (prevents cropping).
+- **Page breaks** — Work Experience, Personal Projects, Recommendations all start on new pages.
+- **Language** — resume generation (`tailored-resume/route.ts`) detects job post language via `detectLanguage` and appends language instruction to system prompt.
+- **Markdown rendering** — `MdPdf` component added (with `parseInline`, `parseMdBlocks`, `renderInlinePdf` helpers). Motivation and Professional Summary now rendered via `MdPdf`. Bold uses `Helvetica-Bold`, italic uses `Helvetica-Oblique`, links render as `<Link>` in blue.
 
-### Previously built (2026-06-29) — still intact
-- Full LinkedIn Network Intelligence feature: CSV import, connections table, company grouping, AI contact suggestion, inline LinkedIn message generation, NetworkBadge on job cards, auto-research on find-jobs.
+### ResumeSection component (`components/find-jobs/ResumeSection.tsx`)
+- `avatarUrl?: string | null` prop added.
+- `includePhoto` state + toggle button (same pattern as CoverLetterSection) — shows when `hasAvatar && resumeReady`.
+- Download URL appends `?photo=0` when photo excluded.
+- `PhotoIcon` inline SVG added.
+- **Markdown preview** — `MarkdownPreview` component added (with `parseInline`, `parseBlocks`, `renderInline` helpers using React elements). Replaces the `<pre>` tag in preview mode. `combinedText = [motivation, resumeText].filter(Boolean).join("\n\n---\n\n")`.
+- **Markdown hint footer** — below the Resume Content textarea: `Supports markdown: **bold** *italic* [text](url)` using `<code>` chips, matching CoverLetterSection style exactly.
+
+### Tailored resume GET route (`app/api/jobs/[id]/tailored-resume/route.ts`)
+- Reads `photo` query param; passes `avatarUrl` (or undefined) to `ResumePDF`.
+- Imports `detectLanguage`; detects language from job text; appends language instruction to `SYSTEM_PROMPT`.
+
+### Resume motivation route (`app/api/jobs/[id]/resume-motivation/route.ts`)
+- Imports `detectLanguage`; detects language from job text; appends language instruction so motivation is written in the job's language.
+
+### Job page (`app/find-jobs/[id]/page.tsx`)
+- Passes `avatarUrl` from `profileData.avatar_url` to `ResumeSection`.
+
+### Profile form (`components/profile/ProfileForm.tsx`)
+- **Personal website field** — new URL input below "Portfolio / GitHub", bound to `websiteUrl`.
+- **Project screenshots** — 3 click-to-upload thumbnail slots (80×64px) per project, hover remove button. Files upload to `/api/profile/project-image`. `updateProject` uses `any` value type.
+- `PersonalProjectEntry.images: [string, string, string]`.
+
+### New API routes
+- `app/api/recommendations/avatar/route.ts` — recommender photo upload to `avatars` bucket.
+- `app/api/profile/project-image/route.ts` — project screenshot upload (slot 0/1/2).
+
+### Types (`types/index.ts`)
+- `Profile.website_url: string | null`
+- `ProfileFormInput.websiteUrl: string`
+- `PersonalProject.images?: [string?, string?, string?]`
+- `ProfileFormInput.personalProjects` — `images: [string, string, string]` required
+
+### Actions (`actions/profile.ts`)
+- Maps `websiteUrl → website_url`.
+
+### Database
+- `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS website_url TEXT` — applied.
 
 ## Decisions made
 
-- **ContactSuggestion is standalone**: Renders independently of company research — visible even when no research has been run, as long as there are network connections for the company.
-- **Connection count only in NetworkBadge**: Building icon removed entirely from jobs list; count lives only in the NetworkBadge pill.
-- **Natural table layout**: `table-fixed` dropped so company column is content-sized. Role column fills all remaining space. Company name not truncated; role name truncates.
-- **`shortenLocation` with country fallback**: `CITY_COUNTRY_DEFAULTS` fills in country when not present in the raw string, ensuring "Copenhagen Metropolitan Area" and "Copenhagen, Denmark" both normalize to "Copenhagen, Denmark".
+- react-pdf `transparent` borders render black → use `#ffffff` for "hidden" sides (recommendation tail arrows).
+- react-pdf `gap` on flex containers is unreliable → use explicit `marginRight`/`marginBottom`.
+- Masonry layout in react-pdf: two independent `flex: 1` column Views, left gets items at odd index, right gets even index.
+- `lineHeight: 1` needed in react-pdf pill text to center vertically (removes implicit font-metric offset).
+- Markdown parsers are identical for browser and PDF — only the render layer differs (React elements vs `<Text>`/`<Link>`).
+- PDF style arrays (`[style1, style2]`) cause TS errors in react-pdf → use object spread `{ ...base, ...overrides }`.
 
 ## Problems solved
 
-- **ContactSuggestion only showed with research**: Was nested inside `CompanyDossierDisplay`. Moved to standalone section in left column.
-- **Check icon top-aligned**: Was `mt-1` — fixed with `self-center`.
-- **Location column showing "Copenh..."**: Location td had `max-w-0` leftover from `table-fixed` era. Removed.
-- **Inconsistent location display**: Some raw strings had no country after suffix stripping. Fixed with `CITY_COUNTRY_DEFAULTS` fallback in `shortenLocation`.
+- **Black tail arrows on recommendation bubbles**: `borderLeftColor: "transparent"` renders black in react-pdf → use `borderLeftColor: "#ffffff"`.
+- **Unequal masonry gaps**: flex stretch equalizes heights → `alignItems: "flex-start"` on the grid row, then masonry columns.
+- **Skill pill text not centered**: `lineHeight: 1` + equal `paddingTop`/`paddingBottom` fixes it.
+- **TS error on `updateProject`**: `keyof PersonalProjectEntry` didn't include `images` tuple → changed to `any` value type.
+- **PDF style array TS error**: react-pdf `Text` doesn't accept style arrays → use `{ ...base, ...overrides }` spread.
 
 ## Current state
 
-TypeScript-clean (`tsc --noEmit` passes). Changes are code-only, not yet browser-tested this session.
-
-**Working:**
-- `/find-jobs` list: company column shrinks to content, role column expands, location shows short canonical form, tooltip shows raw value
-- `/find-jobs/[id]`: "Contacts to reach out to" section above Company Research, independent of research state
-- Selected contact: 2px border, vertically centered check icon
-- `shortenLocation` handles all Copenhagen variants consistently
-- `/network` page with all 6 tabs, CSV import, NetworkBadge, AI contact suggestion, LinkedIn message generation
-
-**Not yet browser-tested**: table layout changes, location normalization, ContactSuggestion standalone section.
+Everything is working. The resume:
+- Renders markdown in both browser preview and PDF
+- Supports photo toggle, skill pills with year badges, masonry recommendations, full-width project images, spoken languages, personal interests, personal website URL
+- Is generated in the same language as the job post (as is the motivation letter)
 
 ## Next session starts with
 
-Browser-test:
-1. Jobs list — company column shrinks for short names (DFDS, byACRE), role expands, location shows "Copenhagen, Denmark" consistently
-2. Job detail with network connections — "Contacts to reach out to" appears above Company Research, works without research present
-3. Job detail without network connections — section absent, no errors
+No immediate next task — the resume feature set is complete as of this session.
 
 ## Open questions
 
-- Should re-import of LinkedIn CSV preserve notes/favorites (upsert instead of full replace)? Currently all notes are lost on re-import.
-- Should `research-all` (auto-triggered after find-jobs search) show any UI feedback, or stay silent?
-- `components/network/OpportunityScore.tsx` is unused — safe to delete.
-- Resend sender domain verification for production emails — still pending.
+None currently.

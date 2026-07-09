@@ -5,8 +5,9 @@ import {
   View,
   StyleSheet,
   Link,
+  Image,
 } from "@react-pdf/renderer";
-import type { Profile } from "@/types";
+import type { Profile, LinkedInRecommendation } from "@/types";
 
 type SkillGroup = { label: string; skills: string[] };
 
@@ -29,11 +30,15 @@ type Props = {
   profile: Profile;
   generated: GeneratedContent;
   skillYears?: Record<string, number>;
+  motivation?: string;
+  recommendations?: LinkedInRecommendation[];
+  avatarUrl?: string;
 };
 
 const TEXT = "#111827";
 const MUTED = "#6B7280";
-const ACCENT = "#7C5CFC";
+const ACCENT = "#111827";
+const BLUE = "#2563EB";
 
 const styles = StyleSheet.create({
   page: {
@@ -51,11 +56,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: "Helvetica-Bold",
     color: TEXT,
-    marginBottom: 4,
+    marginBottom: 9,
   },
   headerTitle: {
     fontSize: 11,
-    color: MUTED,
+    color: BLUE,
     marginBottom: 3,
   },
   headerContact: {
@@ -118,6 +123,43 @@ const styles = StyleSheet.create({
     color: TEXT,
     lineHeight: 1.4,
   },
+  skillPillsWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 3,
+    flex: 1,
+  },
+  skillPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#eff6ff",
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingTop: 3,
+    paddingBottom: 3,
+  },
+  skillPillText: {
+    fontSize: 7.5,
+    color: TEXT,
+    lineHeight: 1,
+  },
+  skillYrsBadge: {
+    backgroundColor: "#dbeafe",
+    borderRadius: 99,
+    paddingHorizontal: 4,
+    paddingTop: 2,
+    paddingBottom: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  skillYrsText: {
+    fontSize: 6.5,
+    color: BLUE,
+    fontFamily: "Helvetica-Bold",
+    lineHeight: 1,
+    textAlign: "center",
+  },
   // Work experience
   roleRow: {
     flexDirection: "row",
@@ -163,6 +205,72 @@ const styles = StyleSheet.create({
   roleBlock: {
     marginBottom: 5,
   },
+  // Recommendations — speech bubble grid
+  recGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    alignItems: "flex-start",
+  },
+  recCard: {
+    width: "47%",
+  },
+  recBubble: {
+    backgroundColor: "#F3F4F6",
+    borderRadius: 6,
+    padding: 7,
+  },
+  recTail: {
+    width: 0,
+    height: 0,
+    borderStyle: "solid",
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderTopWidth: 5,
+    borderLeftColor: "#ffffff",
+    borderRightColor: "#ffffff",
+    borderTopColor: "#F3F4F6",
+    borderBottomWidth: 0,
+    marginLeft: 14,
+  },
+  recMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 3,
+  },
+  recAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+  },
+  recAvatarFallback: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recInfo: {
+    flex: 1,
+  },
+  recText: {
+    fontSize: 7.5,
+    color: TEXT,
+    lineHeight: 1.5,
+    fontStyle: "italic",
+  },
+  recName: {
+    fontSize: 7.5,
+    fontFamily: "Helvetica-Bold",
+    color: BLUE,
+    textDecoration: "none",
+  },
+  recRole: {
+    fontSize: 6.5,
+    color: MUTED,
+  },
   // Education
   eduDegree: {
     fontSize: 9,
@@ -187,7 +295,7 @@ const styles = StyleSheet.create({
   },
   projectLink: {
     fontSize: 7,
-    color: ACCENT,
+    color: BLUE,
     textDecoration: "none",
   },
   projectLinkLabel: {
@@ -220,30 +328,130 @@ function formatDateRange(
   return start && end ? `${start} – ${end}` : start || end;
 }
 
-export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
-  const contactParts: string[] = [];
-  if (profile.email) contactParts.push(profile.email);
-  if (profile.phone) contactParts.push(profile.phone);
-  if (profile.location) contactParts.push(profile.location);
-  if (profile.linkedin_url) contactParts.push(profile.linkedin_url);
-  if (profile.portfolio_url) contactParts.push(profile.portfolio_url);
+// ── Markdown → PDF renderer ───────────────────────────────────────────────
+type InlineToken = { kind: "text"; text: string } | { kind: "bold"; text: string } | { kind: "italic"; text: string } | { kind: "bold-italic"; text: string } | { kind: "link"; text: string; url: string };
+const INLINE_RE = /\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|\[(.+?)\]\s*\(([^)]+)\)/g;
+function parseInline(text: string): InlineToken[] {
+  const tokens: InlineToken[] = []; let last = 0; let m: RegExpExecArray | null; INLINE_RE.lastIndex = 0;
+  while ((m = INLINE_RE.exec(text)) !== null) {
+    if (m.index > last) tokens.push({ kind: "text", text: text.slice(last, m.index) });
+    if (m[1] !== undefined) tokens.push({ kind: "bold-italic", text: m[1] });
+    else if (m[2] !== undefined) tokens.push({ kind: "bold", text: m[2] });
+    else if (m[3] !== undefined) tokens.push({ kind: "italic", text: m[3] });
+    else tokens.push({ kind: "link", text: m[4], url: m[5] });
+    last = INLINE_RE.lastIndex;
+  }
+  if (last < text.length) tokens.push({ kind: "text", text: text.slice(last) });
+  return tokens;
+}
+type MdBlock = { kind: "h1" | "h2" | "h3"; tokens: InlineToken[] } | { kind: "paragraph"; tokens: InlineToken[] } | { kind: "bullet"; items: InlineToken[][] };
+function parseMdBlocks(text: string): MdBlock[] {
+  const blocks: MdBlock[] = [];
+  for (const raw of text.split(/\n{2,}/).map((b) => b.trim()).filter(Boolean)) {
+    const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) continue;
+    if (lines[0].startsWith("### ")) { blocks.push({ kind: "h3", tokens: parseInline(lines[0].slice(4)) }); if (lines.length > 1) blocks.push({ kind: "paragraph", tokens: parseInline(lines.slice(1).join(" ")) }); continue; }
+    if (lines[0].startsWith("## "))  { blocks.push({ kind: "h2", tokens: parseInline(lines[0].slice(3)) }); if (lines.length > 1) blocks.push({ kind: "paragraph", tokens: parseInline(lines.slice(1).join(" ")) }); continue; }
+    if (lines[0].startsWith("# "))   { blocks.push({ kind: "h1", tokens: parseInline(lines[0].slice(2)) }); if (lines.length > 1) blocks.push({ kind: "paragraph", tokens: parseInline(lines.slice(1).join(" ")) }); continue; }
+    const isBullet = (l: string) => l.startsWith("- ") || l.startsWith("* ");
+    if (lines.every(isBullet)) { blocks.push({ kind: "bullet", items: lines.map((l) => parseInline(l.replace(/^[-*] /, ""))) }); continue; }
+    if (lines.some(isBullet)) {
+      let paraAcc: string[] = [], bulletAcc: string[] = [];
+      const flush = () => { if (paraAcc.length) { blocks.push({ kind: "paragraph", tokens: parseInline(paraAcc.join(" ")) }); paraAcc = []; } if (bulletAcc.length) { blocks.push({ kind: "bullet", items: bulletAcc.map((l) => parseInline(l.replace(/^[-*] /, ""))) }); bulletAcc = []; } };
+      for (const line of lines) { if (isBullet(line)) { if (paraAcc.length) flush(); bulletAcc.push(line); } else { if (bulletAcc.length) flush(); paraAcc.push(line); } }
+      flush(); continue;
+    }
+    blocks.push({ kind: "paragraph", tokens: parseInline(lines.join(" ")) });
+  }
+  return blocks;
+}
+function renderInlinePdf(tokens: InlineToken[]) {
+  return tokens.map((tok, i) => {
+    if (tok.kind === "bold") return <Text key={i} style={{ fontFamily: "Helvetica-Bold" }}>{tok.text}</Text>;
+    if (tok.kind === "italic") return <Text key={i} style={{ fontFamily: "Helvetica-Oblique" }}>{tok.text}</Text>;
+    if (tok.kind === "bold-italic") return <Text key={i} style={{ fontFamily: "Helvetica-BoldOblique" }}>{tok.text}</Text>;
+    if (tok.kind === "link") return <Link key={i} src={tok.url} style={{ color: BLUE, textDecoration: "none" }}>{tok.text}</Link>;
+    return <Text key={i}>{tok.text}</Text>;
+  });
+}
+function MdPdf({ text, baseStyle }: { text: string; baseStyle?: Record<string, unknown> }) {
+  const base = baseStyle ?? {};
+  const blocks = parseMdBlocks(text);
+  return (
+    <>
+      {blocks.map((block, i) => {
+        if (block.kind === "h1") return <Text key={i} style={{ ...base, fontFamily: "Helvetica-Bold", fontSize: 11, marginBottom: 3, marginTop: i > 0 ? 6 : 0 }}>{renderInlinePdf(block.tokens)}</Text>;
+        if (block.kind === "h2") return <Text key={i} style={{ ...base, fontFamily: "Helvetica-Bold", fontSize: 10, marginBottom: 2, marginTop: i > 0 ? 5 : 0 }}>{renderInlinePdf(block.tokens)}</Text>;
+        if (block.kind === "h3") return <Text key={i} style={{ ...base, fontFamily: "Helvetica-Bold", fontSize: 9, marginBottom: 2, marginTop: i > 0 ? 4 : 0 }}>{renderInlinePdf(block.tokens)}</Text>;
+        if (block.kind === "bullet") return (
+          <View key={i} style={{ marginBottom: 2 }}>
+            {block.items.map((item, j) => (
+              <View key={j} style={{ flexDirection: "row", marginBottom: 1 }}>
+                <Text style={{ ...base, width: 10 }}>{"•"}</Text>
+                <Text style={{ ...base, flex: 1 }}>{renderInlinePdf(item)}</Text>
+              </View>
+            ))}
+          </View>
+        );
+        return <Text key={i} style={{ ...base, marginBottom: 3, lineHeight: 1.5 }}>{renderInlinePdf(block.tokens)}</Text>;
+      })}
+    </>
+  );
+}
+
+function fmtRecDate(d: string) {
+  if (!d) return "";
+  const [year, month] = d.split("-");
+  if (!month) return year;
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${months[parseInt(month, 10) - 1]} ${year}`;
+}
+
+export function ResumePDF({ profile, generated, skillYears = {}, motivation, recommendations = [], avatarUrl }: Props) {
+  const contactParts: { text: string; isUrl: boolean }[] = [];
+  if (profile.email) contactParts.push({ text: profile.email, isUrl: false });
+  if (profile.phone) contactParts.push({ text: profile.phone, isUrl: false });
+  if (profile.location) contactParts.push({ text: profile.location, isUrl: false });
+  if (profile.linkedin_url) contactParts.push({ text: profile.linkedin_url, isUrl: true });
+  if (profile.portfolio_url) contactParts.push({ text: profile.portfolio_url, isUrl: true });
+  if (profile.website_url) contactParts.push({ text: profile.website_url, isUrl: true });
 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
         {/* Header */}
-        <Text style={styles.headerName}>{profile.full_name ?? ""}</Text>
-        {profile.current_title ? (
-          <Text style={styles.headerTitle}>{profile.current_title}</Text>
-        ) : null}
-        {contactParts.length > 0 ? (
-          <View style={styles.headerContact}>
-            {contactParts.map((part, i) => (
-              <View key={i} style={{ flexDirection: "row" }}>
-                {i > 0 ? <Text style={styles.headerDot}>·</Text> : null}
-                <Text style={{ fontSize: 9, color: MUTED }}>{part}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 2 }}>
+          {avatarUrl ? (
+            <Image src={avatarUrl} style={{ width: 56, height: 56, borderRadius: 28 }} />
+          ) : null}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerName}>{profile.full_name ?? ""}</Text>
+            {profile.current_title ? (
+              <Text style={styles.headerTitle}>{profile.current_title}</Text>
+            ) : null}
+            {contactParts.length > 0 ? (
+              <View style={styles.headerContact}>
+                {contactParts.map((part, i) => (
+                  <View key={i} style={{ flexDirection: "row" }}>
+                    {i > 0 ? <Text style={styles.headerDot}>·</Text> : null}
+                    {part.isUrl ? (
+                      <Link src={part.text} style={{ fontSize: 9, color: BLUE, textDecoration: "none" }}>{part.text}</Link>
+                    ) : (
+                      <Text style={{ fontSize: 9, color: MUTED }}>{part.text}</Text>
+                    )}
+                  </View>
+                ))}
               </View>
-            ))}
+            ) : null}
+          </View>
+        </View>
+
+        {/* Motivation (shown first if present) */}
+        {motivation ? (
+          <View>
+            <Text style={styles.sectionLabel}>Motivation</Text>
+            <View style={styles.divider} />
+            <MdPdf text={motivation} baseStyle={styles.summaryText} />
           </View>
         ) : null}
 
@@ -252,7 +460,7 @@ export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
           <View>
             <Text style={styles.sectionLabel}>Professional Summary</Text>
             <View style={styles.divider} />
-            <Text style={styles.summaryText}>{generated.summary}</Text>
+            <MdPdf text={generated.summary} baseStyle={styles.summaryText} />
           </View>
         ) : null}
 
@@ -272,19 +480,23 @@ export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
                     if (yB !== yA) return yB - yA;
                     return a.localeCompare(b);
                   });
-              const sorted = skills.map((skill) => {
-                  const yrs = skillYears[skill];
-                  return yrs && yrs > 0 ? `${skill} (${yrs} yr${yrs === 1 ? "" : "s"})` : skill;
-                });
-              const rows: string[][] = [];
-              for (let i = 0; i < sorted.length; i += 8) rows.push(sorted.slice(i, i + 8));
               return (
                 <View key={gi} style={styles.skillGroupRow}>
                   <Text style={styles.skillGroupLabel}>{group.label}</Text>
-                  <View style={{ flex: 1 }}>
-                    {rows.map((row, ri) => (
-                      <Text key={ri} style={styles.skillsRowText}>{row.join("  ·  ")}</Text>
-                    ))}
+                  <View style={styles.skillPillsWrap}>
+                    {skills.map((skill, si) => {
+                      const yrs = skillYears[skill];
+                      return (
+                        <View key={si} style={styles.skillPill}>
+                          <Text style={styles.skillPillText}>{skill}</Text>
+                          {yrs && yrs > 0 ? (
+                            <View style={styles.skillYrsBadge}>
+                              <Text style={styles.skillYrsText}>{yrs} y</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      );
+                    })}
                   </View>
                 </View>
               );
@@ -295,32 +507,38 @@ export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
             <Text style={styles.sectionLabel}>Skills</Text>
             <View style={styles.divider} />
             {(() => {
-              const sorted = (profile.skills ?? [])
+              const skills = (profile.skills ?? [])
                 .slice()
                 .sort((a, b) => {
                   const yA = skillYears[a] ?? 0;
                   const yB = skillYears[b] ?? 0;
                   if (yB !== yA) return yB - yA;
                   return a.localeCompare(b);
-                })
-                .map((skill) => {
-                  const yrs = skillYears[skill];
-                  return yrs && yrs > 0 ? `${skill} (${yrs} yr${yrs === 1 ? "" : "s"})` : skill;
                 });
-              // Chunk into rows of 8 — react-pdf miscalculates height for long
-              // wrapping Text nodes, pushing the next section into the wrong position.
-              const rows: string[][] = [];
-              for (let i = 0; i < sorted.length; i += 8) rows.push(sorted.slice(i, i + 8));
-              return rows.map((row, ri) => (
-                <Text key={ri} style={styles.skillsRowText}>{row.join("  ·  ")}</Text>
-              ));
+              return (
+                <View style={styles.skillPillsWrap}>
+                  {skills.map((skill, si) => {
+                    const yrs = skillYears[skill];
+                    return (
+                      <View key={si} style={styles.skillPill}>
+                        <Text style={styles.skillPillText}>{skill}</Text>
+                        {yrs && yrs > 0 ? (
+                          <View style={styles.skillYrsBadge}>
+                            <Text style={styles.skillYrsText}>{yrs}y</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                </View>
+              );
             })()}
           </View>
         ) : null}
 
         {/* Work Experience */}
         {generated.workExperience && generated.workExperience.length > 0 ? (
-          <View>
+          <View break>
             <Text style={styles.sectionLabel}>Work Experience</Text>
             <View style={styles.divider} />
             {generated.workExperience.map((role, i) => (
@@ -348,7 +566,7 @@ export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
 
         {/* Personal Projects */}
         {(profile.personal_projects ?? []).length > 0 ? (
-          <View>
+          <View break>
             <Text style={styles.sectionLabel}>Personal Projects</Text>
             <View style={styles.divider} />
             {(profile.personal_projects ?? []).map((project, i) => {
@@ -397,6 +615,16 @@ export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
                       ) : null}
                     </View>
                   ) : null}
+                  {/* Screenshots */}
+                  {(project.images ?? []).filter(Boolean).length > 0 ? (
+                    <View style={{ flexDirection: "row", gap: 6, marginTop: 6 }}>
+                      {(project.images ?? []).filter(Boolean).map((url, si) => (
+                        <View key={si} style={{ flex: 1 }}>
+                          <Image src={url!} style={{ width: "100%", borderRadius: 4 }} />
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
                 </View>
               );
             })}
@@ -419,6 +647,88 @@ export function ResumePDF({ profile, generated, skillYears = {} }: Props) {
                 </Text>
               </View>
             ))}
+          </View>
+        ) : null}
+
+        {/* Spoken Languages */}
+        {profile.spoken_languages && profile.spoken_languages.length > 0 ? (
+          <View>
+            <Text style={styles.sectionLabel}>Languages</Text>
+            <View style={styles.divider} />
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+              {profile.spoken_languages.map((l, i) => (
+                <View key={i} style={{ flexDirection: "row", gap: 4, alignItems: "center" }}>
+                  <Text style={{ fontSize: 8.5, color: TEXT, fontFamily: "Helvetica-Bold" }}>{l.language}</Text>
+                  {l.level ? <Text style={{ fontSize: 8, color: MUTED }}>{l.level}</Text> : null}
+                  {i < profile.spoken_languages!.length - 1 && (
+                    <Text style={{ fontSize: 8, color: MUTED, marginLeft: 2 }}>·</Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {/* Personal Interests */}
+        {profile.personal_interests ? (
+          <View>
+            <Text style={styles.sectionLabel}>Interests</Text>
+            <View style={styles.divider} />
+            <Text style={{ fontSize: 8.5, color: TEXT, lineHeight: 1.5 }}>{profile.personal_interests}</Text>
+          </View>
+        ) : null}
+
+        {/* LinkedIn Recommendations — speech bubble grid */}
+        {recommendations.length > 0 ? (
+          <View break>
+            <Text style={styles.sectionLabel}>LinkedIn Recommendations</Text>
+            <View style={styles.divider} />
+            {(() => {
+              const GAP = 10;
+              const renderCard = (rec: typeof recommendations[0], i: number, isLast: boolean) => {
+                const company = rec.work_experience_company ?? "Former Colleague";
+                const role = [rec.recommender_title, company].filter(Boolean).join(" · ");
+                return (
+                  <View key={i} style={{ marginBottom: isLast ? 0 : GAP }}>
+                    <View style={styles.recBubble}>
+                      <Text style={styles.recText}>&ldquo;{rec.recommendation_text}&rdquo;</Text>
+                    </View>
+                    <View style={styles.recTail} />
+                    <View style={styles.recMeta}>
+                      {rec.avatar_url ? (
+                        <Image src={rec.avatar_url} style={styles.recAvatar} />
+                      ) : (
+                        <View style={styles.recAvatarFallback}>
+                          <Text style={{ fontSize: 8, color: MUTED, fontFamily: "Helvetica-Bold" }}>
+                            {rec.recommender_name.charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.recInfo}>
+                        {rec.recommender_linkedin_url ? (
+                          <Link src={rec.recommender_linkedin_url} style={styles.recName}>{rec.recommender_name}</Link>
+                        ) : (
+                          <Text style={styles.recName}>{rec.recommender_name}</Text>
+                        )}
+                        <Text style={styles.recRole}>{role} · {fmtRecDate(rec.recommendation_date)}</Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              };
+              const left = recommendations.filter((_, i) => i % 2 === 0);
+              const right = recommendations.filter((_, i) => i % 2 === 1);
+              return (
+                <View style={{ flexDirection: "row" }}>
+                  <View style={{ flex: 1, marginRight: GAP }}>
+                    {left.map((rec, i) => renderCard(rec, i, i === left.length - 1))}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    {right.map((rec, i) => renderCard(rec, i, i === right.length - 1))}
+                  </View>
+                </View>
+              );
+            })()}
           </View>
         ) : null}
       </Page>

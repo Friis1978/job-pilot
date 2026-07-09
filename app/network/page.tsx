@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createInsforgeServer, fetchAllConnections } from "@/lib/insforge-server";
 import { Navbar } from "@/components/layout/Navbar";
 import { NetworkTabs } from "@/components/network/NetworkTabs";
-import type { NetworkImport } from "@/types";
+import type { NetworkImport, LinkedInRecommendation, WorkExperience } from "@/types";
 
 export default async function NetworkPage() {
   const insforge = await createInsforgeServer();
@@ -11,7 +11,7 @@ export default async function NetworkPage() {
 
   const userMeta = user.metadata as { full_name?: string; name?: string; avatar_url?: string } | null;
 
-  const [connections, importsResult, profileResult] = await Promise.allSettled([
+  const [connections, importsResult, profileResult, recsResult] = await Promise.allSettled([
     fetchAllConnections(insforge, user.id),
     insforge.database
       .from("network_imports")
@@ -20,17 +20,26 @@ export default async function NetworkPage() {
       .order("imported_at", { ascending: false }),
     insforge.database
       .from("profiles")
-      .select("avatar_url, is_admin")
+      .select("avatar_url, is_admin, work_experience")
       .eq("id", user.id)
       .maybeSingle(),
+    insforge.database
+      .from("linkedin_recommendations")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("recommendation_date", { ascending: false }),
   ]);
 
   const allConnections = connections.status === "fulfilled" ? connections.value : [];
   const imports: NetworkImport[] =
     importsResult.status === "fulfilled" ? (importsResult.value.data ?? []) : [];
   const profileRow = profileResult.status === "fulfilled"
-    ? (profileResult.value.data as { avatar_url?: string | null; is_admin?: boolean } | null)
+    ? (profileResult.value.data as { avatar_url?: string | null; is_admin?: boolean; work_experience?: WorkExperience[] | null } | null)
     : null;
+  const recommendations: LinkedInRecommendation[] =
+    recsResult.status === "fulfilled" ? (recsResult.value.data ?? []) : [];
+
+  const workExperience: WorkExperience[] = profileRow?.work_experience ?? [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -48,7 +57,12 @@ export default async function NetworkPage() {
           </p>
         </div>
 
-        <NetworkTabs connections={allConnections} imports={imports} />
+        <NetworkTabs
+          connections={allConnections}
+          imports={imports}
+          recommendations={recommendations}
+          workExperience={workExperience}
+        />
       </main>
     </div>
   );

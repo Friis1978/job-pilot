@@ -84,6 +84,7 @@ export async function saveProfile(
       salary_expectation: input.salaryExpectation || null,
       cover_letter_tone: input.coverLetterTone || null,
       cover_letter_instructions: input.coverLetterInstructions || null,
+      cover_letter_examples: input.coverLetterExamples.filter(Boolean).length > 0 ? input.coverLetterExamples.filter(Boolean) : null,
       personal_projects: input.personalProjects.length > 0 ? input.personalProjects : null,
       personal_interests: input.personalInterests || null,
       motivation: input.motivation || null,
@@ -94,6 +95,7 @@ export async function saveProfile(
       spoken_languages: input.spokenLanguages.length > 0 ? input.spokenLanguages : null,
       linkedin_url: input.linkedinUrl || null,
       portfolio_url: input.portfolioUrl || null,
+      website_url: input.websiteUrl || null,
     };
 
     const checks = {

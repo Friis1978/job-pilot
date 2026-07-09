@@ -106,6 +106,8 @@ function MarkdownPreview({ text, className }: { text: string; className?: string
 export function CoverLetterSection({ jobId, initialCoverLetter, initialAdvice, hasAvatar, tailoredSummary }: Props) {
   const [advice, setAdvice] = useState(initialAdvice);
   const [loadingAdvice, setLoadingAdvice] = useState(false);
+  const [loadingGenerate, setLoadingGenerate] = useState(false);
+  const [letterStyle, setLetterStyle] = useState<"compact" | "detailed">("compact");
 
   const [coverLetter, setCoverLetter] = useState(initialCoverLetter ?? "");
   const [previewMode, setPreviewMode] = useState(false);
@@ -115,6 +117,7 @@ export function CoverLetterSection({ jobId, initialCoverLetter, initialAdvice, h
   const [copied, setCopied] = useState(false);
   const [includePhoto, setIncludePhoto] = useState(true);
   const [includeResume, setIncludeResume] = useState(false);
+  const [includeJobTitle, setIncludeJobTitle] = useState(true);
 
   const isDirty = coverLetter !== (initialCoverLetter ?? "");
 
@@ -129,6 +132,25 @@ export function CoverLetterSection({ jobId, initialCoverLetter, initialAdvice, h
       toast("Failed to get advice. Please try again.", "error");
     } finally {
       setLoadingAdvice(false);
+    }
+  }
+
+  async function handleGenerateCoverLetter() {
+    setLoadingGenerate(true);
+    try {
+      const res = await fetch("/api/agent/cover-letter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId, style: letterStyle }),
+      });
+      const json = await res.json() as { success?: boolean; text?: string; error?: string };
+      if (!res.ok || json.error) { toast(json.error ?? "Failed to generate cover letter. Please try again.", "error"); return; }
+      setCoverLetter(json.text ?? "");
+      toast("Cover letter generated!", "success");
+    } catch {
+      toast("Failed to generate cover letter. Please try again.", "error");
+    } finally {
+      setLoadingGenerate(false);
     }
   }
 
@@ -166,8 +188,13 @@ export function CoverLetterSection({ jobId, initialCoverLetter, initialAdvice, h
       const searchParams = new URLSearchParams();
       if (hasAvatar && !includePhoto) searchParams.set("photo", "0");
       if (tailoredSummary && includeResume) searchParams.set("resume", "1");
+      if (!includeJobTitle) searchParams.set("title", "0");
       const params = searchParams.toString() ? `?${searchParams.toString()}` : "";
-      const res = await fetch(`/api/jobs/${jobId}/cover-letter${params}`);
+      const res = await fetch(`/api/jobs/${jobId}/cover-letter${params}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: coverLetter }),
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         toast((body as { error?: string }).error ?? "Download failed. Please try again.", "error");
@@ -196,19 +223,46 @@ export function CoverLetterSection({ jobId, initialCoverLetter, initialAdvice, h
             <SparkleIcon className="w-4 h-4 text-accent shrink-0" />
             <h2 className="text-sm font-semibold text-text-primary">Writing Advice</h2>
           </div>
-          <button
-            onClick={handleGetAdvice}
-            disabled={loadingAdvice}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loadingAdvice ? (
-              <><SpinnerIcon className="w-3.5 h-3.5 animate-spin" />{advice ? "Regenerating..." : "Analysing..."}</>
-            ) : advice ? (
-              <><RefreshIcon className="w-3.5 h-3.5" />Regenerate</>
-            ) : (
-              <><SparkleIcon className="w-3.5 h-3.5" />Get Advice</>
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center border border-border rounded-lg overflow-hidden text-xs font-medium">
+              <button
+                onClick={() => setLetterStyle("compact")}
+                className={`px-2.5 py-1.5 transition-colors ${letterStyle === "compact" ? "bg-surface-secondary text-text-primary" : "text-text-secondary hover:bg-surface-secondary"}`}
+              >
+                Compact
+              </button>
+              <button
+                onClick={() => setLetterStyle("detailed")}
+                className={`px-2.5 py-1.5 transition-colors ${letterStyle === "detailed" ? "bg-surface-secondary text-text-primary" : "text-text-secondary hover:bg-surface-secondary"}`}
+              >
+                Detailed
+              </button>
+            </div>
+            <button
+              onClick={handleGenerateCoverLetter}
+              disabled={loadingGenerate}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-accent/20 bg-accent/5 rounded-lg text-xs font-medium text-accent hover:bg-accent/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loadingGenerate ? (
+                <><SpinnerIcon className="w-3.5 h-3.5 animate-spin" />Writing...</>
+              ) : (
+                <><SparkleIcon className="w-3.5 h-3.5" />Tailored Letter</>
+              )}
+            </button>
+            <button
+              onClick={handleGetAdvice}
+              disabled={loadingAdvice}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loadingAdvice ? (
+                <><SpinnerIcon className="w-3.5 h-3.5 animate-spin" />{advice ? "Regenerating..." : "Analysing..."}</>
+              ) : advice ? (
+                <><RefreshIcon className="w-3.5 h-3.5" />Regenerate</>
+              ) : (
+                <><SparkleIcon className="w-3.5 h-3.5" />Get Advice</>
+              )}
+            </button>
+          </div>
         </div>
 
         {advice ? (
@@ -277,6 +331,17 @@ export function CoverLetterSection({ jobId, initialCoverLetter, initialAdvice, h
               >
                 <SummaryIcon className="w-3.5 h-3.5" />+ Resume
                 {includeResume && <CheckIcon className="w-3 h-3" />}
+              </button>
+            )}
+
+            {coverLetter && (
+              <button
+                onClick={() => setIncludeJobTitle((v) => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${includeJobTitle ? "border-accent text-accent bg-accent/5 hover:bg-accent/10" : "border-border text-text-muted hover:bg-surface-secondary"}`}
+                title={includeJobTitle ? "Job title shown in PDF" : "Job title hidden from PDF"}
+              >
+                <LetterIcon className="w-3.5 h-3.5" />Title
+                {includeJobTitle && <CheckIcon className="w-3 h-3" />}
               </button>
             )}
 

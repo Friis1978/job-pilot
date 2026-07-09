@@ -16,11 +16,12 @@ type Props = {
   contactParts: string[];
   avatarUrl: string | null;
   labels: { category: string; position: string };
+  includeJobTitle?: boolean;
 };
 
 const DARK = "#111827";
 const MUTED = "#6B7280";
-const ACCENT = "#8B5E3C";
+const ACCENT = "#111827";
 const BORDER = "#E5E7EB";
 const LINK_COLOR = "#1D4ED8";
 
@@ -290,6 +291,7 @@ export function CoverLetterPDF({
   contactParts,
   avatarUrl,
   labels,
+  includeJobTitle = true,
 }: Props) {
   const blocks = parseBlocks(coverLetterText);
 
@@ -323,8 +325,12 @@ export function CoverLetterPDF({
         <View style={styles.divider} />
 
         {/* Position */}
-        <Text style={styles.positionLabel}>{labels.position}</Text>
-        <Text style={styles.positionText}>{jobTitle} — {company}</Text>
+        {includeJobTitle && (
+          <>
+            <Text style={styles.positionLabel}>{labels.position}</Text>
+            <Text style={styles.positionText}>{jobTitle} — {company}</Text>
+          </>
+        )}
 
         {/* Cover letter body */}
         {blocks.map((block, i) => {

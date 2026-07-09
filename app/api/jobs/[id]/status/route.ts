@@ -32,5 +32,33 @@ export async function PATCH(
     return NextResponse.json({ error: "Failed to update status." }, { status: 500 });
   }
 
+  // When marking as applied, append the job's cover letter to profile examples (max 10)
+  if (status === "applied") {
+    const { data: job } = await insforge.database
+      .from("jobs")
+      .select("cover_letter")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .single();
+
+    const coverLetter = job?.cover_letter as string | null;
+    if (coverLetter?.trim()) {
+      const { data: profile } = await insforge.database
+        .from("profiles")
+        .select("cover_letter_examples")
+        .eq("id", user.id)
+        .single();
+
+      const existing = (profile?.cover_letter_examples as string[] | null) ?? [];
+      if (!existing.includes(coverLetter)) {
+        const updated = [coverLetter, ...existing].slice(0, 3);
+        await insforge.database
+          .from("profiles")
+          .update({ cover_letter_examples: updated })
+          .eq("id", user.id);
+      }
+    }
+  }
+
   return NextResponse.json({ success: true });
 }

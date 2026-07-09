@@ -5,8 +5,9 @@ import { createElement, type ReactElement } from "react";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { computeSkillYears } from "@/lib/utils";
+import { detectLanguage } from "@/lib/detect-language";
 import { ResumePDF } from "@/app/api/resume/ResumePDF";
-import type { Profile } from "@/types";
+import type { Profile, LinkedInRecommendation } from "@/types";
 import type { DocumentProps } from "@react-pdf/renderer";
 
 const SYSTEM_PROMPT = `You are a professional resume writer tailoring a candidate's resume for a specific company and role. Return ONLY valid JSON with this exact shape:
@@ -60,6 +61,32 @@ type GeneratedContent = {
   }[];
 };
 
+function generatedToText(g: GeneratedContent): string {
+  const lines: string[] = [];
+  if (g.summary) {
+    lines.push("PROFESSIONAL SUMMARY", g.summary, "");
+  }
+  if (g.skillGroups?.length) {
+    lines.push("SKILLS");
+    for (const group of g.skillGroups) {
+      lines.push(`${group.label}: ${group.skills.join(", ")}`);
+    }
+    lines.push("");
+  }
+  if (g.workExperience?.length) {
+    lines.push("EXPERIENCE");
+    for (const role of g.workExperience) {
+      const dates = role.currentlyWorking ? `${role.startDate} – Present` : `${role.startDate} – ${role.endDate}`;
+      lines.push(`${role.company} | ${role.title} | ${dates}`);
+      for (const bullet of role.bullets ?? []) {
+        lines.push(`• ${bullet}`);
+      }
+      lines.push("");
+    }
+  }
+  return lines.join("\n").trim();
+}
+
 export async function POST(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -77,7 +104,7 @@ export async function POST(
     const [jobRes, profileRes] = await Promise.all([
       insforge.database
         .from("jobs")
-        .select("title, company, about_role, responsibilities, requirements, matched_skills, missing_skills, company_research")
+        .select("title, company, about_role, responsibilities, requirements, matched_skills, missing_skills, company_research, resume_motivation")
         .eq("id", jobId)
         .eq("user_id", userId)
         .single(),
@@ -97,6 +124,7 @@ export async function POST(
 
     const job = jobRes.data;
     const profile = profileRes.data as Profile;
+    const resumeMotivation = (job as unknown as { resume_motivation?: string | null }).resume_motivation ?? null;
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: "AI generation is not configured." }, { status: 503 });
@@ -123,13 +151,19 @@ export async function POST(
       education: profile.education,
     };
 
+    const allJobText = [job.about_role, job.title, ...(job.requirements as string[] | null ?? []), ...(job.responsibilities as string[] | null ?? [])].filter(Boolean).join(" ");
+    const detectedLang = detectLanguage(allJobText);
+    const langInstruction = detectedLang !== "en"
+      ? `\n- IMPORTANT: Write ALL text fields (summary, bullets) in the same language as the job post. Detected language code: ${detectedLang}. Do not use English if the job post is in another language.`
+      : "";
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       response_format: { type: "json_object" },
       temperature: 0.7,
       max_tokens: 1500,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: SYSTEM_PROMPT + langInstruction },
         {
           role: "user",
           content: `TARGET ROLE: ${job.title} at ${job.company}
@@ -139,7 +173,7 @@ Skills the candidate is missing: ${(job.missing_skills as string[] | null)?.join
 ${companyContext}
 
 CANDIDATE PROFILE:
-${JSON.stringify(profileInput, null, 2)}${(profile.personal_interests as string | null) ? `\n\nPERSONAL INTERESTS:\n${profile.personal_interests}` : ""}${(profile.motivation as string | null) || (profile.proud_achievement as string | null) || (profile.energy_tasks as string | null) || (profile.career_vision as string | null) ? `
+${JSON.stringify(profileInput, null, 2)}${(profile.personal_interests as string | null) ? `\n\nPERSONAL INTERESTS:\n${profile.personal_interests}` : ""}${resumeMotivation ? `\n\nCANDIDATE MOTIVATION FOR THIS SPECIFIC ROLE:\n${resumeMotivation}` : ""}${(profile.motivation as string | null) || (profile.proud_achievement as string | null) || (profile.energy_tasks as string | null) || (profile.career_vision as string | null) ? `
 
 WHAT DRIVES THIS CANDIDATE:${(profile.motivation as string | null) ? `\nMotivation: ${profile.motivation}` : ""}${(profile.proud_achievement as string | null) ? `\nKey achievement: ${profile.proud_achievement}` : ""}${(profile.energy_tasks as string | null) ? `\nWhat gives them energy: ${profile.energy_tasks}` : ""}${(profile.career_vision as string | null) ? `\nCareer vision: ${profile.career_vision}` : ""}` : ""}`,
         },
@@ -212,10 +246,13 @@ WHAT DRIVES THIS CANDIDATE:${(profile.motivation as string | null) ? `\nMotivati
       ];
     }
 
+    // Convert generated JSON to editable text
+    const resumeText = generatedToText(generated);
+
     // Persist summary + full generated content (after post-processing so Required group is included)
     await insforge.database
       .from("jobs")
-      .update({ tailored_summary: generated.summary, tailored_resume_content: generated })
+      .update({ tailored_summary: generated.summary, tailored_resume_content: generated, resume_text: resumeText })
       .eq("id", jobId)
       .eq("user_id", userId);
 
@@ -231,12 +268,6 @@ WHAT DRIVES THIS CANDIDATE:${(profile.motivation as string | null) ? `\nMotivati
       return { ...role, skills: sorted };
     });
 
-    const element = createElement(
-      ResumePDF,
-      { profile, generated, skillYears },
-    ) as unknown as ReactElement<DocumentProps>;
-    const buffer = await renderToBuffer(element);
-
     const posthog = getPostHogClient();
     posthog.capture({
       distinctId: userId,
@@ -245,16 +276,161 @@ WHAT DRIVES THIS CANDIDATE:${(profile.motivation as string | null) ? `\nMotivati
     });
     await posthog.shutdown();
 
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error("[api/jobs/tailored-resume POST]", err);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+  }
+}
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id: jobId } = await params;
+
+    const insforge = await createInsforgeServer();
+    const { data: authData, error: authError } = await insforge.auth.getCurrentUser();
+    if (authError || !authData?.user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    const userId = authData.user.id;
+
+    const [jobRes, profileRes, recsRes] = await Promise.all([
+      insforge.database
+        .from("jobs")
+        .select("company, tailored_resume_content, resume_motivation, resume_text")
+        .eq("id", jobId)
+        .eq("user_id", userId)
+        .single(),
+      insforge.database
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single(),
+      insforge.database
+        .from("linkedin_recommendations")
+        .select("*")
+        .eq("user_id", userId)
+        .order("recommendation_date", { ascending: false }),
+    ]);
+
+    if (jobRes.error || !jobRes.data) return NextResponse.json({ error: "Job not found." }, { status: 404 });
+    if (profileRes.error || !profileRes.data) return NextResponse.json({ error: "Profile not found." }, { status: 404 });
+
+    const job = jobRes.data;
+    const profile = profileRes.data as Profile;
+    const recommendations = (recsRes.data ?? []) as LinkedInRecommendation[];
+    const tailoredContent = job.tailored_resume_content as Record<string, unknown> | null;
+
+    if (!tailoredContent) {
+      return NextResponse.json({ error: "No resume generated yet. Generate one first." }, { status: 400 });
+    }
+
+    const motivation = (job as unknown as { resume_motivation?: string | null }).resume_motivation ?? null;
+    const resumeText = (job as unknown as { resume_text?: string | null }).resume_text ?? null;
+    const skillYears = computeSkillYears(profile.work_experience);
+
+    let generated = tailoredContent as GeneratedContent;
+    // Re-apply per-role skills from profile
+    const jobSkillsLower = new Set<string>();
+    generated = {
+      ...generated,
+      workExperience: generated.workExperience.map((role, i) => {
+        const roleSkills = profile.work_experience?.[i]?.skills;
+        if (!roleSkills?.length) return role;
+        const sorted = [...roleSkills].sort((a, b) => {
+          const aMatch = jobSkillsLower.has(a.toLowerCase()) ? 0 : 1;
+          const bMatch = jobSkillsLower.has(b.toLowerCase()) ? 0 : 1;
+          return aMatch - bMatch;
+        });
+        return { ...role, skills: sorted };
+      }),
+    };
+
+    // Translate recommendations into the resume's language if needed
+    let localizedRecs = recommendations;
+    if (recommendations.length > 0 && process.env.OPENAI_API_KEY) {
+      try {
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const resumeLanguageSample = generated.summary ?? "";
+        const texts = recommendations.map((r) => r.recommendation_text);
+        const resp = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          max_tokens: 1200,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content: `You translate recommendation texts into the same language as a given resume excerpt. Return JSON: {"translated": ["<text1>", "<text2>", ...]}. Preserve meaning exactly. If a text is already in the target language, return it unchanged.`,
+            },
+            {
+              role: "user",
+              content: `Resume language sample:\n"${resumeLanguageSample}"\n\nTexts to translate (return in the same order):\n${JSON.stringify(texts)}`,
+            },
+          ],
+        });
+        const raw = resp.choices[0]?.message?.content ?? "";
+        const parsed = JSON.parse(raw) as { translated?: string[] };
+        if (Array.isArray(parsed.translated) && parsed.translated.length === recommendations.length) {
+          localizedRecs = recommendations.map((r, i) => ({ ...r, recommendation_text: parsed.translated![i] }));
+        }
+      } catch {
+        // fallback: use original texts
+      }
+    }
+
+    const includePhoto = req.nextUrl.searchParams.get("photo") !== "0";
+    const avatarUrl = includePhoto ? (profile.avatar_url ?? undefined) : undefined;
+
+    const element = createElement(
+      ResumePDF,
+      { profile, generated, skillYears, motivation: motivation ?? undefined, recommendations: localizedRecs, avatarUrl },
+    ) as unknown as ReactElement<DocumentProps>;
+    const buffer = await renderToBuffer(element);
+
     const safeCompany = job.company.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const resumeParam = req.nextUrl.searchParams.get("name");
+    const filename = resumeParam === "resume" ? `${safeCompany}-resume.pdf` : `${safeCompany}-resume.pdf`;
 
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="resume-${safeCompany}.pdf"`,
+        "Content-Disposition": `attachment; filename="${filename}"`,
       },
     });
   } catch (err) {
-    console.error("[api/jobs/tailored-resume]", err);
+    console.error("[api/jobs/tailored-resume GET]", err);
+    return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id: jobId } = await params;
+    const { resumeText, motivation } = (await req.json()) as { resumeText?: string; motivation?: string };
+
+    const insforge = await createInsforgeServer();
+    const { data: authData, error: authError } = await insforge.auth.getCurrentUser();
+    if (authError || !authData?.user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+
+    const update: Record<string, string | null> = {};
+    if (typeof resumeText === "string") update.resume_text = resumeText || null;
+    if (typeof motivation === "string") update.resume_motivation = motivation || null;
+
+    await insforge.database
+      .from("jobs")
+      .update(update)
+      .eq("id", jobId)
+      .eq("user_id", authData.user.id);
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error("[api/jobs/tailored-resume PATCH]", err);
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
 }

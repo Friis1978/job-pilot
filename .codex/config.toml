@@ -1,0 +1,18 @@
+[mcp_servers.insforge]
+command = "npx"
+args = [
+    "-y",
+    "@insforge/mcp@latest",
+]
+
+[mcp_servers.insforge.env]
+API_KEY = "ik_fc95f415aecae55336385babe40b7fbd"
+API_BASE_URL = "https://8kj4iaqv.eu-central.insforge.app"
+
+[mcp_servers.ptc-agent]
+command = "python3"
+args = ["~/Documents/GitHub/open-ptc-agent/mcp_servers/claude_code_ptc_server.py"]
+
+[mcp_servers.ptc-agent.env]
+PTC_CONFIG_FILE = "~/.ptc-agent/config.yaml"
+PYTHONPATH = "~/Documents/GitHub/open-ptc-agent/libs/ptc-agent:~/Documents/GitHub/open-ptc-agent/libs/ptc-cli"

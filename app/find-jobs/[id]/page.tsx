@@ -7,7 +7,7 @@ import type { Profile, Connection } from "@/types";
 import { Navbar } from "@/components/layout/Navbar";
 import { ResearchButton } from "@/components/find-jobs/ResearchButton";
 import { CoverLetterSection } from "@/components/find-jobs/CoverLetterSection";
-import { TailoredResumeButton } from "@/components/find-jobs/TailoredResumeButton";
+import { ResumeSection } from "@/components/find-jobs/ResumeSection";
 import { StatusBadge } from "@/components/find-jobs/StatusBadge";
 import { RescoreButton } from "@/components/find-jobs/RescoreButton";
 import { RegenerateDescriptionButton } from "@/components/find-jobs/RegenerateDescriptionButton";
@@ -57,6 +57,9 @@ type Job = {
   cover_letter: string | null;
   cover_letter_advice: string | null;
   tailored_summary: string | null;
+  tailored_resume_content: Record<string, unknown> | null;
+  resume_motivation: string | null;
+  resume_text: string | null;
   status: string;
   external_apply_url: string | null;
   found_at: string;
@@ -367,6 +370,18 @@ export default async function JobDetailsPage({
                 <CoverLetterSection jobId={job.id} initialCoverLetter={job.cover_letter} initialAdvice={job.cover_letter_advice} hasAvatar={!!profileData?.avatar_url} tailoredSummary={job.tailored_summary} />
               </div>
 
+              {/* Resume */}
+              <div id="resume">
+                <ResumeSection
+                  jobId={job.id}
+                  hasResearch={!!job.company_research}
+                  initialMotivation={job.resume_motivation}
+                  initialResumeText={job.resume_text}
+                  hasGeneratedResume={!!job.tailored_resume_content}
+                  avatarUrl={(profileData as { avatar_url?: string | null } | null)?.avatar_url}
+                />
+              </div>
+
             </div>
 
             {/* ── RIGHT SIDEBAR ────────────────────────────────────────── */}
@@ -391,14 +406,6 @@ export default async function JobDetailsPage({
                     No job link available
                   </div>
                 )}
-
-                {/* Download Tailored Resume */}
-                <TailoredResumeButton
-                  jobId={job.id}
-                  companyName={job.company}
-                  hasResearch={!!job.company_research}
-                  fullWidth
-                />
 
                 {/* Separator */}
                 <div className="h-px bg-border-muted mx-1 my-1" />

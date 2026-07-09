@@ -9,6 +9,7 @@ export type PersonalProject = {
   url?: string;
   githubUrl?: string;
   videoUrl?: string;
+  images?: [string?, string?, string?];
   skills: string[];
   startDate?: string;
   endDate?: string;
@@ -51,6 +52,7 @@ export type Profile = {
   salary_expectation: string | null;
   cover_letter_tone: string | null;
   cover_letter_instructions: string | null;
+  cover_letter_examples: string[] | null;
   personal_projects: PersonalProject[] | null;
   personal_interests: string | null;
   motivation: string | null;
@@ -61,6 +63,7 @@ export type Profile = {
   spoken_languages: SpokenLanguage[] | null;
   linkedin_url: string | null;
   portfolio_url: string | null;
+  website_url: string | null;
   resume_pdf_url: string | null;
   avatar_url: string | null;
   is_complete: boolean;
@@ -128,6 +131,7 @@ export type ProfileFormInput = {
   location: string;
   linkedinUrl: string;
   portfolioUrl: string;
+  websiteUrl: string;
   currentTitle: string;
   experienceLevel: string;
   skills: string[];
@@ -149,7 +153,8 @@ export type ProfileFormInput = {
   preferredLocations: string;
   coverLetterTone: string;
   coverLetterInstructions: string;
-  personalProjects: { name: string; description: string; url: string; githubUrl: string; videoUrl: string; skills: string[]; startDate: string; endDate: string; currentlyWorking: boolean }[];
+  coverLetterExamples: string[];
+  personalProjects: { name: string; description: string; url: string; githubUrl: string; videoUrl: string; images: [string, string, string]; skills: string[]; startDate: string; endDate: string; currentlyWorking: boolean }[];
   personalInterests: string;
   motivation: string;
   proudAchievement: string;
@@ -181,4 +186,17 @@ export type NetworkImport = {
   imported_at: string;
   connection_count: number;
   file_name: string | null;
+};
+
+export type LinkedInRecommendation = {
+  id: string;
+  user_id: string;
+  recommender_name: string;
+  recommender_title: string;
+  recommender_linkedin_url: string | null;
+  avatar_url: string | null;
+  work_experience_company: string | null;
+  recommendation_text: string;
+  recommendation_date: string;
+  created_at: string;
 };

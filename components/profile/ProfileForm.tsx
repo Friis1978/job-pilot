@@ -35,6 +35,7 @@ type PersonalProjectEntry = {
   url: string;
   githubUrl: string;
   videoUrl: string;
+  images: [string, string, string];
   skills: string[];
   startDate: string;
   endDate: string;
@@ -78,6 +79,7 @@ type FormData = {
   location: string;
   linkedinUrl: string;
   portfolioUrl: string;
+  websiteUrl: string;
   currentTitle: string;
   experienceLevel: string;
   skills: string[];
@@ -96,6 +98,7 @@ type FormData = {
   preferredLocations: string;
   coverLetterTone: string;
   coverLetterInstructions: string;
+  coverLetterExamples: string[];
   personalInterests: string;
   motivation: string;
   proudAchievement: string;
@@ -113,6 +116,7 @@ const CHANGE_LABELS: Partial<Record<keyof FormData, string>> = {
   experienceLevel:    "Experience Level",
   linkedinUrl:        "LinkedIn URL",
   portfolioUrl:       "Portfolio URL",
+  websiteUrl:         "Website URL",
   skills:             "Skills",
   industries:         "Industries",
   personalProjects:   "Personal Projects",
@@ -123,6 +127,7 @@ const CHANGE_LABELS: Partial<Record<keyof FormData, string>> = {
   preferredLocations: "Preferred Locations",
   coverLetterTone:    "Cover Letter Tone",
   coverLetterInstructions: "Cover Letter Instructions",
+  coverLetterExamples: "Cover Letter Examples",
   personalInterests:  "Personal Interests",
   motivation:         "Motivation",
   proudAchievement:   "Key Achievement",
@@ -213,13 +218,13 @@ function profileToFormData(p: Profile | null | undefined): FormData {
   if (!p) {
     return {
       fullName: "", email: "", phone: "", location: "",
-      linkedinUrl: "", portfolioUrl: "",
+      linkedinUrl: "", portfolioUrl: "", websiteUrl: "",
       currentTitle: "", experienceLevel: "",
       skills: [], skillInput: "", industries: [], industryInput: "",
       spokenLanguages: [], langInput: "", langLevelInput: "Native",
       workExperience: [], personalProjects: [], educations: [], jobTitlesSeeking: "",
       remotePreference: "", salaryExpectation: "", preferredLocations: "",
-      coverLetterTone: "", coverLetterInstructions: "",
+      coverLetterTone: "", coverLetterInstructions: "", coverLetterExamples: [],
       personalInterests: "",
       motivation: "", proudAchievement: "", energyTasks: "",
       companyTypePreference: [], careerVision: "",
@@ -235,6 +240,7 @@ function profileToFormData(p: Profile | null | undefined): FormData {
     location: p.location ?? "",
     linkedinUrl: p.linkedin_url ?? "",
     portfolioUrl: p.portfolio_url ?? "",
+    websiteUrl: p.website_url ?? "",
     currentTitle: p.current_title ?? "",
     experienceLevel: p.experience_level ?? "",
     skills: p.skills ?? [],
@@ -259,6 +265,7 @@ function profileToFormData(p: Profile | null | undefined): FormData {
       url: proj.url ?? "",
       githubUrl: proj.githubUrl ?? "",
       videoUrl: proj.videoUrl ?? "",
+      images: [(proj.images?.[0] ?? ""), (proj.images?.[1] ?? ""), (proj.images?.[2] ?? "")] as [string, string, string],
       skills: proj.skills ?? [],
       startDate: proj.startDate ?? "",
       endDate: proj.endDate ?? "",
@@ -281,6 +288,7 @@ function profileToFormData(p: Profile | null | undefined): FormData {
     preferredLocations: (p.preferred_locations ?? []).join(", "),
     coverLetterTone: p.cover_letter_tone ?? "",
     coverLetterInstructions: p.cover_letter_instructions ?? "",
+    coverLetterExamples: (p.cover_letter_examples as string[] | null) ?? [],
     personalInterests: p.personal_interests ?? "",
     motivation: p.motivation ?? "",
     proudAchievement: p.proud_achievement ?? "",
@@ -546,7 +554,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
       ...prev,
       personalProjects: [
         ...prev.personalProjects,
-        { id: newId, name: "", description: "", url: "", githubUrl: "", videoUrl: "", skills: [], startDate: "", endDate: "", currentlyWorking: false, skillInput: "" },
+        { id: newId, name: "", description: "", url: "", githubUrl: "", videoUrl: "", images: ["", "", ""] as [string, string, string], skills: [], startDate: "", endDate: "", currentlyWorking: false, skillInput: "" },
       ],
     }));
     setOpenProjects((prev) => new Set([...prev, newId]));
@@ -557,7 +565,8 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
     setOpenProjects((prev) => { const next = new Set(prev); next.delete(id); return next; });
   }
 
-  function updateProject(id: string, field: keyof PersonalProjectEntry, value: string) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function updateProject(id: string, field: keyof PersonalProjectEntry, value: any) {
     setField(
       "personalProjects",
       data.personalProjects.map((p) => (p.id === id ? { ...p, [field]: value } : p)),
@@ -870,6 +879,16 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                 value={data.portfolioUrl}
                 onChange={(e) => setField("portfolioUrl", e.target.value)}
                 placeholder="https://github.com/you"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={`${labelClass} flex items-center gap-1.5`}>Personal Website <InfoIcon tip="Your personal website or blog — shown in the contact section of your resume" /></label>
+              <input
+                type="url"
+                value={data.websiteUrl}
+                onChange={(e) => setField("websiteUrl", e.target.value)}
+                placeholder="https://yourname.com"
                 className={inputClass}
               />
             </div>
@@ -1533,6 +1552,59 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
                       </div>
                     </div>
 
+                    {/* Project screenshots */}
+                    <div>
+                      <label className={`${labelClass} flex items-center gap-1.5`}>Screenshots (Optional) <InfoIcon tip="Upload up to 3 screenshots that will be shown on your resume" /></label>
+                      <div className="flex gap-3 mt-1">
+                        {([0, 1, 2] as const).map((slot) => {
+                          const imgUrl = proj.images?.[slot] ?? "";
+                          return (
+                            <label key={slot} className="relative cursor-pointer group">
+                              <div className="w-24 h-16 rounded-lg border-2 border-dashed border-border hover:border-accent transition-colors overflow-hidden flex items-center justify-center bg-surface-secondary">
+                                {imgUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={imgUrl} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <svg className="w-5 h-5 text-text-muted group-hover:text-accent transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
+                                  </svg>
+                                )}
+                              </div>
+                              {imgUrl && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.preventDefault(); const imgs = [...(proj.images ?? ["", "", ""])] as [string, string, string]; imgs[slot] = ""; updateProject(proj.id, "images", imgs); }}
+                                  className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-danger text-white rounded-full flex items-center justify-center text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
+                                >×</button>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  const fd = new FormData();
+                                  fd.append("file", file);
+                                  fd.append("slot", String(slot));
+                                  fd.append("projectId", proj.id);
+                                  const res = await fetch("/api/profile/project-image", { method: "POST", body: fd });
+                                  const json = await res.json() as { url?: string; error?: string };
+                                  if (json.url) {
+                                    const imgs = [...(proj.images ?? ["", "", ""])] as [string, string, string];
+                                    imgs[slot] = json.url;
+                                    updateProject(proj.id, "images", imgs);
+                                  } else {
+                                    toast(json.error ?? "Upload failed.", "error");
+                                  }
+                                }}
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                     <div>
                       <label className={`${labelClass} flex items-center gap-1.5`}>Skills Used <InfoIcon tip="Add the technologies and tools you used — helps match you to jobs requiring similar work" /></label>
                       <div className="flex gap-2">
@@ -1949,6 +2021,85 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
               rows={12}
               className="w-full px-3 py-2 border border-border rounded-lg text-xs font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-y"
             />
+            </div>
+
+            {/* Cover letter examples */}
+            <div>
+              <div className="flex items-end justify-between gap-3 mb-1.5">
+                <label className={`${labelClass} flex items-center gap-1.5 mb-0`}>
+                  Example Cover Letters
+                  <InfoIcon tip="Paste or upload 1–3 of your best old cover letters. The AI uses these as style references to match your voice and structure when generating new letters." />
+                </label>
+                {data.coverLetterExamples.length < 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setField("coverLetterExamples", [...data.coverLetterExamples, ""])}
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors shrink-0"
+                  >
+                    + Add Example
+                  </button>
+                )}
+              </div>
+              {data.coverLetterExamples.length === 0 && (
+                <p className="text-xs text-text-muted">No examples added yet. Add up to 3.</p>
+              )}
+              <div className="flex flex-col gap-3">
+                {data.coverLetterExamples.map((ex, i) => (
+                  <div key={i} className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-text-muted font-medium">Example {i + 1}</span>
+                      <div className="flex items-center gap-2">
+                        <label
+                          htmlFor={`cl-example-pdf-${i}`}
+                          className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1 border border-border rounded-lg text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 13 13" fill="none">
+                            <path d="M6.5 1v7M3.5 4l3-3 3 3M1.5 10v1a1 1 0 001 1h9a1 1 0 001-1v-1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          Upload PDF
+                        </label>
+                        <input
+                          id={`cl-example-pdf-${i}`}
+                          type="file"
+                          accept=".pdf"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (!file) return;
+                            const fd = new FormData();
+                            fd.append("file", file);
+                            const res = await fetch("/api/profile/extract-pdf-text", { method: "POST", body: fd });
+                            const json = await res.json() as { text?: string; error?: string };
+                            if (!res.ok || json.error) { toast(json.error ?? "Failed to read PDF.", "error"); return; }
+                            const updated = [...data.coverLetterExamples];
+                            updated[i] = json.text ?? "";
+                            setField("coverLetterExamples", updated);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setField("coverLetterExamples", data.coverLetterExamples.filter((_, j) => j !== i))}
+                          className="px-2.5 py-1 text-xs text-text-muted hover:text-error hover:bg-error/10 rounded-lg border border-transparent hover:border-error/20 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                    <textarea
+                      value={ex}
+                      onChange={(e) => {
+                        const updated = [...data.coverLetterExamples];
+                        updated[i] = e.target.value;
+                        setField("coverLetterExamples", updated);
+                      }}
+                      placeholder={`Paste a previous cover letter here, or upload a PDF above...`}
+                      rows={8}
+                      className="w-full px-3 py-2 border border-border rounded-lg text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent bg-surface transition-colors resize-y"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </SectionAccordion>

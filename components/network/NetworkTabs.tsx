@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Connection, NetworkImport } from "@/types";
+import type { Connection, NetworkImport, LinkedInRecommendation, WorkExperience } from "@/types";
 import { isRecruiter } from "@/lib/network-utils";
 import { ImportButton } from "@/components/network/ImportButton";
 import { ConnectionsTable } from "@/components/network/ConnectionsTable";
@@ -10,15 +10,18 @@ import { CompaniesView } from "@/components/network/CompaniesView";
 import { FavoritesView } from "@/components/network/FavoritesView";
 import { NotesView } from "@/components/network/NotesView";
 import { ImportHistory } from "@/components/network/ImportHistory";
+import { RecommendationsView } from "@/components/network/RecommendationsView";
 
-type Tab = "connections" | "recruiters" | "companies" | "favorites" | "notes" | "history";
+type Tab = "connections" | "recruiters" | "companies" | "favorites" | "notes" | "recommendations" | "history";
 
 type Props = {
   connections: Connection[];
   imports: NetworkImport[];
+  recommendations: LinkedInRecommendation[];
+  workExperience: WorkExperience[];
 };
 
-export function NetworkTabs({ connections, imports }: Props) {
+export function NetworkTabs({ connections, imports, recommendations, workExperience }: Props) {
   const [tab, setTab] = useState<Tab>("connections");
 
   const recruiterCount = connections.filter(isRecruiter).length;
@@ -32,13 +35,14 @@ export function NetworkTabs({ connections, imports }: Props) {
     { key: "companies", label: "Companies", count: companiesCount },
     { key: "favorites", label: "Favorites", count: favoriteCount },
     { key: "notes", label: "Notes", count: notesCount },
+    { key: "recommendations", label: "Recommendations", count: recommendations.length },
     { key: "history", label: "Import History", count: imports.length },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1 bg-surface border border-border rounded-xl p-1">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1 bg-surface border border-border rounded-xl p-1">
           {tabs.map((t) => (
             <button
               key={t.key}
@@ -72,6 +76,13 @@ export function NetworkTabs({ connections, imports }: Props) {
       {tab === "companies" && <CompaniesView connections={connections} />}
       {tab === "favorites" && <FavoritesView connections={connections} />}
       {tab === "notes" && <NotesView connections={connections} />}
+      {tab === "recommendations" && (
+        <RecommendationsView
+          connections={connections}
+          workExperience={workExperience}
+          initialRecommendations={recommendations}
+        />
+      )}
       {tab === "history" && <ImportHistory imports={imports} />}
     </div>
   );
