@@ -1,6 +1,6 @@
 # DevJobInfo
 
-An AI-powered job hunting assistant. Set up your profile once, then let the agent find relevant jobs, score them against your actual skills, research each company, generate a tailored cover letter, and tell you who in your network to reach out to — all before you click Apply.
+An AI-powered job hunting assistant. Set up your profile once, then let the agent find relevant jobs, score them against your actual skills, research each company, generate a tailored cover letter and resume, and tell you who in your network to reach out to — all before you click Apply.
 
 **Live:** [devjob.info](https://devjob.info)
 
@@ -10,33 +10,119 @@ An AI-powered job hunting assistant. Set up your profile once, then let the agen
 
 ---
 
-## What it does
+## How it works
 
-### Find jobs that match your real skills
+Three steps. No manual searching.
 
-Search by title and location across Adzuna, JobTech, Jooble, CareerJet, and Glassdoor simultaneously. GPT-4o scores every job 0–100 against your profile and explains exactly which skills match and which are missing — so you spend time on roles worth applying to.
+| Step | What happens |
+|---|---|
+| **1. Build your profile** | Enter your work history, skills, and cover letter style rules once. Upload a PDF resume — GPT-4o pre-fills everything automatically. |
+| **2. Search & score** | Type a job title and location. The agent queries five job boards in parallel and GPT-4o scores every result 0–100 against your actual skills. |
+| **3. Apply with confidence** | Research the company, generate a tailored cover letter and resume, find a warm intro in your LinkedIn network — all from one page. |
+
+---
+
+## Features
+
+### Job discovery and AI scoring
+
+Search Adzuna, JobTech, Jooble, CareerJet, and Glassdoor simultaneously. GPT-4o reads every posting against your profile and assigns a match score 0–100, with a breakdown of exactly which skills match and which are missing — so you spend time only on roles worth applying to.
 
 ![Jobs list with match scores](public/images/jobs-2026-06-30.jpeg)
 
-### Research any company in one click
+You can also paste any job URL directly to import a posting that didn't appear in search results.
 
-Browserbase + Stagehand autonomously browses the company's public website and builds a structured dossier: business overview, tech stack, culture signals, why the role exists, and smart interview prep talking points. Falls back to GPT-4o synthesis if the site can't be reached.
+---
+
+### Company research
+
+Click **Research Company** and an autonomous agent opens the company's public website, reads the homepage, About, and Engineering/Blog pages, then produces a structured dossier:
+
+- Business overview and product
+- Tech stack and engineering culture signals
+- Why this role exists
+- Smart interview prep talking points
+
+Falls back to GPT-4o synthesis from the job description if the site can't be reached.
 
 ![Company research dossier](public/images/research-2026-06-30.jpeg)
 
-### AI cover letter and tailored resume
+---
 
-One click generates a personalised cover letter using your profile, the job description, and the company research. The letter is always written in the detected language of the job posting (Danish, Swedish, Norwegian, German, Dutch, French, Spanish, English). Download as PDF or copy as plain text. Tailored resume PDFs are generated per role from the same source.
+### AI cover letter — with humanise workflow
+
+One click generates a personalised cover letter using your profile, the full job description, and the company research dossier. Letters are always written in the **detected language of the job posting** (Danish, Swedish, Norwegian, German, Dutch, French, Spanish, English).
+
+**Getting a more human-sounding letter:**
+
+1. Generate the letter and click **Copy & open Gemini**
+2. Paste the letter into [gemini.google.com](https://gemini.google.com) and ask for style suggestions
+3. Paste the suggestions back into the **Writing advice** field
+4. Click **Recreate with advice** — the letter is rewritten using your advice as extra instructions
+
+Download as PDF (compact or detailed layout, with optional photo, job title, and resume appendix) or copy as plain text.
+
+---
+
+### Tailored resume
+
+Generate a job-specific resume PDF in one click from any job detail page. The resume is optimised for the target role, pulling from your full profile and up to three of your best past cover letter examples as a style reference.
+
+Upload an existing PDF on the Profile page to pre-fill your entire profile automatically using GPT-4o extraction.
+
+---
+
+### Profile and resume builder
+
+![Profile setup](public/images/onboarding-profile.png)
+
+Build a structured profile with:
+- Work experience (with reference contacts per role)
+- Education, skills, and languages
+- Cover letter style rules (Markdown — the AI follows them on every generation)
+- Cover letter examples (unlimited; the AI uses the latest three as style references)
+- LinkedIn recommendations
+- Free-text resume input as an alternative to the structured form
+
+---
+
+### Application pipeline
+
+Move jobs through **Saved → Applied → Interviewing → Offer → No answer → Rejected after interview**. When a job is marked Applied, the cover letter is automatically archived as a style example for future generations.
+
+---
 
 ### Network intelligence
 
-Import your LinkedIn connections once. DevJobInfo cross-references them against every job in your list so you always know when a warm intro is possible. For each job, the AI recommends the single best contact to reach out to and generates a ready-to-send, under-300-character LinkedIn message.
+Import your LinkedIn connections CSV once. DevJobInfo cross-references every connection against your job list so you always know when a warm intro is possible.
 
-![Network contacts and message generation](public/images/network-contacts-2026-06-30.jpeg)
+![Network contacts and outreach message](public/images/network-contacts-2026-06-30.jpeg)
 
-### Full application pipeline
+For each job, the AI:
+- Lists all connections who work at that company
+- Selects the single best contact to reach out to (recruiter, hiring manager, or relevant colleague) and explains why
+- Generates a personalised, under-300-character LinkedIn outreach message
 
-Move jobs through Saved → Applied → Interviewing → Offer. Dashboard analytics (PostHog-powered) show jobs over time, match score distribution, and company research activity.
+---
+
+### Dashboard and activity log
+
+![Dashboard and activity feed](public/images/dashboard-demo.png)
+
+The dashboard shows jobs added over time, match score distribution, company research activity, and a live activity feed. PostHog powers the analytics charts.
+
+![Agent activity log](public/images/agent-log.png)
+
+The agent log records every AI action — job scoring runs, research sessions, cover letter generations — so you can trace what happened and when.
+
+---
+
+### Onboarding
+
+New users are walked through profile setup, job search, and company research step by step before reaching the full app.
+
+![Onboarding — job search](public/images/onboarding-jobs.png)
+![Onboarding — company research](public/images/onboarding-research.png)
 
 ---
 
@@ -45,13 +131,17 @@ Move jobs through Saved → Applied → Interviewing → Offer. Dashboard analyt
 | Feature | Details |
 |---|---|
 | Job discovery | Adzuna, JobTech, Jooble, CareerJet, Glassdoor searched in parallel |
+| Job import | Paste any URL — GPT-4o extracts the posting |
 | AI scoring | GPT-4o scores 0–100 with matched + missing skills per job |
 | Company research | Browserbase live browsing → structured dossier with interview prep |
-| Cover letter | GPT-4o, language-detected, PDF + plain text download |
+| Cover letter | GPT-4o, language-detected, humanise workflow, PDF + plain text |
 | Tailored resume | Job-specific PDF generated per role |
 | Resume extraction | Upload existing PDF — GPT-4o pre-fills your profile |
+| Cover letter examples | Unlimited; newest three used as style reference on every generation |
+| Cover letter rules | Markdown rules file — sole AI system prompt when set |
+| LinkedIn recommendations | Store and display recommendations on your profile |
 | Network intelligence | LinkedIn connection import, AI contact selection, message generation |
-| Application tracking | Saved → Applied → Interviewing → Offer pipeline |
+| Application tracking | Saved → Applied → Interviewing → Offer pipeline with more statuses |
 | Dashboard analytics | Charts for activity, scores, and research via PostHog |
 | User approval gate | Admin-controlled sign-up approval with Resend email notifications |
 
@@ -63,7 +153,7 @@ Move jobs through Saved → Applied → Interviewing → Offer. Dashboard analyt
 |---|---|
 | Framework | Next.js 16 (App Router) |
 | Backend (DB, Auth, Storage) | InsForge |
-| AI model | OpenAI GPT-4o |
+| AI model | OpenAI GPT-4o / GPT-4o-mini |
 | Cloud browser | Browserbase |
 | Browser automation | Stagehand |
 | Job sources | Adzuna, JobTech, Jooble, CareerJet, RapidAPI (Glassdoor) |
@@ -192,6 +282,7 @@ Open [http://localhost:3000](http://localhost:3000).
 │   ├── find-jobs.ts            # Multi-source job discovery + GPT-4o scoring
 │   ├── research-company.ts     # Browserbase + Stagehand company dossier
 │   ├── generate-cover-letter.ts
+│   ├── humanize-text.ts        # GPT-4o-mini second pass for natural tone
 │   └── import-job-from-url.ts
 ├── app/
 │   ├── page.tsx                # Landing page
@@ -235,9 +326,10 @@ See [`context/app-map.md`](context/app-map.md) for a full reference of every rou
 
 ### Cover letter
 1. Click **Generate Cover Letter** on any job detail page
-2. GPT-4o writes a letter using your profile, job description, and company research dossier
+2. GPT-4o writes a letter using your profile, job description, company research dossier, and any cover letter style examples you have saved
 3. The letter is written in the detected language of the job posting
-4. Download as PDF or copy as plain text; previous versions are archived automatically
+4. Optionally paste writing advice from Gemini and click **Recreate with advice** to rewrite the letter using that feedback
+5. Download as PDF or copy as plain text; when you mark the job Applied the letter is automatically archived as a style example
 
 ### Resume
 1. Upload an existing PDF on the Profile page — GPT-4o extracts your details and pre-fills the form
@@ -300,6 +392,8 @@ Remember to set all required environment variables in your InsForge deployment s
 - **Agent routes** (`/api/agent/*`) can run for up to 5 minutes. On short-timeout serverless platforms, max execution time may need to be increased.
 - **Job language detection** covers Danish, Swedish, Norwegian, German, Dutch, French, Spanish, and English. Letters are always written in the detected language of the job posting.
 - **LinkedIn CSV import** — export from LinkedIn → Settings → Data Privacy → Get a copy of your data → Connections. The CSV is parsed client-side; raw files are not stored.
+- **Cover letter examples** are saved automatically when a job is marked Applied. The three most recent examples are always included as style references in new generations.
+- **Cover letter rules** — if you set a `cover_letter_instructions` field in your profile, it becomes the sole AI system prompt for generation (overriding defaults). Write it in Markdown.
 - **Adzuna** always searches with `category=it-jobs`. Change this in `lib/adzuna.ts` for non-tech roles.
 - **RLS** — all database queries are scoped to the authenticated user via InsForge Row Level Security. Never query without a `user_id` filter in application code.
 - **Approval cookie lifetime** — `jp_approved` is a 7-day httpOnly cookie. If an admin revokes a user's approval, they retain access until the cookie expires or they log out.
