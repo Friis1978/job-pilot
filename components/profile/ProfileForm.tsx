@@ -2074,26 +2074,32 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
               <div className="flex items-end justify-between gap-3 mb-1.5">
                 <label className={`${labelClass} flex items-center gap-1.5 mb-0`}>
                   Example Cover Letters
-                  <InfoIcon tip="Paste or upload 1–3 of your best old cover letters. The AI uses these as style references to match your voice and structure when generating new letters." />
+                  <InfoIcon tip="Paste or upload your best old cover letters. The AI uses the 3 newest as style references to match your voice and structure when generating new letters." />
+                  {data.coverLetterExamples.filter(Boolean).length > 0 && (
+                    <span className="text-xs font-normal text-text-muted">
+                      {data.coverLetterExamples.filter(Boolean).length} total
+                    </span>
+                  )}
                 </label>
-                {data.coverLetterExamples.length < 3 && (
-                  <button
-                    type="button"
-                    onClick={() => setField("coverLetterExamples", [...data.coverLetterExamples, ""])}
-                    className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors shrink-0"
-                  >
-                    + Add Example
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setField("coverLetterExamples", ["", ...data.coverLetterExamples])}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors shrink-0"
+                >
+                  + Add Example
+                </button>
               </div>
               {data.coverLetterExamples.length === 0 && (
-                <p className="text-xs text-text-muted">No examples added yet. Add up to 3.</p>
+                <p className="text-xs text-text-muted">No examples added yet.</p>
+              )}
+              {data.coverLetterExamples.length > 3 && (
+                <p className="text-xs text-text-muted mb-2">Showing newest 3 of {data.coverLetterExamples.length}. Older examples are stored and used by the AI automatically.</p>
               )}
               <div className="flex flex-col gap-3">
-                {data.coverLetterExamples.map((ex, i) => (
+                {data.coverLetterExamples.slice(0, 3).map((ex, i) => (
                   <div key={i} className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs text-text-muted font-medium">Example {i + 1}</span>
+                      <span className="text-xs text-text-muted font-medium">Example {i + 1}{i === 0 && data.coverLetterExamples.length > 1 ? " (newest)" : ""}</span>
                       <div className="flex items-center gap-2">
                         <label
                           htmlFor={`cl-example-pdf-${i}`}

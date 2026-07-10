@@ -173,6 +173,8 @@ export async function POST(
       ? `\n- IMPORTANT: Write ALL text fields (summary, bullets) in the same language as the job post. Detected language code: ${detectedLang}. Do not use English if the job post is in another language.`
       : "";
 
+    const coverLetterExamples = ((profile.cover_letter_examples as string[] | null) ?? []).filter(Boolean).slice(0, 3);
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       response_format: { type: "json_object" },
@@ -180,6 +182,10 @@ export async function POST(
       max_tokens: 1500,
       messages: [
         { role: "system", content: SYSTEM_PROMPT + langInstruction },
+        ...(coverLetterExamples.length > 0 ? [{
+          role: "user" as const,
+          content: `Here are ${coverLetterExamples.length} example cover letter${coverLetterExamples.length > 1 ? "s" : ""} written by this candidate. Study their voice, sentence structure, tone, and writing style. Apply this same voice to the resume summary and bullet points — do not copy content, only mirror the style.\n\n${coverLetterExamples.map((ex, i) => `--- Example ${i + 1} ---\n${ex.trim()}`).join("\n\n")}`,
+        }] : []),
         {
           role: "user",
           content: `TARGET ROLE: ${job.title} at ${job.company}

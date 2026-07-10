@@ -657,6 +657,7 @@ export async function findJobs(
         salary: r.job.salary ?? null,
         job_type: r.job.job_type ?? "fulltime",
         about_role: r.job.description,
+        full_post_text: r.job.description,
         description_summary: summaries[i] ?? null,
         match_score: r.matchScore,
         experience_score: r.experienceScore ?? null,

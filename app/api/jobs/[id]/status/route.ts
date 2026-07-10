@@ -51,7 +51,7 @@ export async function PATCH(
 
       const existing = (profile?.cover_letter_examples as string[] | null) ?? [];
       if (!existing.includes(coverLetter)) {
-        const updated = [coverLetter, ...existing].slice(0, 3);
+        const updated = [coverLetter, ...existing];
         await insforge.database
           .from("profiles")
           .update({ cover_letter_examples: updated })

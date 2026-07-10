@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { detectLanguage, LANGUAGE_LABELS } from "@/lib/detect-language";
+import { humanizeText } from "@/agent/humanize-text";
 import type { WorkExperience, PersonalProject } from "@/types";
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -37,7 +38,7 @@ export async function POST(
         .single(),
       insforge.database
         .from("profiles")
-        .select("full_name, current_title, years_experience, skills, work_experience, personal_projects, motivation, proud_achievement, energy_tasks, career_vision, cover_letter_tone")
+        .select("full_name, current_title, years_experience, skills, work_experience, personal_projects, motivation, proud_achievement, energy_tasks, career_vision, cover_letter_tone, cover_letter_instructions, cover_letter_examples")
         .eq("id", userId)
         .single(),
     ]);
@@ -69,6 +70,9 @@ export async function POST(
       ? `Use a ${profile.cover_letter_tone} tone.`
       : "Use a confident and professional tone.";
 
+    const coverLetterExamples = ((profile.cover_letter_examples as string[] | null) ?? []).filter(Boolean).slice(0, 3);
+    const customInstructions = (profile.cover_letter_instructions as string | null) ?? null;
+
     const companyContext = job.company_research
       ? `\nCOMPANY RESEARCH:\n${JSON.stringify(job.company_research, null, 2)}`
       : "";
@@ -89,12 +93,18 @@ Rules:
 - No subject line, no date, no address header — start directly with the opening paragraph
 - Do NOT include placeholders like [Your Name] or [Date]
 - End with just the candidate's name as the sign-off
-- ${toneInstruction}
+- ${toneInstruction}${customInstructions ? `\n- Candidate's personal style guide: ${customInstructions}` : ""}
 - Be specific: reference the company name, role title, and concrete skills/experiences
 - Show genuine understanding of what the company needs
 - Never be generic — every sentence must be tailored to this specific job
+- NEVER start with "I" as the first word
+- NEVER use: "excited", "thrilled", "passion", "perfect opportunity", "dream role", or any variant
 - CRITICAL: Never invent, fabricate, or assume details not explicitly provided. Do not make up company names, project names, team sizes, metrics, platforms, achievements, or anything else not present in the candidate data. If a detail is not in the candidate data, do not use it`,
         },
+        ...(coverLetterExamples.length > 0 ? [{
+          role: "user" as const,
+          content: `Here are ${coverLetterExamples.length} example cover letter${coverLetterExamples.length > 1 ? "s" : ""} written by this candidate. Study their voice, sentence structure, tone, and rhythm. Mirror this style in the new letter — do not copy content, only the writing style.\n\n${coverLetterExamples.map((ex, i) => `--- Example ${i + 1} ---\n${ex.trim()}`).join("\n\n")}`,
+        }] : []),
         {
           role: "user",
           content: `JOB:
@@ -114,11 +124,12 @@ Work history: ${workExp.map((w) => `${w.title} at ${w.company}`).join("; ") || "
       ],
     });
 
-    const text = response.choices[0]?.message?.content?.trim();
-    if (!text) {
+    const raw = response.choices[0]?.message?.content?.trim();
+    if (!raw) {
       return NextResponse.json({ error: "Failed to generate cover letter. Please try again." }, { status: 500 });
     }
 
+    const text = await humanizeText(raw, openai);
     return NextResponse.json({ text, language, labels });
   } catch (err) {
     console.error("[api/jobs/tailored-cover-letter POST]", err);

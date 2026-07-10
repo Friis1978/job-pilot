@@ -56,6 +56,7 @@ type Job = {
   description_summary: string | null;
   cover_letter: string | null;
   cover_letter_advice: string | null;
+  humanized_cover_letter: string | null;
   tailored_summary: string | null;
   tailored_resume_content: Record<string, unknown> | null;
   resume_motivation: string | null;
@@ -367,7 +368,7 @@ export default async function JobDetailsPage({
 
               {/* Cover Letter */}
               <div id="cover-letter">
-                <CoverLetterSection jobId={job.id} initialCoverLetter={job.cover_letter} initialAdvice={job.cover_letter_advice} hasAvatar={!!profileData?.avatar_url} tailoredSummary={job.tailored_summary} />
+                <CoverLetterSection jobId={job.id} initialCoverLetter={job.cover_letter} initialHumanizedLetter={job.humanized_cover_letter} hasAvatar={!!profileData?.avatar_url} tailoredSummary={job.tailored_summary} />
               </div>
 
               {/* Resume */}

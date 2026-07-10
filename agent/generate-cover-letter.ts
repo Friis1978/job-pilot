@@ -3,6 +3,7 @@ import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { computeSkillYears } from "@/lib/utils";
 import { detectLanguage } from "@/lib/detect-language";
+import { humanizeText } from "@/agent/humanize-text";
 import type { WorkExperience, PersonalProject } from "@/types";
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -18,13 +19,6 @@ const LANGUAGE_NAMES: Record<string, string> = {
 
 type Result = { success: boolean; text?: string; error?: string };
 
-const OPENING_STRATEGIES = [
-  "Lead with a specific result or achievement from the candidate's past that directly maps to what this role needs. Make the first sentence about impact, not excitement.",
-  "Open with a concrete observation about the company — something specific from the research (a product, a market position, a challenge they face) — then connect it to why the candidate's background is relevant.",
-  "Start by naming the exact problem or challenge this role is meant to solve, then immediately show how the candidate has already solved something similar.",
-  "Begin in the middle of a story: a specific project, moment, or technical decision the candidate made that is directly relevant to this company's work. No preamble.",
-  "Open with a direct statement of fit: what the candidate brings + what the role needs, stated plainly and confidently. No flattery, no 'thrilled to apply'.",
-];
 
 /**
  * Generates a personalised cover letter for a saved job using gpt-4o.
@@ -48,7 +42,7 @@ export async function generateCoverLetter(
     insforge.database
       .from("jobs")
       .select(
-        "title, company, about_role, responsibilities, requirements, match_reason, matched_skills, missing_skills, company_research",
+        "title, company, about_role, full_post_text, responsibilities, requirements, match_reason, matched_skills, missing_skills, company_research",
       )
       .eq("id", jobId)
       .eq("user_id", userId)
@@ -56,7 +50,7 @@ export async function generateCoverLetter(
     insforge.database
       .from("profiles")
       .select(
-        "full_name, current_title, years_experience, skills, work_experience, personal_projects, cover_letter_tone, cover_letter_instructions, cover_letter_examples, motivation, proud_achievement, energy_tasks, company_type_preference, career_vision, linkedin_url, portfolio_url",
+        "full_name, current_title, years_experience, skills, work_experience, personal_projects, cover_letter_instructions, cover_letter_examples, motivation, proud_achievement, energy_tasks, career_vision, linkedin_url, portfolio_url",
       )
       .eq("id", userId)
       .single(),
@@ -75,12 +69,12 @@ export async function generateCoverLetter(
   const job = jobRes.data;
   const profile = profileRes.data;
 
-  const tone = (profile.cover_letter_tone as string | null) ?? "Professional";
   const customInstructions = (profile.cover_letter_instructions as string | null) ?? null;
   const coverLetterExamples = ((profile.cover_letter_examples as string[] | null) ?? []).filter(Boolean).slice(0, 3);
+  const fullPost = (job.full_post_text as string | null) || job.about_role || "";
   const allJobText = [
     job.title ?? "",
-    job.about_role ?? "",
+    fullPost,
     ...(job.responsibilities as string[] | null ?? []),
     ...(job.requirements as string[] | null ?? []),
   ].join(" ");
@@ -108,7 +102,6 @@ export async function generateCoverLetter(
     .map(([s, y]) => `${s} ${y}yr`)
     .join(", ");
 
-  const companyTypePreference = (profile.company_type_preference as string[] | null) ?? [];
   const projectsText = personalProjects.length > 0
     ? personalProjects
         .map((p) => {
@@ -130,66 +123,14 @@ export async function generateCoverLetter(
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    const openingStrategy = OPENING_STRATEGIES[Math.floor(Math.random() * OPENING_STRATEGIES.length)];
-
-
-    const coreRules = `
-Content rules — apply regardless of any other instructions:
-
-COMPANY & JOB FIT:
-- Use the match reason to understand exactly why this candidate fits this role — that is the spine of the letter
-- Use the company research to show genuine understanding: what does this company actually do, what problems are they solving, what kind of person thrives there — then connect it directly to the candidate. Don't name-drop; demonstrate that you understand their world
-- If the research reveals culture signals (pace, values, mission, team structure), use those to calibrate tone and emphasis
-
-WHAT DRIVES THE CANDIDATE:
-- If motivation is provided: find where it overlaps with what this company does or values — make that connection explicit in the letter, not just implied. "I care about X" only lands if you show the company also cares about X
-- If energy tasks are provided: cross-reference with what the role actually requires day-to-day — show the candidate will genuinely enjoy this work, not just be qualified for it. "I thrive doing X, and this role is fundamentally about X" is more convincing than any skills list
-- If career vision is provided: connect it to where this company is going — show this role is a deliberate step, not a random application
-- If a key achievement is provided: use it as concrete evidence for the most important claim in the letter
-
-EXPERIENCE & SKILLS:
-- Draw on ALL work history — matched skills are a hint, not the limit. Older roles often contain the most relevant experience
-- Where the candidate has years of experience for a skill relevant to this role, include the number naturally (e.g. "5 years of React")
-- If personal projects are listed, weave in at least one that's relevant — mention it by name and include ALL available links inline (Live URL, GitHub URL, and Video URL — include every one that exists for the project, e.g. "live at https://..., source at https://..., demo at https://...") — real links turn claims into proof
-
-FINISHING:
-- Acknowledge gap skills briefly — one sentence max, frame as adjacent strength or fast ramp
-- Close with a direct, confident call to action — not "I hope to hear from you"
-${companyTypePreference.length > 0 ? `- The candidate prefers ${companyTypePreference.join(" / ")} environments — reflect language and values that resonate with that culture\n` : ""}
-FORMAT (${style === "compact" ? "COMPACT" : "DETAILED"} style selected):
-${style === "compact"
-  ? `- Maximum 15 lines of text (blank lines don't count)
-- Use a short opening paragraph (2–3 sentences), then an unordered bullet list (4–6 bullets) of the strongest matching points, then a one-sentence closing
-- Each bullet must be a concrete, specific claim — not a generic soft skill
-- The entire letter must be easy to scan in under 30 seconds`
-  : `- Maximum 40 lines (including blank lines)
-- Use 3–4 paragraphs with flowing prose — no bullet lists
-- Mention at least 2 relevant personal projects or past roles by name with specifics
-- Go deeper on how the candidate's experience maps to the role's actual challenges`}
-- NEVER invent, fabricate, or assume details not explicitly provided in the candidate data. Do not make up company names, project names, team sizes, metrics, platforms, or achievements. Only use what is given
-- Do NOT include subject line, date, address block, or signature — just the letter body
-- Write in first person as the candidate
-- Write the entire letter in ${language}`;
-
     const systemPrompt = customInstructions
-      ? `You are an expert cover letter writer. The candidate's instruction set below is their personal style guide — follow it for voice, tone, structure, and formatting preferences. Write in a ${tone} tone.
-${coreRules}
+      ? `You are writing a cover letter for ${profile.full_name ?? "the candidate"}.
+Write the letter in ${language} — detected from the job posting.
+Follow the personal instruction set below as your sole guide.
 
-CANDIDATE'S COVER LETTER INSTRUCTIONS:
 ${customInstructions}`
-      : `You are an expert cover letter writer. Write a compelling, personalised cover letter in a ${tone} tone.
-
-Opening strategy for THIS letter: ${openingStrategy}
-
-Additional style rules:
-- NEVER start with "I" as the first word
-- NEVER use: "excited", "thrilled", "passion", "couldn't help", "perfect opportunity", "dream role", "long-time admirer", "ideal candidate", or any variant of these
-- Do NOT open with enthusiasm about the company — lead with substance, not flattery
-- Address it to the hiring team at the company (no "Dear Sir/Madam", no "To Whom It May Concern")
-- Every claim must be grounded in the candidate's actual experience — no vague assertions
-- OPENING: Introduce the candidate and their experience without naming specific frameworks, tools, or the job title. Lead with what they do and the impact they create, not the stack they use
-- COMPANY FIT: Only mention how the candidate fits the company if the job posting explicitly asks for it (e.g. "tell us why you want to work here", "why us", "what draws you to X"). Otherwise skip it entirely — do not volunteer cultural fit or enthusiasm unprompted
-${coreRules}`;
+      : `You are writing a cover letter for ${profile.full_name ?? "the candidate"} in ${language}.
+Write in first person. Be direct and specific — every claim must be grounded in the candidate's actual profile data. Do not fabricate achievements, team sizes, or responsibilities. Do not express excitement or enthusiasm about the opportunity. Do not mention personal hobbies. End with the candidate's name.`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -209,7 +150,7 @@ ${coreRules}`;
           content: `JOB:
 Title: ${job.title}
 Company: ${job.company}
-Description: ${job.about_role ?? "Not provided"}${(job.requirements as string[] | null)?.length ? `\nRequirements:\n${(job.requirements as string[]).map((r) => `- ${r}`).join("\n")}` : ""}${(job.responsibilities as string[] | null)?.length ? `\nResponsibilities:\n${(job.responsibilities as string[]).map((r) => `- ${r}`).join("\n")}` : ""}
+Full job post: ${fullPost || "Not provided"}${(job.requirements as string[] | null)?.length ? `\nRequirements:\n${(job.requirements as string[]).map((r) => `- ${r}`).join("\n")}` : ""}${(job.responsibilities as string[] | null)?.length ? `\nResponsibilities:\n${(job.responsibilities as string[]).map((r) => `- ${r}`).join("\n")}` : ""}
 Matched skills: ${(job.matched_skills as string[] | null)?.join(", ") ?? "None"}
 Gap skills: ${(job.missing_skills as string[] | null)?.join(", ") ?? "None"}${(job.match_reason as string | null) ? `\nWhy this job fits the candidate: ${job.match_reason}` : ""}
 ${companyContext}
@@ -222,7 +163,7 @@ All skills: ${(profile.skills as string[] | null)?.join(", ") ?? "Not provided"}
 Full work history (sorted newest first — [CURRENT ROLE] or [MOST RECENT] marks the top entry):
 ${recentWork || "Not provided"}${projectsText ? `\n\nPersonal projects:\n${projectsText}` : ""}
 
-WHAT DRIVES THIS CANDIDATE:${(profile.motivation as string | null) ? `\nMotivation: ${profile.motivation}` : ""}${(profile.proud_achievement as string | null) ? `\nKey achievement: ${profile.proud_achievement}` : ""}${(profile.energy_tasks as string | null) ? `\nWhat gives them energy: ${profile.energy_tasks}` : ""}${(profile.career_vision as string | null) ? `\nCareer vision: ${profile.career_vision}` : ""}${(profile.linkedin_url as string | null) ? `\n\nLinkedIn: ${profile.linkedin_url}` : ""}${(profile.portfolio_url as string | null) ? `\nPortfolio: ${profile.portfolio_url}` : ""}`,
+WHAT DRIVES THIS CANDIDATE (use only what maps to professional work in this role — never mention hobbies or personal interests):${(profile.motivation as string | null) ? `\nMotivation: ${profile.motivation}` : ""}${(profile.proud_achievement as string | null) ? `\nKey achievement: ${profile.proud_achievement}` : ""}${(profile.energy_tasks as string | null) ? `\nWhat energises them professionally: ${profile.energy_tasks}` : ""}${(profile.career_vision as string | null) ? `\nCareer vision: ${profile.career_vision}` : ""}${(profile.linkedin_url as string | null) ? `\n\nLinkedIn: ${profile.linkedin_url}` : ""}${(profile.portfolio_url as string | null) ? `\nPortfolio: ${profile.portfolio_url}` : ""}`,
         },
         ...(extraInstructions?.trim() ? [{
           role: "user" as const,
@@ -231,11 +172,13 @@ WHAT DRIVES THIS CANDIDATE:${(profile.motivation as string | null) ? `\nMotivati
       ],
     });
 
-    const coverLetter = response.choices[0]?.message?.content?.trim();
-    if (!coverLetter) {
+    const raw = response.choices[0]?.message?.content?.trim();
+    if (!raw) {
       await posthog.shutdown();
       return { success: false, error: "Generation failed. Please try again." };
     }
+
+    const coverLetter = await humanizeText(raw, openai);
 
     // Archive existing cover letter before overwriting
     const { data: existingJob } = await insforge.database
