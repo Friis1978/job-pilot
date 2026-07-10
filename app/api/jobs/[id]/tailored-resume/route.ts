@@ -404,11 +404,12 @@ export async function GET(
     }
 
     const includePhoto = req.nextUrl.searchParams.get("photo") !== "0";
+    const includeImages = req.nextUrl.searchParams.get("images") === "1";
     const avatarUrl = includePhoto ? (profile.avatar_url ?? undefined) : undefined;
 
     const element = createElement(
       ResumePDF,
-      { profile, generated, skillYears, motivation: motivation ?? undefined, resumeText: resumeText ?? undefined, recommendations: localizedRecs, avatarUrl },
+      { profile, generated, skillYears, motivation: motivation ?? undefined, resumeText: resumeText ?? undefined, recommendations: localizedRecs, avatarUrl, includeImages },
     ) as unknown as ReactElement<DocumentProps>;
     const buffer = await renderToBuffer(element);
 

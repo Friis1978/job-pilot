@@ -87,6 +87,7 @@ export function ResumeSection({ jobId, hasResearch, initialMotivation, initialRe
   const [downloading, setDownloading] = useState(false);
   const [resumeReady, setResumeReady] = useState(hasGeneratedResume);
   const [includePhoto, setIncludePhoto] = useState(true);
+  const [includeImages, setIncludeImages] = useState(false);
   const hasAvatar = !!avatarUrl;
 
   const isDirty =
@@ -166,8 +167,11 @@ export function ResumeSection({ jobId, hasResearch, initialMotivation, initialRe
           body: JSON.stringify({ motivation, resumeText }),
         });
       }
-      const photoParam = hasAvatar && !includePhoto ? "?photo=0" : "";
-      const res = await fetch(`/api/jobs/${jobId}/tailored-resume${photoParam}`);
+      const params = new URLSearchParams();
+      if (hasAvatar && !includePhoto) params.set("photo", "0");
+      if (includeImages) params.set("images", "1");
+      const qs = params.size ? `?${params.toString()}` : "";
+      const res = await fetch(`/api/jobs/${jobId}/tailored-resume${qs}`);
       if (!res.ok) {
         const json = await res.json().catch(() => ({})) as { error?: string };
         toast(json.error ?? "Failed to download resume.", "error");
@@ -255,6 +259,17 @@ export function ResumeSection({ jobId, hasResearch, initialMotivation, initialRe
           >
             <PhotoIcon className="w-3.5 h-3.5" />Photo
             {includePhoto && <CheckIcon className="w-3 h-3" />}
+          </button>
+        )}
+
+        {resumeReady && (
+          <button
+            onClick={() => setIncludeImages((v) => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${includeImages ? "border-accent text-accent bg-accent/5 hover:bg-accent/10" : "border-border text-text-muted hover:bg-surface-secondary"}`}
+            title={includeImages ? "Project images included in PDF (larger file)" : "Project images excluded from PDF (smaller file)"}
+          >
+            <ImagesIcon className="w-3.5 h-3.5" />Images
+            {includeImages && <CheckIcon className="w-3 h-3" />}
           </button>
         )}
 
@@ -395,6 +410,14 @@ function PhotoIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
+    </svg>
+  );
+}
+
+function ImagesIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="5" width="16" height="14" rx="2" /><polyline points="18 5 22 5 22 19 18 19" /><circle cx="7" cy="10" r="1.5" /><polyline points="18 15 13 10 2 19" />
     </svg>
   );
 }

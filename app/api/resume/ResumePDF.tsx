@@ -34,6 +34,7 @@ type Props = {
   resumeText?: string;
   recommendations?: LinkedInRecommendation[];
   avatarUrl?: string;
+  includeImages?: boolean;
 };
 
 const TEXT = "#111827";
@@ -46,23 +47,23 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica",
     fontSize: 9,
     color: TEXT,
-    paddingTop: 30,
-    paddingBottom: 30,
-    paddingLeft: 40,
-    paddingRight: 40,
-    lineHeight: 1.4,
+    paddingTop: 22,
+    paddingBottom: 22,
+    paddingLeft: 34,
+    paddingRight: 34,
+    lineHeight: 1.3,
   },
   // Header
   headerName: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: "Helvetica-Bold",
     color: TEXT,
-    marginBottom: 9,
+    marginBottom: 4,
   },
   headerTitle: {
-    fontSize: 11,
+    fontSize: 10,
     color: BLUE,
-    marginBottom: 3,
+    marginBottom: 2,
   },
   headerContact: {
     fontSize: 8,
@@ -81,8 +82,8 @@ const styles = StyleSheet.create({
     fontSize: 7,
     fontFamily: "Helvetica-Bold",
     color: ACCENT,
-    marginTop: 10,
-    marginBottom: 3,
+    marginTop: 7,
+    marginBottom: 2,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
@@ -90,25 +91,25 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Helvetica-Bold",
     color: TEXT,
-    marginTop: 8,
-    marginBottom: 3,
+    marginTop: 6,
+    marginBottom: 2,
   },
   divider: {
     borderBottomWidth: 0.5,
     borderBottomColor: "#E5E7EB",
-    marginBottom: 4,
+    marginBottom: 3,
   },
   // Summary
   summaryText: {
     fontSize: 9,
     color: TEXT,
-    lineHeight: 1.5,
+    lineHeight: 1.4,
   },
   // Skills
   skillGroupRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 2,
+    marginBottom: 1.5,
   },
   skillGroupLabel: {
     fontSize: 7,
@@ -123,29 +124,29 @@ const styles = StyleSheet.create({
   skillsText: {
     fontSize: 8,
     color: TEXT,
-    lineHeight: 1.4,
+    lineHeight: 1.3,
     flex: 1,
   },
   skillsRowText: {
     fontSize: 8,
     color: TEXT,
-    lineHeight: 1.4,
+    lineHeight: 1.3,
   },
   skillPillsWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 3,
+    gap: 2,
     flex: 1,
   },
   skillPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    gap: 2,
     backgroundColor: "#eff6ff",
-    borderRadius: 4,
-    paddingHorizontal: 5,
-    paddingTop: 3,
-    paddingBottom: 3,
+    borderRadius: 3,
+    paddingHorizontal: 4,
+    paddingTop: 2,
+    paddingBottom: 2,
   },
   skillPillText: {
     fontSize: 7.5,
@@ -155,9 +156,9 @@ const styles = StyleSheet.create({
   skillYrsBadge: {
     backgroundColor: "#dbeafe",
     borderRadius: 99,
-    paddingHorizontal: 4,
-    paddingTop: 2,
-    paddingBottom: 2,
+    paddingHorizontal: 3,
+    paddingTop: 1,
+    paddingBottom: 1,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -192,11 +193,11 @@ const styles = StyleSheet.create({
   roleSkills: {
     fontSize: 7,
     color: MUTED,
-    marginBottom: 2,
+    marginBottom: 1,
   },
   bulletRow: {
     flexDirection: "row",
-    marginBottom: 1,
+    marginBottom: 0.5,
     paddingLeft: 4,
   },
   bulletDot: {
@@ -208,10 +209,10 @@ const styles = StyleSheet.create({
     fontSize: 8,
     color: TEXT,
     flex: 1,
-    lineHeight: 1.4,
+    lineHeight: 1.35,
   },
   roleBlock: {
-    marginBottom: 5,
+    marginBottom: 4,
   },
   // Recommendations — speech bubble grid
   recGrid: {
@@ -225,8 +226,8 @@ const styles = StyleSheet.create({
   },
   recBubble: {
     backgroundColor: "#F3F4F6",
-    borderRadius: 6,
-    padding: 7,
+    borderRadius: 5,
+    padding: 5,
   },
   recTail: {
     width: 0,
@@ -417,7 +418,7 @@ function fmtRecDate(d: string) {
   return `${months[parseInt(month, 10) - 1]} ${year}`;
 }
 
-export function ResumePDF({ profile, generated, skillYears = {}, motivation, resumeText, recommendations = [], avatarUrl }: Props) {
+export function ResumePDF({ profile, generated, skillYears = {}, motivation, resumeText, recommendations = [], avatarUrl, includeImages = false }: Props) {
   const contactParts: { text: string; isUrl: boolean }[] = [];
   if (profile.email) contactParts.push({ text: profile.email, isUrl: false });
   if (profile.phone) contactParts.push({ text: profile.phone, isUrl: false });
@@ -658,9 +659,9 @@ export function ResumePDF({ profile, generated, skillYears = {}, motivation, res
                       ) : null}
                     </View>
                   ) : null}
-                  {/* Screenshots */}
-                  {(project.images ?? []).filter(Boolean).length > 0 ? (
-                    <View style={{ flexDirection: "row", gap: 6, marginTop: 6 }}>
+                  {/* Screenshots — only included when includeImages=true */}
+                  {includeImages && (project.images ?? []).filter(Boolean).length > 0 ? (
+                    <View style={{ flexDirection: "row", gap: 6, marginTop: 4 }}>
                       {(project.images ?? []).filter(Boolean).map((url, si) => (
                         <View key={si} style={{ flex: 1 }}>
                           <Image src={url!} style={{ width: "100%", borderRadius: 4 }} />
