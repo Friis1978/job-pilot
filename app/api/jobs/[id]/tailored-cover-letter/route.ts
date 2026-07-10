@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { detectLanguage, LANGUAGE_LABELS } from "@/lib/detect-language";
-import { humanizeText } from "@/agent/humanize-text";
 import type { WorkExperience, PersonalProject } from "@/types";
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -79,35 +78,36 @@ export async function POST(
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0.5,
-      max_tokens: 500,
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert cover letter writer. Write a tailored, compelling cover letter in ${language}.
+    const FORBIDDEN = `"passion", "excited", "excites", "resonates", "inspires", "thrive", "seamlessly", "empowering", "leverage", "transformative", "aligns perfectly", "real value", "deliver value", "appreciate the intricacies", "unique combination", "In my professional journey", "perfect opportunity", "dream role", "thrilled"`;
 
-Rules:
-- Maximum 20 lines (including blank lines)
-- No subject line, no date, no address header — start directly with the opening paragraph
-- Do NOT include placeholders like [Your Name] or [Date]
-- End with just the candidate's name as the sign-off
-- ${toneInstruction}${customInstructions ? `\n- Candidate's personal style guide: ${customInstructions}` : ""}
-- Be specific: reference the company name, role title, and concrete skills/experiences
-- Show genuine understanding of what the company needs
-- Never be generic — every sentence must be tailored to this specific job
-- NEVER start with "I" as the first word
-- NEVER use: "excited", "thrilled", "passion", "perfect opportunity", "dream role", or any variant
-- CRITICAL: Never invent, fabricate, or assume details not explicitly provided. Do not make up company names, project names, team sizes, metrics, platforms, achievements, or anything else not present in the candidate data. If a detail is not in the candidate data, do not use it`,
-        },
-        ...(coverLetterExamples.length > 0 ? [{
-          role: "user" as const,
-          content: `Here are ${coverLetterExamples.length} example cover letter${coverLetterExamples.length > 1 ? "s" : ""} written by this candidate. Study their voice, sentence structure, tone, and rhythm. Mirror this style in the new letter — do not copy content, only the writing style.\n\n${coverLetterExamples.map((ex, i) => `--- Example ${i + 1} ---\n${ex.trim()}`).join("\n\n")}`,
-        }] : []),
-        {
-          role: "user",
-          content: `JOB:
+    const greeting = language === "Danish" ? "Hej [Company name]," : "Hi [Company name],";
+    const closing = language === "Danish" ? "Med venlig hilsen," : "Best regards,";
+
+    const systemPrompt = `You are a JSON generator. Return a JSON object with exactly these 5 keys. Write in ${language}.
+
+{
+  "greeting": "${greeting}",
+  "intro": "1-2 sentences. Who the candidate is professionally. Must name at least 2 specific technologies from their actual skills (e.g. TypeScript, React, Rust, Next.js, Vue 3). Do NOT start with 'I'. Do NOT express enthusiasm or emotion.",
+  "achievement": "1-2 sentences. One specific project or work achievement by name. State what was built, what technology was used, and what changed as a result. Facts only.",
+  "fit": "1-2 sentences. Connect one specific skill or past experience to a concrete requirement from this job posting. Do not invent connections not in the data.",
+  "closing": "${closing}"
+}
+
+HARD RULES — every field must pass:
+- Banned words/concepts (no synonyms either): ${FORBIDDEN}
+- No emotional language. No statements about what the candidate feels, wants, loves, or is passionate about.
+- Only facts present in the profile data. TypeScript IS JavaScript — never say the candidate lacks JS experience.
+- Do NOT fabricate connections between unrelated domains.
+- Do NOT repeat the same sentence or phrase across fields.${customInstructions ? `\n\nSTYLE GUIDE (apply voice/structure rules only — do NOT apply enthusiasm or personality expression):\n${customInstructions}` : ""}`;
+
+    const workHistory = workExp
+      .map((w: WorkExperience) => {
+        const bullets = (w.responsibilities as string[] | null)?.slice(0, 3).map((r) => `  - ${r}`).join("\n") ?? "";
+        return `${w.title} at ${w.company}${bullets ? "\n" + bullets : ""}`;
+      })
+      .join("\n");
+
+    const candidateData = `JOB:
 Title: ${job.title}
 Company: ${job.company}
 Description: ${job.about_role ?? "Not provided"}${(job.requirements as string[] | null)?.length ? `\nRequirements:\n${(job.requirements as string[]).map((r) => `- ${r}`).join("\n")}` : ""}
@@ -119,17 +119,47 @@ Name: ${profile.full_name ?? "Not provided"}
 Current title: ${profile.current_title ?? "Not provided"}
 Experience: ${profile.years_experience ?? 0} years
 Skills: ${(profile.skills as string[] | null)?.join(", ") ?? "Not provided"}
-Work history: ${workExp.map((w) => `${w.title} at ${w.company}`).join("; ") || "Not provided"}${personalProjects.length > 0 ? `\nPersonal projects: ${personalProjects.map((p) => p.name).join(", ")}` : ""}${(profile.motivation as string | null) ? `\nMotivation: ${profile.motivation}` : ""}${(profile.proud_achievement as string | null) ? `\nKey achievement: ${profile.proud_achievement}` : ""}${(profile.career_vision as string | null) ? `\nCareer vision: ${profile.career_vision}` : ""}`,
-        },
-      ],
+Work history:
+${workHistory || "Not provided"}${personalProjects.length > 0 ? `\nPersonal projects: ${personalProjects.map((p: PersonalProject) => `${p.name}${p.description ? ` — ${p.description}` : ""}`).join("; ")}` : ""}`;
+
+    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+      { role: "system", content: systemPrompt },
+      ...(coverLetterExamples.length > 0 ? [{
+        role: "user" as const,
+        content: `Voice reference — mirror the sentence rhythm and directness of these examples. Do not copy content:\n\n${coverLetterExamples.map((ex: string, i: number) => `--- Example ${i + 1} ---\n${ex.trim()}`).join("\n\n")}`,
+      }] : []),
+      { role: "user", content: candidateData },
+    ];
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      response_format: { type: "json_object" },
+      temperature: 0.4,
+      max_tokens: 600,
+      messages,
     });
 
-    const raw = response.choices[0]?.message?.content?.trim();
-    if (!raw) {
+    const rawJson = response.choices[0]?.message?.content?.trim();
+    if (!rawJson) {
       return NextResponse.json({ error: "Failed to generate cover letter. Please try again." }, { status: 500 });
     }
 
-    const text = await humanizeText(raw, openai);
+    let parsed: { greeting?: string; intro?: string; achievement?: string; fit?: string; closing?: string };
+    try {
+      parsed = JSON.parse(rawJson);
+    } catch {
+      return NextResponse.json({ error: "Failed to generate cover letter. Please try again." }, { status: 500 });
+    }
+
+    const text = [
+      parsed.greeting,
+      parsed.intro,
+      parsed.achievement,
+      parsed.fit,
+      parsed.closing,
+      profile.full_name ?? "",
+    ].filter(Boolean).join("\n\n");
+
     return NextResponse.json({ text, language, labels });
   } catch (err) {
     console.error("[api/jobs/tailored-cover-letter POST]", err);

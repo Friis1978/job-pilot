@@ -128,16 +128,27 @@ export async function POST(): Promise<NextResponse> {
       personalProjects: profile.personal_projects,
     };
 
+    const RESUME_CRITICAL_REMINDER = `CRITICAL RULES — apply to every word you write:
+- Output MUST be valid JSON matching the schema above. Do not add any text outside the JSON.
+- summary: THIRD PERSON ONLY. Never use "I", "my", or "me". No personal hobbies (music, theatre, sports). No mention of what the candidate loves or feels. Facts and professional impact only.
+- No fabrication: every claim must come from the input data. Do not invent achievements, team sizes, or metrics.
+- Forbidden phrases (never use in summary or bullets): "passion for", "aligns perfectly", "thrive in environments", "delivering high-value solutions", "empowering", "leverage", "synergize", "dynamic", "impactful", "unique combination of", "not just X but Y", "In my professional journey", "aligns seamlessly"
+- Bullets: start with a strong past-tense action verb. Be specific — name tools, outcomes, or scale where the data supports it.`;
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       response_format: { type: "json_object" },
-      temperature: 0.7,
+      temperature: 0.6,
       max_tokens: 1800,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {
           role: "user",
           content: `Generate a professional resume for this candidate:\n\n${JSON.stringify(profileInput, null, 2)}`,
+        },
+        {
+          role: "user",
+          content: RESUME_CRITICAL_REMINDER,
         },
       ],
     });

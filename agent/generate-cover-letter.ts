@@ -123,69 +123,87 @@ export async function generateCoverLetter(
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    const systemPrompt = customInstructions
-      ? customInstructions
-      : `You are writing a cover letter for ${profile.full_name ?? "the candidate"} in ${language}.
-Write in first person. Be direct and specific — every claim must be grounded in the candidate's actual profile data. Do not fabricate achievements, team sizes, or responsibilities. Do not express excitement or enthusiasm about the opportunity. Do not mention personal hobbies. End with the candidate's name.`;
+    // Use structured JSON generation to bypass GPT-4o's strong "cover letter" priors.
+    // Free-form generation reliably produces banned enthusiasm language regardless of instructions.
+    // Filling discrete JSON fields forces deliberate, constrained output per section.
+    const FORBIDDEN = `"passion", "excited", "excites", "resonates", "inspires", "thrive", "seamlessly", "empowering", "leverage", "transformative", "aligns perfectly", "real value", "deliver value", "appreciate the intricacies", "unique combination", "In my professional journey"`;
 
-    const CRITICAL_REMINDER = `CRITICAL RULES — check every sentence before writing it:
-- TypeScript IS JavaScript. Never write that the candidate lacks JavaScript experience. TypeScript is a superset of JavaScript; every TypeScript developer writes JavaScript.
-- No fabrication: every claim must appear verbatim in the profile data above. If it is not there, omit it.
-- Forbidden phrases (never use): "In my professional journey", "aligns seamlessly", "passion for", "thrilled", "excited", "leverage", "synergize", "dynamic", "impactful", "unique combination of", "not just X but Y"
-- No suck-up opener: do not open by naming frameworks or the job title
-- Write in ${language} — the language detected from the job posting
-Now write the letter.`;
+    const systemPrompt = `You are a JSON generator. Return a JSON object with exactly these 5 keys. Write in ${language}.
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0.6,
-      max_tokens: style === "detailed" ? 1200 : 500,
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt,
-        },
-        ...(coverLetterExamples.length > 0 ? [{
-          role: "user" as const,
-          content: `Here are ${coverLetterExamples.length} example cover letter${coverLetterExamples.length > 1 ? "s" : ""} written by this candidate. Study their voice, sentence structure, tone, and rhythm. Mirror this style in the new letter — do not copy content, only the writing style.\n\n${coverLetterExamples.map((ex, i) => `--- Example ${i + 1} ---\n${ex.trim()}`).join("\n\n")}`,
-        }] : []),
-        {
-          role: "user",
-          content: `JOB:
+{
+  "greeting": "${language === "Danish" ? "Hej [Company name]," : "Hi [Company name],"}",
+  "intro": "1-2 sentences. State who the candidate is professionally and name at least 2 specific technologies they actually use (e.g. TypeScript, React, Rust, Next.js, Vue 3). Do NOT open with 'I'. Do NOT express enthusiasm.",
+  "achievement": "1-2 sentences. Name one specific project or work achievement from the profile. Include what was built and what technology was used. Factual only.",
+  "fit": "1-2 sentences. Connect one specific skill or experience from the profile to a concrete requirement from the job. Do not invent connections not supported by the data.",
+  "closing": "${language === "Danish" ? "Med venlig hilsen," : "Best regards,"}"
+}
+
+HARD RULES — every field must pass these checks:
+- No banned words/concepts: ${FORBIDDEN}
+- No emotional language of any kind. No statements about what the candidate feels, loves, wants, or is passionate about.
+- Only facts that appear in the profile data. TypeScript IS JavaScript — never claim the candidate lacks JS experience.
+- Do NOT fabricate connections between unrelated domains (e.g. audio engineering ≠ physical machinery).`;
+
+    const candidateData = `JOB:
 Title: ${job.title}
 Company: ${job.company}
 Full job post: ${fullPost || "Not provided"}${(job.requirements as string[] | null)?.length ? `\nRequirements:\n${(job.requirements as string[]).map((r) => `- ${r}`).join("\n")}` : ""}${(job.responsibilities as string[] | null)?.length ? `\nResponsibilities:\n${(job.responsibilities as string[]).map((r) => `- ${r}`).join("\n")}` : ""}
 Matched skills: ${(job.matched_skills as string[] | null)?.join(", ") ?? "None"}
-Gap skills: ${(job.missing_skills as string[] | null)?.join(", ") ?? "None"}${(job.match_reason as string | null) ? `\nWhy this job fits the candidate: ${job.match_reason}` : ""}
 ${companyContext}
 
 CANDIDATE:
 Name: ${profile.full_name ?? "Not provided"}
 Current title: ${profile.current_title ?? "Not provided"}
 Experience: ${profile.years_experience ?? 0} years
-All skills: ${(profile.skills as string[] | null)?.join(", ") ?? "Not provided"}${skillYearsStr ? `\nSkill experience (years): ${skillYearsStr}` : ""}
-Full work history (sorted newest first — [CURRENT ROLE] or [MOST RECENT] marks the top entry):
-${recentWork || "Not provided"}${projectsText ? `\n\nPersonal projects:\n${projectsText}` : ""}
+Skills: ${(profile.skills as string[] | null)?.join(", ") ?? "Not provided"}${skillYearsStr ? `\nSkill experience (years): ${skillYearsStr}` : ""}
+Work history (newest first):
+${recentWork || "Not provided"}${projectsText ? `\n\nPersonal projects:\n${projectsText}` : ""}${(profile.career_vision as string | null) ? `\n\nCareer direction (context only, do not quote): ${profile.career_vision}` : ""}${(profile.linkedin_url as string | null) ? `\n\nLinkedIn: ${profile.linkedin_url}` : ""}${(profile.portfolio_url as string | null) ? `\nPortfolio: ${profile.portfolio_url}` : ""}`;
 
-WHAT DRIVES THIS CANDIDATE (use only what maps to professional work in this role — never mention hobbies or personal interests):${(profile.motivation as string | null) ? `\nMotivation: ${profile.motivation}` : ""}${(profile.proud_achievement as string | null) ? `\nKey achievement: ${profile.proud_achievement}` : ""}${(profile.energy_tasks as string | null) ? `\nWhat energises them professionally: ${profile.energy_tasks}` : ""}${(profile.career_vision as string | null) ? `\nCareer vision: ${profile.career_vision}` : ""}${(profile.linkedin_url as string | null) ? `\n\nLinkedIn: ${profile.linkedin_url}` : ""}${(profile.portfolio_url as string | null) ? `\nPortfolio: ${profile.portfolio_url}` : ""}`,
-        },
-        ...(extraInstructions?.trim() ? [{
-          role: "user" as const,
-          content: `IMPORTANT — extra instructions for this specific letter (override anything above if they conflict):\n${extraInstructions.trim()}`,
-        }] : []),
-        {
-          role: "user" as const,
-          content: CRITICAL_REMINDER,
-        },
-      ],
+    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+      { role: "system", content: systemPrompt },
+      ...(coverLetterExamples.length > 0 ? [{
+        role: "user" as const,
+        content: `Voice reference — mirror the sentence rhythm and directness of these examples. Do not copy content:\n\n${coverLetterExamples.map((ex, i) => `--- Example ${i + 1} ---\n${ex.trim()}`).join("\n\n")}`,
+      }] : []),
+      { role: "user", content: candidateData },
+      ...(extraInstructions?.trim() ? [{
+        role: "user" as const,
+        content: `Additional instructions for this letter: ${extraInstructions.trim()}`,
+      }] : []),
+    ];
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      response_format: { type: "json_object" },
+      temperature: 0.4,
+      max_tokens: style === "detailed" ? 900 : 500,
+      messages,
     });
 
-    const raw = response.choices[0]?.message?.content?.trim();
-    if (!raw) {
+    const rawJson = response.choices[0]?.message?.content?.trim();
+    if (!rawJson) {
       await posthog.shutdown();
       return { success: false, error: "Generation failed. Please try again." };
     }
 
+    let parsed: { greeting?: string; intro?: string; achievement?: string; fit?: string; closing?: string };
+    try {
+      parsed = JSON.parse(rawJson);
+    } catch {
+      await posthog.shutdown();
+      return { success: false, error: "Generation failed. Please try again." };
+    }
+
+    const sections = [
+      parsed.greeting,
+      parsed.intro,
+      parsed.achievement,
+      parsed.fit,
+      parsed.closing,
+      profile.full_name ?? "",
+    ].filter(Boolean);
+
+    const raw = sections.join("\n\n");
     const coverLetter = customInstructions ? raw : await humanizeText(raw, openai);
 
     // Archive existing cover letter before overwriting
