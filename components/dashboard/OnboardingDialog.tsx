@@ -25,6 +25,16 @@ const STEPS = [
     imageWidth: 800,
     imageHeight: 560,
   },
+  {
+    title: "Track your progress on the Dashboard",
+    body: "Your dashboard shows the full application pipeline, match score distribution, recent activity, and how many jobs you've found over time — all in one place.",
+    cta: "Head to the Dashboard any time to see where you stand.",
+    ctaHref: "/dashboard",
+    imageSrc: "/images/dashboard-demo-top.jpeg",
+    imageAlt: "DevJobInfo dashboard — job pipeline and activity",
+    imageWidth: 1200,
+    imageHeight: 700,
+  },
 ];
 
 export function OnboardingDialog({ show }: { show: boolean }) {

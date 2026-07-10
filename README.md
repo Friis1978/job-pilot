@@ -6,6 +6,10 @@ An AI-powered job hunting assistant. Set up your profile once, then let the agen
 
 ---
 
+![Dashboard overview](public/images/dashboard-demo-full.jpeg)
+
+---
+
 ![Profile page](public/images/profile-2026-06-30.jpeg)
 
 ---
@@ -28,7 +32,7 @@ Three steps. No manual searching.
 
 Search Adzuna, JobTech, Jooble, CareerJet, and Glassdoor simultaneously. GPT-4o reads every posting against your profile and assigns a match score 0–100, with a breakdown of exactly which skills match and which are missing — so you spend time only on roles worth applying to.
 
-![Jobs list with match scores](public/images/jobs-2026-06-30.jpeg)
+![Jobs list with match scores](public/images/jobs-pipeline-2026-07-10.jpeg)
 
 You can also paste any job URL directly to import a posting that didn't appear in search results.
 
@@ -90,6 +94,8 @@ Build a structured profile with:
 
 Move jobs through **Saved → Applied → Interviewing → Offer → No answer → Rejected after interview**. When a job is marked Applied, the cover letter is automatically archived as a style example for future generations.
 
+![Application pipeline](public/images/pipeline-2026-07-10.jpeg)
+
 ---
 
 ### Network intelligence
@@ -107,11 +113,9 @@ For each job, the AI:
 
 ### Dashboard and activity log
 
-![Dashboard and activity feed](public/images/dashboard-demo.png)
+![Dashboard](public/images/dashboard-2026-07-10.jpeg)
 
-The dashboard shows jobs added over time, match score distribution, company research activity, and a live activity feed. PostHog powers the analytics charts.
-
-![Agent activity log](public/images/agent-log.png)
+The dashboard shows application pipeline status, jobs added over time, match score distribution, company research activity, and a live activity feed. PostHog powers the analytics charts.
 
 The agent log records every AI action — job scoring runs, research sessions, cover letter generations — so you can trace what happened and when.
 

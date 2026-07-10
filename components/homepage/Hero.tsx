@@ -37,8 +37,8 @@ export function Hero() {
       {/* Dashboard preview — gray background, no rounded corners, separate section */}
       <div className="w-full max-w-300 mx-auto bg-surface-muted p-4 sm:p-10">
         <Image
-          src="/images/profile-2026-06-30.jpeg"
-          alt="DevJobInfo profile page"
+          src="/images/dashboard-demo-top.jpeg"
+          alt="DevJobInfo dashboard — job pipeline and activity"
           width={1200}
           height={700}
           className="w-full h-auto"
