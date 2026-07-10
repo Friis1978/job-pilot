@@ -92,6 +92,7 @@ export type JobRow = {
   matched_skills: string[] | null;
   status: string;
   source: string;
+  updated_at: string | null;
 };
 
 export type AdzunaJob = {

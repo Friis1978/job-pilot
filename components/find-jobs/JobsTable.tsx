@@ -16,9 +16,9 @@ import type { Connection } from "@/types";
 export type { JobRow };
 
 type FilterOption = "all" | "high" | "low";
-type SortCol = "company" | "title" | "location" | "match_score" | "status" | "found_at";
+type SortCol = "company" | "title" | "location" | "match_score" | "status" | "found_at" | "updated_at";
 type SortDir = "asc" | "desc";
-type StatusFilter = "all" | JobStatus;
+type StatusFilter = "all" | JobStatus | "no_answer";
 
 const PAGE_SIZE = 20;
 
@@ -38,6 +38,7 @@ const STATUS_FILTERS: Array<{ key: StatusFilter; label: string; dot: string }> =
   { key: "rejected",                 label: "Rejected",               dot: "bg-error" },
   { key: "rejected_after_interview", label: "Rej. after interview",   dot: "bg-error/70" },
   { key: "saved",                    label: "Saved",                  dot: "bg-border" },
+  { key: "no_answer",                label: "No answer",              dot: "bg-text-muted/50" },
   { key: "no_fit",                   label: "No fit",                 dot: "bg-text-muted" },
 ];
 
@@ -173,7 +174,14 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
   }
 
   // Status filter
-  if (statusFilter !== "all") {
+  if (statusFilter === "no_answer") {
+    const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    filtered = filtered.filter((job) =>
+      job.status === "applied" &&
+      job.updated_at != null &&
+      new Date(job.updated_at).getTime() < fourteenDaysAgo
+    );
+  } else if (statusFilter !== "all") {
     filtered = filtered.filter((job) => (job.status ?? "saved") === statusFilter);
   }
 
@@ -205,6 +213,7 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
       case "match_score": return mul * (a.match_score - b.match_score);
       case "status":    return mul * ((STATUS_ORDER[a.status ?? "saved"] ?? 99) - (STATUS_ORDER[b.status ?? "saved"] ?? 99));
       case "found_at":  return mul * (new Date(a.found_at).getTime() - new Date(b.found_at).getTime());
+      case "updated_at": return mul * (new Date(a.updated_at ?? 0).getTime() - new Date(b.updated_at ?? 0).getTime());
       default:          return 0;
     }
   });
@@ -330,8 +339,11 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
       <div className="flex items-center gap-2 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none" }}>
         {STATUS_FILTERS.map(({ key, label, dot }) => {
           const active = statusFilter === key;
+          const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
           const count = key === "all"
             ? jobs.length
+            : key === "no_answer"
+            ? jobs.filter((j) => j.status === "applied" && j.updated_at != null && new Date(j.updated_at).getTime() < fourteenDaysAgo).length
             : jobs.filter((j) => (j.status ?? "saved") === key).length;
           if (key !== "all" && count === 0) return null;
           return (
@@ -385,7 +397,7 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
                     [
                       { col: "company",     label: "Company",     width: "",        hide: "",                     pad: "px-3 md:px-6" },
                       { col: "title",       label: "Role",        width: "w-full",  hide: "",                     pad: "px-3 md:px-6" },
-                      { col: "location",    label: "Location",    width: "w-36",    hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
+                      { col: "location",    label: "Location",    width: "w-36",    hide: "hidden lg:table-cell", pad: "px-3 md:px-6" },
                       { col: "match_score", label: "Match",       width: "w-32",    hide: "",                     pad: "pl-2 pr-3 md:px-6" },
                       { col: "status",      label: "Status",      width: "w-44",    hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
                       { col: "found_at",    label: "Date Found",  width: "w-28",    hide: "hidden md:table-cell", pad: "px-3 md:px-6" },
@@ -404,6 +416,15 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
                       </span>
                     </th>
                   ))}
+                  <th
+                      onClick={() => handleSort("updated_at")}
+                      className={`px-3 md:px-6 py-4 text-left text-xs font-medium uppercase tracking-wide whitespace-nowrap cursor-pointer select-none transition-colors hidden lg:table-cell w-28 ${sortCol === "updated_at" ? "text-text-primary" : "text-text-secondary hover:text-text-primary"}`}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        Applied
+                        <SortIcon active={sortCol === "updated_at"} dir={sortDir} />
+                      </span>
+                    </th>
                   <th className="py-4 w-10 md:w-14" />
                 </tr>
               </thead>
@@ -437,7 +458,7 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
                         </span>
                       </Tooltip>
                     </td>
-                    <td className="px-6 py-4 hidden md:table-cell">
+                    <td className="px-6 py-4 hidden lg:table-cell">
                       {job.location ? (
                         <Tooltip content={job.location}>
                           <span className="text-sm text-text-muted truncate block">
@@ -467,6 +488,11 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
                     <td className="px-6 py-4 whitespace-nowrap hidden md:table-cell">
                       <span className="text-sm text-text-muted">
                         {formatDateAgo(job.found_at)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap hidden lg:table-cell">
+                      <span className="text-sm text-text-muted">
+                        {job.status !== "saved" && job.updated_at ? formatDateAgo(job.updated_at) : "—"}
                       </span>
                     </td>
                     <td className="py-4 pr-3 md:pr-4 text-right">

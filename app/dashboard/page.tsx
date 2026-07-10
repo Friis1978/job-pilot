@@ -76,7 +76,7 @@ export default async function DashboardPage() {
       .gte("researched_at", new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()),
     insforge.database
       .from("jobs")
-      .select("status")
+      .select("status, updated_at")
       .eq("user_id", user.id),
     insforge.database
       .from("profiles")
@@ -123,11 +123,15 @@ export default async function DashboardPage() {
   })();
 
   const pipelineData = (() => {
-    const counts = { saved: 0, applied: 0, interviewing: 0, offer: 0, rejected: 0, rejected_after_interview: 0, no_fit: 0 };
+    const counts = { saved: 0, applied: 0, interviewing: 0, offer: 0, rejected: 0, rejected_after_interview: 0, no_fit: 0, no_answer: 0 };
     if (pipelineResult.status === "fulfilled" && pipelineResult.value.data) {
-      for (const row of pipelineResult.value.data as { status: string }[]) {
+      const oneMonthAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+      for (const row of pipelineResult.value.data as { status: string; updated_at: string }[]) {
         const s = row.status as keyof typeof counts;
         if (s in counts) counts[s]++;
+        if (row.status === "applied" && new Date(row.updated_at).getTime() < oneMonthAgo) {
+          counts.no_answer++;
+        }
       }
     }
     return counts;
