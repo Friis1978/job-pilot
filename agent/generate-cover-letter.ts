@@ -124,17 +124,21 @@ export async function generateCoverLetter(
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     const systemPrompt = customInstructions
-      ? `You are writing a cover letter for ${profile.full_name ?? "the candidate"}.
-Write the letter in ${language} — detected from the job posting.
-Follow the personal instruction set below as your sole guide.
-
-${customInstructions}`
+      ? customInstructions
       : `You are writing a cover letter for ${profile.full_name ?? "the candidate"} in ${language}.
 Write in first person. Be direct and specific — every claim must be grounded in the candidate's actual profile data. Do not fabricate achievements, team sizes, or responsibilities. Do not express excitement or enthusiasm about the opportunity. Do not mention personal hobbies. End with the candidate's name.`;
 
+    const CRITICAL_REMINDER = `CRITICAL RULES — check every sentence before writing it:
+- TypeScript IS JavaScript. Never write that the candidate lacks JavaScript experience. TypeScript is a superset of JavaScript; every TypeScript developer writes JavaScript.
+- No fabrication: every claim must appear verbatim in the profile data above. If it is not there, omit it.
+- Forbidden phrases (never use): "In my professional journey", "aligns seamlessly", "passion for", "thrilled", "excited", "leverage", "synergize", "dynamic", "impactful", "unique combination of", "not just X but Y"
+- No suck-up opener: do not open by naming frameworks or the job title
+- Write in ${language} — the language detected from the job posting
+Now write the letter.`;
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
-      temperature: 0.9,
+      temperature: 0.6,
       max_tokens: style === "detailed" ? 1200 : 500,
       messages: [
         {
@@ -167,8 +171,12 @@ WHAT DRIVES THIS CANDIDATE (use only what maps to professional work in this role
         },
         ...(extraInstructions?.trim() ? [{
           role: "user" as const,
-          content: `IMPORTANT — extra instructions for this specific letter (override anything above if they conflict):\n${extraInstructions.trim()}\n\nNow write the letter.`,
+          content: `IMPORTANT — extra instructions for this specific letter (override anything above if they conflict):\n${extraInstructions.trim()}`,
         }] : []),
+        {
+          role: "user" as const,
+          content: CRITICAL_REMINDER,
+        },
       ],
     });
 
@@ -178,7 +186,7 @@ WHAT DRIVES THIS CANDIDATE (use only what maps to professional work in this role
       return { success: false, error: "Generation failed. Please try again." };
     }
 
-    const coverLetter = await humanizeText(raw, openai);
+    const coverLetter = customInstructions ? raw : await humanizeText(raw, openai);
 
     // Archive existing cover letter before overwriting
     const { data: existingJob } = await insforge.database
