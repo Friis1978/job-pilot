@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       company,
       connections,
       profile: profileData ?? { full_name: null, current_title: null, skills: null },
-    });
+    }, user.id);
 
     return NextResponse.json(result);
   } catch (error) {

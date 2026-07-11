@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { Stagehand } from "@browserbasehq/stagehand";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
+import { TokenAccumulator } from "@/lib/track-tokens";
 import { searchJobs } from "@/lib/adzuna";
 import { searchJobsSweden } from "@/lib/jobtech";
 import { searchJobsJooble } from "@/lib/jooble";
@@ -288,7 +289,7 @@ export function extractSalaryFromText(text: string): string | null {
  * Generates a concise 8–10 bullet-point summary of a job description using
  * gpt-4o-mini. Returns `null` for short descriptions (< 500 chars) or on error.
  */
-export async function summarizeDescription(description: string, openai: OpenAI): Promise<string | null> {
+export async function summarizeDescription(description: string, openai: OpenAI, acc?: TokenAccumulator): Promise<string | null> {
   if (!description || description.length < 500) return null;
   try {
     const response = await openai.chat.completions.create({
@@ -312,6 +313,7 @@ Return only the bullet points, each on its own line starting with "•". No intr
         { role: "user", content: description.slice(0, 5000) },
       ],
     });
+    acc?.add(response.usage);
     return response.choices[0]?.message?.content?.trim() ?? null;
   } catch {
     return null;
@@ -330,6 +332,7 @@ export async function scoreJob(
   profile: Profile,
   openai: OpenAI,
   searchedLocation: string,
+  acc?: TokenAccumulator,
 ): Promise<ScoringResult | null> {
   const isRemoteSearch = /^remote$/i.test(searchedLocation.trim());
   let locationRule: string;
@@ -432,6 +435,7 @@ Recent work: ${JSON.stringify(
     });
 
     const raw = response.choices[0]?.message?.content;
+    acc?.add(response.usage);
     if (!raw) return null;
 
     const scored = JSON.parse(raw) as ScoredJob;
@@ -608,8 +612,9 @@ export async function findJobs(
     }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const tokenAcc = new TokenAccumulator();
     const scoringResults = await Promise.all(
-      enrichedJobs.map((job) => scoreJob(job, profile, openai, location)),
+      enrichedJobs.map((job) => scoreJob(job, profile, openai, location, tokenAcc)),
     );
 
     const qualifyingJobs = scoringResults.filter(
@@ -642,7 +647,7 @@ export async function findJobs(
     if (jobsWithUrl.length > 0) {
       // Generate short summaries in parallel — gpt-4o-mini, fast and cheap
       const summaries = await Promise.all(
-        jobsWithUrl.map((r) => summarizeDescription(r.job.description, openai)),
+        jobsWithUrl.map((r) => summarizeDescription(r.job.description, openai, tokenAcc)),
       );
 
       const jobRecords = jobsWithUrl.map((r, i) => ({
@@ -706,6 +711,7 @@ export async function findJobs(
       .eq("id", runId)
       .eq("user_id", userId);
 
+    tokenAcc.flush(userId, "find_jobs", "gpt-4o");
     await posthog.shutdown();
 
     return {

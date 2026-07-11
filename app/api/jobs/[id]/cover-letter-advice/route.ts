@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { detectLanguage, LANGUAGE_LABELS } from "@/lib/detect-language";
 import type { WorkExperience, PersonalProject } from "@/types";
+import { trackTokens } from "@/lib/track-tokens";
 
 const LANGUAGE_NAMES: Record<string, string> = {
   da: "Danish",
@@ -116,6 +117,7 @@ Work history: ${workExp.map((w) => `${w.title} at ${w.company}`).join("; ") || "
     });
 
     const advice = response.choices[0]?.message?.content?.trim();
+    trackTokens(userId, "cover_letter_advice", "gpt-4o", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
     if (!advice) {
       return NextResponse.json({ error: "Failed to generate advice. Please try again." }, { status: 500 });
     }

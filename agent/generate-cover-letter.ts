@@ -5,6 +5,7 @@ import { computeSkillYears } from "@/lib/utils";
 import { detectLanguage } from "@/lib/detect-language";
 import { humanizeText } from "@/agent/humanize-text";
 import type { WorkExperience, PersonalProject } from "@/types";
+import { trackTokens } from "@/lib/track-tokens";
 
 const LANGUAGE_NAMES: Record<string, string> = {
   da: "Danish",
@@ -132,9 +133,9 @@ export async function generateCoverLetter(
 
 {
   "greeting": "${language === "Danish" ? "Hej [Company name]," : "Hi [Company name],"}",
-  "intro": "1-2 sentences. State who the candidate is professionally and name at least 2 specific technologies they actually use (e.g. TypeScript, React, Rust, Next.js, Vue 3). Do NOT open with 'I'. Do NOT express enthusiasm.",
-  "achievement": "1-2 sentences. Name one specific project or work achievement from the profile. Include what was built and what technology was used. Factual only.",
-  "fit": "1-2 sentences. Connect one specific skill or experience from the profile to a concrete requirement from the job. Do not invent connections not supported by the data.",
+  "intro": "1-2 sentences. Write in first person (I/my). State who the candidate is professionally and name at least 2 specific technologies they actually use (e.g. TypeScript, React, Rust, Next.js, Vue 3). Do NOT open the sentence with the word 'I' — vary the sentence structure instead (e.g. 'With 8 years building...', 'As a senior...', 'My background is...'). Do NOT write in 3rd person. Do NOT express enthusiasm.",
+  "achievement": "1-2 sentences. Write in first person (I/my/we). Name one specific project or work achievement from the profile. Include what was built and what technology was used. Factual only.",
+  "fit": "1-2 sentences. Write in first person (I/my). Connect one specific skill or experience from the profile to a concrete requirement from the job. Do not invent connections not supported by the data.",
   "closing": "${language === "Danish" ? "Med venlig hilsen," : "Best regards,"}"
 }
 
@@ -181,6 +182,7 @@ ${recentWork || "Not provided"}${projectsText ? `\n\nPersonal projects:\n${proje
     });
 
     const rawJson = response.choices[0]?.message?.content?.trim();
+    trackTokens(userId, "cover_letter", "gpt-4o", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
     if (!rawJson) {
       await posthog.shutdown();
       return { success: false, error: "Generation failed. Please try again." };

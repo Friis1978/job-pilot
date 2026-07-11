@@ -1,6 +1,7 @@
 import { z } from "zod";
 import OpenAI from "openai";
 import type { Connection, Profile } from "@/types";
+import { trackTokens } from "@/lib/track-tokens";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
@@ -21,6 +22,7 @@ type GenerateMessageInput = {
 
 export async function generateLinkedInMessage(
   input: GenerateMessageInput,
+  userId?: string,
 ): Promise<{ success: boolean; result?: LinkedInMessage; error?: string }> {
   try {
     const completion = await openai.chat.completions.create({
@@ -48,6 +50,8 @@ Write a personalised LinkedIn connection request message. Keep it under 300 char
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
     const parsed = MessageSchema.parse(JSON.parse(raw));
+
+    if (userId) trackTokens(userId, "linkedin_message", "gpt-4o", completion.usage?.prompt_tokens ?? 0, completion.usage?.completion_tokens ?? 0);
 
     return { success: true, result: parsed };
   } catch (error) {

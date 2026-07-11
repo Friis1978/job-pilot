@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { detectLanguage, LANGUAGE_LABELS } from "@/lib/detect-language";
 import type { WorkExperience, PersonalProject } from "@/types";
+import { trackTokens } from "@/lib/track-tokens";
 
 const LANGUAGE_NAMES: Record<string, string> = {
   da: "Danish",
@@ -140,6 +141,7 @@ ${workHistory || "Not provided"}${personalProjects.length > 0 ? `\nPersonal proj
     });
 
     const rawJson = response.choices[0]?.message?.content?.trim();
+    trackTokens(userId, "tailored_cover_letter", "gpt-4o", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
     if (!rawJson) {
       return NextResponse.json({ error: "Failed to generate cover letter. Please try again." }, { status: 500 });
     }

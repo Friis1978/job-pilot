@@ -4,6 +4,7 @@ import { PDFParse } from "pdf-parse";
 import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import type { ProfileFormInput } from "@/types";
+import { trackTokens } from "@/lib/track-tokens";
 
 const SYSTEM_PROMPT = `You are a resume parser. Extract structured profile information from the resume text provided.
 
@@ -130,6 +131,7 @@ export async function POST(): Promise<NextResponse> {
       ],
     });
 
+    trackTokens(userId, "resume_extract", "gpt-4o", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
     const choice = response.choices[0];
     if (choice.finish_reason === "length") {
       console.warn("[api/resume/extract] response truncated — increase max_tokens");

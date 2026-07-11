@@ -2,6 +2,7 @@ import { z } from "zod";
 import OpenAI from "openai";
 import type { Connection, Profile } from "@/types";
 import { isRecruiter, isManager } from "@/lib/network-utils";
+import { trackTokens } from "@/lib/track-tokens";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
@@ -22,6 +23,7 @@ type SuggestContactInput = {
 
 export async function suggestBestContact(
   input: SuggestContactInput,
+  userId?: string,
 ): Promise<{ success: boolean; suggestion?: ContactSuggestion; error?: string }> {
   try {
     const connectionList = input.connections.map((c, i) => ({
@@ -60,6 +62,8 @@ Which connection should they reach out to first, and why? Return JSON with conne
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
     const parsed = SuggestionSchema.parse(JSON.parse(raw));
+
+    if (userId) trackTokens(userId, "suggest_contact", "gpt-4o", completion.usage?.prompt_tokens ?? 0, completion.usage?.completion_tokens ?? 0);
 
     return { success: true, suggestion: parsed };
   } catch (error) {

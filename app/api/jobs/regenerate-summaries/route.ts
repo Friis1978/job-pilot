@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
+import { TokenAccumulator } from "@/lib/track-tokens";
+import type OpenAILib from "openai";
 
-async function summarizeDescription(description: string, openai: OpenAI): Promise<string | null> {
-  if (!description || description.length < 150) return null;
+async function summarizeDescription(description: string, openai: OpenAI): Promise<{ text: string | null; usage: OpenAILib.CompletionUsage | null }> {
+  if (!description || description.length < 150) return { text: null, usage: null };
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -26,9 +28,9 @@ Return only the bullet points, each on its own line starting with "•". No intr
         { role: "user", content: description.slice(0, 5000) },
       ],
     });
-    return response.choices[0]?.message?.content?.trim() ?? null;
+    return { text: response.choices[0]?.message?.content?.trim() ?? null, usage: response.usage ?? null };
   } catch {
-    return null;
+    return { text: null, usage: null };
   }
 }
 
@@ -56,6 +58,7 @@ export async function POST(): Promise<NextResponse> {
     }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const accumulator = new TokenAccumulator();
 
     // Process in batches of 5 to avoid rate limits
     const BATCH_SIZE = 5;
@@ -63,24 +66,27 @@ export async function POST(): Promise<NextResponse> {
 
     for (let i = 0; i < jobs.length; i += BATCH_SIZE) {
       const batch = jobs.slice(i, i + BATCH_SIZE);
-      const summaries = await Promise.all(
+      const results = await Promise.all(
         batch.map((job) => summarizeDescription(job.about_role as string, openai)),
       );
 
       await Promise.all(
         batch.map((job, idx) => {
-          const summary = summaries[idx];
-          if (!summary) return Promise.resolve();
+          const { text, usage } = results[idx];
+          accumulator.add(usage ?? undefined);
+          if (!text) return Promise.resolve();
           return insforge.database
             .from("jobs")
-            .update({ description_summary: summary })
+            .update({ description_summary: text })
             .eq("id", job.id)
             .eq("user_id", userId);
         }),
       );
 
-      updated += batch.filter((_, idx) => summaries[idx] !== null).length;
+      updated += batch.filter((_, idx) => results[idx].text !== null).length;
     }
+
+    accumulator.flush(userId, "regenerate_summaries", "gpt-4o-mini");
 
     return NextResponse.json({ success: true, updated, total: jobs.length });
   } catch (err) {

@@ -6,6 +6,7 @@ import { getPostHogClient } from "@/lib/posthog-server";
 import { browserbase } from "@/lib/browserbase";
 import { stripHtml } from "@/lib/utils";
 import type { Profile } from "@/types";
+import { TokenAccumulator } from "@/lib/track-tokens";
 
 type ResearchCompanyResult = {
   success: boolean;
@@ -351,6 +352,7 @@ export async function researchCompany(
     >;
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+    const tokenAcc = new TokenAccumulator();
 
     // Resolve company homepage URL
     const { url: resolvedUrl, needsGptLookup } = job.source_url
@@ -382,6 +384,7 @@ Only return a URL you are confident about — do not guess. Return JSON: { "url"
             },
           ],
         });
+        tokenAcc.add(urlResponse.usage);
         const parsed = JSON.parse(urlResponse.choices[0]?.message?.content ?? "{}") as { url?: string | null };
         if (parsed.url) {
           homepageUrl = parsed.url;
@@ -477,6 +480,7 @@ Only extract contacts explicitly named in the text. Distinguish carefully: inter
           ],
         });
 
+        tokenAcc.add(jdExtractResponse.usage);
         const jdRaw = jdExtractResponse.choices[0]?.message?.content;
         if (jdRaw) {
           const jdParsed = JSON.parse(jdRaw) as {
@@ -581,6 +585,7 @@ Only include contacts explicitly named in the text. Distinguish internal contact
                 { role: "user", content: rawText.slice(0, 10000) },
               ],
             });
+            tokenAcc.add(httpExtractResponse.usage);
             const httpRaw = httpExtractResponse.choices[0]?.message?.content;
             console.log(`[research-company] HTTP extract GPT-4o: ${httpRaw?.slice(0, 300)}`);
             if (httpRaw) {
@@ -677,6 +682,7 @@ Only extract contacts explicitly named in the text.`,
               { role: "user", content: pageText.slice(0, 12000) },
             ],
           });
+          tokenAcc.add(res.usage);
           const raw = res.choices[0]?.message?.content;
           if (!raw) return false;
           const parsed = JSON.parse(raw) as {
@@ -1247,6 +1253,7 @@ Skip nav, footers, cookie banners, and marketing boilerplate.`,
                 ],
               });
 
+              tokenAcc.add(ddgExtract.usage);
               const ddgRaw = ddgExtract.choices[0]?.message?.content;
               if (ddgRaw) {
                 const ddg = JSON.parse(ddgRaw) as {
@@ -1408,6 +1415,7 @@ If multiple office addresses appear on the page, return the one in the same coun
             ],
           });
 
+          tokenAcc.add(response.usage);
           const raw = response.choices[0]?.message?.content;
           if (raw) {
             const parsed = JSON.parse(raw) as {
@@ -1521,6 +1529,7 @@ Never return empty strings — if you have partial knowledge, share it. Only ret
           ],
         });
 
+        tokenAcc.add(fallbackResponse.usage);
         const raw = fallbackResponse.choices[0]?.message?.content;
         if (raw) {
           const result = JSON.parse(raw) as {
@@ -1638,6 +1647,7 @@ Work history: ${JSON.stringify((profile.work_experience ?? []).slice(0, 3))}`;
         ],
       });
 
+      tokenAcc.add(response.usage);
       dossier = JSON.parse(response.choices[0].message.content!);
       // Override sources with actual scraped URLs — GPT-4o tends to hallucinate these
       dossier.sources = [...new Set(companyResearchRaw.sourceUrls.filter(Boolean))];
@@ -1703,6 +1713,7 @@ Work history: ${JSON.stringify((profile.work_experience ?? []).slice(0, 3))}`;
         .eq("user_id", userId);
     }
 
+    tokenAcc.flush(userId, "research_company", "gpt-4o");
     posthog.capture({
       distinctId: userId,
       event: "company_researched",

@@ -8,6 +8,7 @@ import { computeSkillYears, computeTotalYearsExperience } from "@/lib/utils";
 import { ResumePDF } from "../ResumePDF";
 import type { Profile, PersonalProject } from "@/types";
 import type { DocumentProps } from "@react-pdf/renderer";
+import { trackTokens } from "@/lib/track-tokens";
 
 const SYSTEM_PROMPT = `You are a professional resume writer. Given a candidate's profile data, return ONLY valid JSON with this exact shape:
 
@@ -154,6 +155,7 @@ export async function POST(): Promise<NextResponse> {
     });
 
     const raw = response.choices[0]?.message?.content;
+    trackTokens(userId, "resume_generate", "gpt-4o", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
     if (!raw) {
       return NextResponse.json(
         { error: "Generation failed. Please try again." },

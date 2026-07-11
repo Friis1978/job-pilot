@@ -6,6 +6,7 @@ import { stripHtml, normalizeLocationToEnglish } from "@/lib/utils";
 import { browserbase } from "@/lib/browserbase";
 import { scoreJob, summarizeDescription } from "@/agent/find-jobs";
 import type { Profile, NormalizedJob } from "@/types";
+import { TokenAccumulator } from "@/lib/track-tokens";
 
 type Result = { success: boolean; error?: string };
 
@@ -262,6 +263,7 @@ export async function importJobFromUrl(userId: string, url: string, pastedText?:
   }
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const tokenAcc = new TokenAccumulator();
 
   // Deduplicate the raw text before sending to GPT-4o.
   // SPAs (like Emply) often render content twice — once in SSR HTML and once after
@@ -317,6 +319,7 @@ If title or company cannot be determined, return them as empty strings.`,
     });
 
     const raw = response.choices[0]?.message?.content;
+    tokenAcc.add(response.usage);
     if (!raw) throw new Error("Empty response");
     extracted = JSON.parse(raw) as ExtractedJob;
   } catch {
@@ -353,14 +356,14 @@ If title or company cannot be determined, return them as empty strings.`,
     ...job,
     description: deduplicatedText.slice(0, 8000),
   };
-  const scored = await scoreJob(jobForScoring, profile, openai, "");
+  const scored = await scoreJob(jobForScoring, profile, openai, "", tokenAcc);
   if (!scored) {
     await posthog.shutdown();
     return { success: false, error: "Scoring failed. Please try again." };
   }
 
   // Generate a short summary for display (full text is kept in about_role for research)
-  const descriptionSummary = await summarizeDescription(job.description, openai);
+  const descriptionSummary = await summarizeDescription(job.description, openai, tokenAcc);
 
   // Save to DB
   // Note: no threshold check here — the user explicitly chose to import this job,
@@ -404,6 +407,7 @@ If title or company cannot be determined, return them as empty strings.`,
     event: "job_found",
     properties: { userId, source: "url_import", matchScore: scored.matchScore },
   });
+  tokenAcc.flush(userId, "import_job", "gpt-4o");
   await posthog.shutdown();
 
   return { success: true };

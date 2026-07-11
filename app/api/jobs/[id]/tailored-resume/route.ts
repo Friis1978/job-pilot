@@ -8,6 +8,7 @@ import { computeSkillYears } from "@/lib/utils";
 import { detectLanguage } from "@/lib/detect-language";
 import { ResumePDF } from "@/app/api/resume/ResumePDF";
 import type { Profile, LinkedInRecommendation } from "@/types";
+import { trackTokens } from "@/lib/track-tokens";
 import type { DocumentProps } from "@react-pdf/renderer";
 
 const SYSTEM_PROMPT = `You are a professional resume writer tailoring a candidate's resume for a specific company and role. Return ONLY valid JSON with this exact shape:
@@ -203,6 +204,7 @@ WHAT DRIVES THIS CANDIDATE:${(profile.motivation as string | null) ? `\nMotivati
     });
 
     const raw = response.choices[0]?.message?.content;
+    trackTokens(userId, "tailored_resume", "gpt-4o", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
     if (!raw) {
       return NextResponse.json({ error: "Generation failed. Please try again." }, { status: 500 });
     }
@@ -393,6 +395,7 @@ export async function GET(
             },
           ],
         });
+        trackTokens(userId, "tailored_resume_translate", "gpt-4o-mini", resp.usage?.prompt_tokens ?? 0, resp.usage?.completion_tokens ?? 0);
         const raw = resp.choices[0]?.message?.content ?? "";
         const parsed = JSON.parse(raw) as { translated?: string[] };
         if (Array.isArray(parsed.translated) && parsed.translated.length === recommendations.length) {

@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       company,
       profile: profileData ?? { full_name: null, current_title: null, skills: null, years_experience: null },
       tone: profileData?.cover_letter_tone ?? "professional",
-    });
+    }, user.id);
 
     return NextResponse.json(result);
   } catch (error) {

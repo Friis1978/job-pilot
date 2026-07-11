@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { detectLanguage } from "@/lib/detect-language";
 import type { Profile } from "@/types";
+import { trackTokens } from "@/lib/track-tokens";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -80,6 +81,7 @@ export async function POST(
     });
 
     const text = completion.choices[0]?.message?.content?.trim() ?? "";
+    trackTokens(userId, "resume_motivation", "gpt-4o-mini", completion.usage?.prompt_tokens ?? 0, completion.usage?.completion_tokens ?? 0);
 
     await insforge.database
       .from("jobs")

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
+import { trackTokens } from "@/lib/track-tokens";
 
-async function summarizeDescription(description: string, openai: OpenAI): Promise<string | null> {
+async function summarizeDescription(description: string, openai: OpenAI, userId: string): Promise<string | null> {
   if (!description || description.length < 50) return null;
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -25,6 +26,7 @@ Return only the bullet points, each on its own line starting with "•". No intr
       { role: "user", content: description.slice(0, 5000) },
     ],
   });
+  trackTokens(userId, "regenerate_description", "gpt-4o-mini", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
   return response.choices[0]?.message?.content?.trim() ?? null;
 }
 
@@ -59,7 +61,7 @@ export async function POST(
   }
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const summary = await summarizeDescription(aboutRole, openai);
+  const summary = await summarizeDescription(aboutRole, openai, user.id);
 
   if (!summary) {
     return NextResponse.json({ error: "Summarization failed. Please try again." }, { status: 500 });
