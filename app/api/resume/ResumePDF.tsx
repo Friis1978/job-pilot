@@ -58,12 +58,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: "Helvetica-Bold",
     color: TEXT,
-    marginBottom: 4,
+    marginBottom: 7,
   },
   headerTitle: {
     fontSize: 10,
     color: BLUE,
-    marginBottom: 2,
+    marginBottom: 6,
   },
   headerContact: {
     fontSize: 8,
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     fontSize: 7,
     fontFamily: "Helvetica-Bold",
     color: ACCENT,
-    marginTop: 7,
+    marginTop: 17,
     marginBottom: 2,
     textTransform: "uppercase",
     letterSpacing: 0.8,
@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
     lineHeight: 1.35,
   },
   roleBlock: {
-    marginBottom: 4,
+    marginBottom: 10,
   },
   // Recommendations — speech bubble grid
   recGrid: {
@@ -392,7 +392,7 @@ function MdPdf({ text, baseStyle }: { text: string; baseStyle?: Record<string, u
     <>
       {blocks.map((block, i) => {
         if (block.kind === "h1") return <Text key={i} style={{ ...base, fontFamily: "Helvetica-Bold", fontSize: 11, marginBottom: 3, marginTop: i > 0 ? 6 : 0 }}>{renderInlinePdf(block.tokens)}</Text>;
-        if (block.kind === "h2") return <Text key={i} style={{ ...base, fontFamily: "Helvetica-Bold", fontSize: 10, marginBottom: 2, marginTop: i > 0 ? 5 : 0 }}>{renderInlinePdf(block.tokens)}</Text>;
+        if (block.kind === "h2") return <Text key={i} style={{ ...base, fontFamily: "Helvetica-Bold", fontSize: 10, marginBottom: 2, marginTop: i > 0 ? 14 : 8 }}>{renderInlinePdf(block.tokens)}</Text>;
         if (block.kind === "h3") return <Text key={i} style={{ ...base, fontFamily: "Helvetica-Bold", fontSize: 9, marginBottom: 2, marginTop: i > 0 ? 4 : 0 }}>{renderInlinePdf(block.tokens)}</Text>;
         if (block.kind === "bullet") return (
           <View key={i} style={{ marginBottom: 2 }}>
@@ -419,13 +419,13 @@ function fmtRecDate(d: string) {
 }
 
 export function ResumePDF({ profile, generated, skillYears = {}, motivation, resumeText, recommendations = [], avatarUrl, includeImages = false }: Props) {
-  const contactParts: { text: string; isUrl: boolean }[] = [];
+  const contactParts: { text: string; label?: string; isUrl: boolean }[] = [];
   if (profile.email) contactParts.push({ text: profile.email, isUrl: false });
   if (profile.phone) contactParts.push({ text: profile.phone, isUrl: false });
   if (profile.location) contactParts.push({ text: profile.location, isUrl: false });
-  if (profile.linkedin_url) contactParts.push({ text: profile.linkedin_url, isUrl: true });
-  if (profile.portfolio_url) contactParts.push({ text: profile.portfolio_url, isUrl: true });
-  if (profile.website_url) contactParts.push({ text: profile.website_url, isUrl: true });
+  if (profile.linkedin_url) contactParts.push({ text: profile.linkedin_url, label: "LinkedIn", isUrl: true });
+  if (profile.portfolio_url) contactParts.push({ text: profile.portfolio_url, label: "GitHub", isUrl: true });
+  if (profile.website_url) contactParts.push({ text: profile.website_url, label: "Website", isUrl: true });
 
   return (
     <Document>
@@ -446,7 +446,7 @@ export function ResumePDF({ profile, generated, skillYears = {}, motivation, res
                   <View key={i} style={{ flexDirection: "row" }}>
                     {i > 0 ? <Text style={styles.headerDot}>·</Text> : null}
                     {part.isUrl ? (
-                      <Link src={part.text} style={{ fontSize: 9, color: BLUE, textDecoration: "none" }}>{part.text}</Link>
+                      <Link src={part.text} style={{ fontSize: 9, color: BLUE, textDecoration: "none" }}>{part.label ?? part.text}</Link>
                     ) : (
                       <Text style={{ fontSize: 9, color: MUTED }}>{part.text}</Text>
                     )}
@@ -544,6 +544,53 @@ export function ResumePDF({ profile, generated, skillYears = {}, motivation, res
                 </View>
               );
             })()}
+          </View>
+        ) : null}
+
+        {/* Education */}
+        {profile.education && profile.education.length > 0 ? (
+          <View>
+            <Text style={styles.sectionLabel}>Education</Text>
+            <View style={styles.divider} />
+            {profile.education.map((edu, i) => (
+              <View key={i} style={i > 0 ? { marginTop: 6 } : undefined}>
+                <Text style={styles.eduDegree}>
+                  {edu.degree}
+                  {edu.field ? ` in ${edu.field}` : ""}
+                </Text>
+                <Text style={styles.eduDetail}>
+                  {[edu.institution, edu.year].filter(Boolean).join("  ·  ")}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {/* Spoken Languages */}
+        {profile.spoken_languages && profile.spoken_languages.length > 0 ? (
+          <View>
+            <Text style={styles.sectionLabel}>Languages</Text>
+            <View style={styles.divider} />
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+              {profile.spoken_languages.map((l, i) => (
+                <View key={i} style={{ flexDirection: "row", gap: 4, alignItems: "center" }}>
+                  <Text style={{ fontSize: 8.5, color: TEXT, fontFamily: "Helvetica-Bold" }}>{l.language}</Text>
+                  {l.level ? <Text style={{ fontSize: 8, color: MUTED }}>{l.level}</Text> : null}
+                  {i < profile.spoken_languages!.length - 1 && (
+                    <Text style={{ fontSize: 8, color: MUTED, marginLeft: 2 }}>·</Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {/* Personal Interests */}
+        {profile.personal_interests ? (
+          <View>
+            <Text style={styles.sectionLabel}>Interests</Text>
+            <View style={styles.divider} />
+            <Text style={{ fontSize: 8.5, color: TEXT, lineHeight: 1.5 }}>{profile.personal_interests}</Text>
           </View>
         ) : null}
 
@@ -672,53 +719,6 @@ export function ResumePDF({ profile, generated, skillYears = {}, motivation, res
                 </View>
               );
             })}
-          </View>
-        ) : null}
-
-        {/* Education */}
-        {profile.education && profile.education.length > 0 ? (
-          <View>
-            <Text style={styles.sectionLabel}>Education</Text>
-            <View style={styles.divider} />
-            {profile.education.map((edu, i) => (
-              <View key={i} style={i > 0 ? { marginTop: 6 } : undefined}>
-                <Text style={styles.eduDegree}>
-                  {edu.degree}
-                  {edu.field ? ` in ${edu.field}` : ""}
-                </Text>
-                <Text style={styles.eduDetail}>
-                  {[edu.institution, edu.year].filter(Boolean).join("  ·  ")}
-                </Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
-
-        {/* Spoken Languages */}
-        {profile.spoken_languages && profile.spoken_languages.length > 0 ? (
-          <View>
-            <Text style={styles.sectionLabel}>Languages</Text>
-            <View style={styles.divider} />
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-              {profile.spoken_languages.map((l, i) => (
-                <View key={i} style={{ flexDirection: "row", gap: 4, alignItems: "center" }}>
-                  <Text style={{ fontSize: 8.5, color: TEXT, fontFamily: "Helvetica-Bold" }}>{l.language}</Text>
-                  {l.level ? <Text style={{ fontSize: 8, color: MUTED }}>{l.level}</Text> : null}
-                  {i < profile.spoken_languages!.length - 1 && (
-                    <Text style={{ fontSize: 8, color: MUTED, marginLeft: 2 }}>·</Text>
-                  )}
-                </View>
-              ))}
-            </View>
-          </View>
-        ) : null}
-
-        {/* Personal Interests */}
-        {profile.personal_interests ? (
-          <View>
-            <Text style={styles.sectionLabel}>Interests</Text>
-            <View style={styles.divider} />
-            <Text style={{ fontSize: 8.5, color: TEXT, lineHeight: 1.5 }}>{profile.personal_interests}</Text>
           </View>
         ) : null}
 

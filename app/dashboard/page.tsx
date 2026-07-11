@@ -9,7 +9,8 @@ import { CompanyResearchChart } from "@/components/dashboard/CompanyResearchChar
 import { JobsOverTimeChart } from "@/components/dashboard/JobsOverTimeChart";
 import { MatchScoreChart } from "@/components/dashboard/MatchScoreChart";
 import { PipelineCard } from "@/components/dashboard/PipelineCard";
-import { getDashboardStats, getJobsOverTime, getMatchScoreDistribution } from "@/lib/posthog-query";
+import { getDashboardStats, getJobsOverTime, getMatchScoreDistribution, getTokenUsageByFeature } from "@/lib/posthog-query";
+import { TokenUsageChart } from "@/components/dashboard/TokenUsageChart";
 import type { CompanyResearchPoint } from "@/components/dashboard/CompanyResearchChart";
 
 type AgentRunRow = {
@@ -47,6 +48,7 @@ export default async function DashboardPage() {
     dashboardStatsResult,
     jobsOverTimeResult,
     matchScoreResult,
+    tokenUsageResult,
     companyResearchResult,
     pipelineResult,
     profileResult,
@@ -68,6 +70,7 @@ export default async function DashboardPage() {
     getDashboardStats(user.id),
     getJobsOverTime(user.id),
     getMatchScoreDistribution(user.id),
+    getTokenUsageByFeature(user.id),
     insforge.database
       .from("jobs")
       .select("researched_at, source")
@@ -94,6 +97,9 @@ export default async function DashboardPage() {
       : null;
   const jobsOverTimeData = jobsOverTimeResult.status === "fulfilled" ? jobsOverTimeResult.value : [];
   const matchScoreData = matchScoreResult.status === "fulfilled" ? matchScoreResult.value : [];
+  const tokenUsageData = tokenUsageResult.status === "fulfilled"
+    ? tokenUsageResult.value
+    : { points: [], features: [], totalTokens: 0 };
   const companyResearchData = (() => {
     type ResearchRow = { researched_at: string; source: string };
     const rows: ResearchRow[] =
@@ -199,6 +205,11 @@ export default async function DashboardPage() {
             <MatchScoreChart data={matchScoreData} />
           </div>
           <CompanyResearchChart data={companyResearchData} />
+          <TokenUsageChart
+            data={tokenUsageData.points}
+            features={tokenUsageData.features}
+            totalTokens={tokenUsageData.totalTokens}
+          />
         </div>
       </main>
     </>

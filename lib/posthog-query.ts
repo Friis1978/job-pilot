@@ -197,3 +197,64 @@ export async function getMatchScoreDistribution(userId: string): Promise<MatchSc
   return SCORE_BUCKETS.map((b) => ({ label: b.label, search: search[b.label], imported: imported[b.label] }));
 }
 
+// ── Token Usage By Feature (last 14 days, daily) ─────────────────────────────
+
+export type TokenUsagePoint = { label: string; total: number } & Record<string, number | string>;
+
+export type TokenUsageData = {
+  points: TokenUsagePoint[];
+  features: string[];
+  totalTokens: number;
+  isCost: boolean;
+};
+
+export async function getTokenUsageByFeature(userId: string): Promise<TokenUsageData> {
+  try {
+    const { results } = await hogql(
+      `SELECT toDate(timestamp) AS day, properties.feature AS feature,
+              sum(toFloatOrZero(toString(properties.cost_usd))) AS cost,
+              sum(toFloatOrZero(toString(properties.total_tokens))) AS tokens
+       FROM events
+       WHERE event = 'ai_tokens_used'
+         AND distinct_id = '${userId}'
+         AND timestamp >= now() - INTERVAL 14 DAY
+       GROUP BY day, feature
+       ORDER BY day`,
+    );
+
+    const featureSet = new Set<string>();
+    const byDay = new Map<string, Record<string, number>>();
+
+    let hasCost = false;
+    for (const [day, feature, cost, tokens] of results) {
+      const key = String(day);
+      const feat = String(feature);
+      featureSet.add(feat);
+      const entry = byDay.get(key) ?? {};
+      const costVal = Number(cost);
+      const tokensVal = Number(tokens);
+      if (costVal > 0) hasCost = true;
+      entry[feat] = (entry[feat] ?? 0) + (costVal > 0 ? costVal : tokensVal);
+      byDay.set(key, entry);
+    }
+
+    const features = Array.from(featureSet);
+    let totalTokens = 0;
+    const now = Date.now();
+
+    const points: TokenUsagePoint[] = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(now - (13 - i) * 24 * 60 * 60 * 1000);
+      const key = utcDateKey(d);
+      const label = utcDateLabel(d);
+      const dayData = byDay.get(key) ?? {};
+      const total = features.reduce((sum, f) => sum + (dayData[f] ?? 0), 0);
+      totalTokens += total;
+      return { label, total, ...Object.fromEntries(features.map((f) => [f, dayData[f] ?? 0])) };
+    });
+
+    return { points, features, totalTokens, isCost: hasCost };
+  } catch {
+    return { points: [], features: [], totalTokens: 0, isCost: false };
+  }
+}
+

@@ -652,7 +652,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
   async function handleGenerateResume() {
     setGeneratingResume(true);
     try {
-      const response = await fetch("/api/resume/generate", { method: "POST" });
+      const response = await fetch("/api/resume/generate?images=1", { method: "POST" });
       if (!response.ok) {
         const json = await response.json() as { error?: string };
         toast(json.error ?? "Generation failed. Please try again.", "error");

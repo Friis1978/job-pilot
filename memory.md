@@ -1,63 +1,66 @@
-# Memory — Cover Letter JSON Generation Fix
+# Memory — Token Tracking, Dashboard Chart, Resume Improvements
 
 Last updated: 2026-07-11
 
 ## What was built
 
-### tailored-cover-letter route (main fix)
-**`app/api/jobs/[id]/tailored-cover-letter/route.ts`** — complete rewrite:
-- Switched from free-form generation to structured JSON (`response_format: json_object`)
-- 5 discrete fields: greeting, intro, achievement, fit, closing
-- Removed `humanizeText` post-processing
-- Removed motivation/proud_achievement/energy_tasks from prompt input
-- Comprehensive forbidden word list: excited, passion, thrive, resonates, inspires, seamlessly, empowering, leverage, transformative, "real value", etc.
-- Temperature 0.4
-- Custom instructions appended as style guide (voice/structure only)
+**Token tracking system:**
+- `lib/track-tokens.ts` — new file with `trackTokens()` and `TokenAccumulator` class. Fires `ai_tokens_used` PostHog event with `feature`, `model`, `prompt_tokens`, `completion_tokens`, `total_tokens`, `cost_usd` properties.
+- Wired into all 17 OpenAI call sites across 12 files: `agent/generate-cover-letter.ts`, `agent/linkedin-message.ts`, `agent/suggest-contact.ts`, `agent/find-jobs.ts`, `agent/import-job-from-url.ts`, `agent/research-company.ts`, `app/api/jobs/[id]/tailored-cover-letter/route.ts`, `app/api/jobs/[id]/cover-letter-advice/route.ts`, `app/api/jobs/[id]/resume-motivation/route.ts`, `app/api/jobs/[id]/regenerate-description/route.ts`, `app/api/jobs/regenerate-summaries/route.ts`, `app/api/jobs/[id]/tailored-resume/route.ts`, `app/api/resume/generate/route.ts`, `app/api/resume/extract/route.ts`.
+- Files with multiple completions (find-jobs, import-job, research-company, regenerate-summaries) use `TokenAccumulator` to aggregate and flush once.
 
-### generate-cover-letter.ts (agent route — same fixes)
-**`agent/generate-cover-letter.ts`** — same JSON approach applied:
-- Fixed generation system prompt (not custom instructions)
-- JSON structured output with same 5 fields
-- No humanize when custom instructions set, humanize otherwise
+**PostHog dashboard (id: 810896) — "AI Token Usage & Cost":**
+- Daily cost trend line chart
+- Cost breakdown by feature (pie)
+- Cost per user bar chart
+- Token usage by feature stacked area chart
 
-### Other files
-- **`agent/edit-cover-letter.ts`** — created (kept for potential future use, not currently called)
-- **`profiles.cover_letter_instructions`** in DB rewritten from 12,119 → 2,201 chars
+**App dashboard token chart:**
+- `lib/posthog-query.ts` — added `getTokenUsageByFeature(userId)` using HogQL. Note: must use `toFloatOrZero` not `toFloat64OrZero` (latter doesn't exist in HogQL).
+- `components/dashboard/TokenUsageChart.tsx` — new stacked area chart, color per feature, total in header, 14-day window.
+- `app/dashboard/page.tsx` — wired in alongside other parallel queries.
 
-### DB change
-Cover letter instructions updated via SQL directly on InsForge. New instructions: no fabrication, language/greeting rules, direct/factual voice (NOT extroverted), comprehensive forbidden phrases, substance requirements (must name specific tech), structure rules.
+**Resume (`app/api/resume/ResumePDF.tsx`) improvements:**
+- Education, Languages, Interests moved to page 1 (before Work Experience page break).
+- Section label `marginTop`: 7 → 17.
+- `roleBlock` `marginBottom`: 4 → 10 (gap between job/project entries).
+- Header `marginBottom`: name 4→7, title 2→6.
+- `## h2` heading `marginTop`: non-first 5→14, first 0→8.
+- URL links in header now show labels "LinkedIn", "GitHub", "Website" instead of raw URLs.
+
+**Resume generate route (`app/api/resume/generate/route.ts`):**
+- Now fetches `linkedin_recommendations` and passes to `ResumePDF` (was missing before).
+- Accepts `?images=1` query param and passes `includeImages` to `ResumePDF`.
+- ProfileForm always calls `/api/resume/generate?images=1` — no toggle, always includes images.
+
+**Cover letter fix (`agent/generate-cover-letter.ts`):**
+- Fixed 3rd-person writing bug: each JSON field now says "write in first person (I/my)" and "do NOT open the sentence with the word 'I'" — previous wording "Do NOT open with 'I'" was misread as "don't use first person at all".
 
 ## Decisions made
 
-- **JSON structured generation is the fix for GPT-4o cliché output** — free-form generation reliably produces banned enthusiasm language regardless of instruction-based bans. Filling discrete fields with per-field constraints bypasses the model's strong cover-letter priors.
-- **Do NOT use custom instructions as the generation system prompt** — 12k+ chars of personality-focused instructions cause the model to express extroversion through emotional language.
-- **Remove motivation/energy_tasks/proud_achievement from prompt input** — user-written emotional language in these fields was being mirrored by the model.
-- **No humanize pass when custom instructions are set** — humanize re-introduces banned phrases.
-- **The tailored-cover-letter route (`/api/jobs/[id]/tailored-cover-letter`) is the one the UI actually calls** — not the agent route (`/api/agent/cover-letter`). Both were fixed but the tailored route is primary.
+- Token tracking is fire-and-forget PostHog, not stored in DB.
+- GPT-4o pricing: $0.005/1K input, $0.015/1K output. GPT-4o-mini: $0.00015/$0.0006.
+- Profile resume always includes images; job page resume has a toggle.
+- `portfolio_url` labelled "GitHub" in resume header — verify this is correct for all users.
 
 ## Problems solved
 
-- GPT-4o reliably produced "excited", "passion", "thrive", "resonates" regardless of instruction bans — solved by JSON structured generation
-- Custom instructions (12k chars with "extroverted" persona) were causing enthusiasm language — solved by rewriting instructions to 2.2k and not using as generation system prompt
-- `humanizeText` re-introduced banned phrases after clean generation — solved by skipping it when custom instructions are set
-- "Appreciate the intricacies of machinery" hallucination (audio engineering → manufacturing) — solved by explicit no-fabrication rule and removing inferred connections
-- User-written motivation/energy fields echoed back as emotional language — solved by removing those fields from the prompt
-- All fixes were applied to the wrong file (`generate-cover-letter.ts`) while the UI called `tailored-cover-letter/route.ts` — now both fixed
+- `toFloat64OrZero` does not exist in HogQL — use `toFloatOrZero`.
+- Cover letter 3rd-person bug: "Do NOT open with 'I'" was misread by GPT-4o as "avoid first person entirely".
 
 ## Current state
 
-- Cover letter generation works correctly (user confirmed "the cover letters are fine")
-- Committed: `ca936fc`
-- Resume generation also updated with CRITICAL_REMINDER (temperature 0.6, no cover letter instructions injection)
+- Token tracking live and capturing events in PostHog.
+- App dashboard token chart working.
+- All resume changes code-complete, not visually verified yet.
+- Cover letter fix in place.
 
 ## Next session starts with
 
-No immediate follow-up. Possible next work:
-- Resume generation quality (still uses free-form, no JSON structured approach — same cliché risk exists)
-- The `generate-cover-letter.ts` (agent route) and `tailored-cover-letter/route.ts` have diverged in structure — could be consolidated into one shared function
+Visually verify the resume PDF — check education/languages/interests on page 1, spacing, "LinkedIn/GitHub/Website" labels in header, recommendations appearing.
 
 ## Open questions
 
-- Should resume generation also use the JSON structured approach to prevent clichés in the summary?
-- `cover_letter_advice` column in DB is unused — could be cleaned up
-- `agent/edit-cover-letter.ts` is not called anywhere — keep or delete?
+- Is `portfolio_url` always GitHub? The label "GitHub" was assumed — might need to be "Portfolio".
+- `find_jobs` costs ~$0.52 per run (78k tokens) — worth investigating prompt trimming.
+- Previous open questions still apply: resume generation cliché risk, `agent/edit-cover-letter.ts` unused.

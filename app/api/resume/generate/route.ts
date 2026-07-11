@@ -1,12 +1,12 @@
 import * as Sentry from "@sentry/nextjs";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { renderToBuffer } from "@react-pdf/renderer";
 import OpenAI from "openai";
 import { createElement, type ReactElement } from "react";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { computeSkillYears, computeTotalYearsExperience } from "@/lib/utils";
 import { ResumePDF } from "../ResumePDF";
-import type { Profile, PersonalProject } from "@/types";
+import type { Profile, PersonalProject, LinkedInRecommendation } from "@/types";
 import type { DocumentProps } from "@react-pdf/renderer";
 import { trackTokens } from "@/lib/track-tokens";
 
@@ -69,7 +69,7 @@ function pdfResponse(buffer: ArrayBuffer): NextResponse {
   });
 }
 
-export async function POST(): Promise<NextResponse> {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const insforge = await createInsforgeServer();
     const { data: authData, error: authError } =
@@ -212,12 +212,20 @@ export async function POST(): Promise<NextResponse> {
     // Compute years of experience per skill from work history + personal projects
     const skillYears = computeSkillYears(profile.work_experience, profile.personal_projects as PersonalProject[] | null);
 
+    const { data: recsData } = await insforge.database
+      .from("linkedin_recommendations")
+      .select("*")
+      .eq("user_id", userId)
+      .order("recommendation_date", { ascending: false });
+    const recommendations = (recsData ?? []) as LinkedInRecommendation[];
+
     // Render PDF buffer
     // Cast required: renderToBuffer expects ReactElement<DocumentProps>, but our wrapper
     // component has a different Props shape — the runtime type is correct.
+    const includeImages = req.nextUrl.searchParams.get("images") === "1";
     const element = createElement(
       ResumePDF,
-      { profile, generated, skillYears },
+      { profile, generated, skillYears, recommendations, includeImages },
     ) as unknown as ReactElement<DocumentProps>;
     const buffer = await renderToBuffer(element);
 
