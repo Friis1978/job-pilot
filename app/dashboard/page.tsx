@@ -99,7 +99,7 @@ export default async function DashboardPage() {
   const matchScoreData = matchScoreResult.status === "fulfilled" ? matchScoreResult.value : [];
   const tokenUsageData = tokenUsageResult.status === "fulfilled"
     ? tokenUsageResult.value
-    : { points: [], features: [], totalTokens: 0 };
+    : { points: [], features: [], totalTokens: 0, isCost: false };
   const companyResearchData = (() => {
     type ResearchRow = { researched_at: string; source: string };
     const rows: ResearchRow[] =
@@ -209,6 +209,7 @@ export default async function DashboardPage() {
             data={tokenUsageData.points}
             features={tokenUsageData.features}
             totalTokens={tokenUsageData.totalTokens}
+            isCost={tokenUsageData.isCost}
           />
         </div>
       </main>

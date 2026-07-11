@@ -29,12 +29,12 @@ const FEATURE_LABELS: Record<string, string> = {
   find_jobs: "Find Jobs",
   research_company: "Research",
   tailored_resume: "Tailored Resume",
-  tailored_resume_translate: "Resume Translation",
+  tailored_resume_translate: "Translation",
   cover_letter: "Cover Letter",
   tailored_cover_letter: "Tailored Cover Letter",
   cover_letter_advice: "Letter Advice",
-  resume_motivation: "Resume Motivation",
-  resume_generate: "Generate Resume",
+  resume_motivation: "Motivation",
+  resume_generate: "Resume",
   resume_extract: "Extract Resume",
   import_job: "Import Job",
   regenerate_description: "Regen Description",
@@ -59,9 +59,10 @@ type TooltipProps = {
   active?: boolean;
   payload?: Array<{ name: string; value: number; color: string }>;
   label?: string;
+  fmt?: (n: number) => string;
 };
 
-function TooltipContent({ active, payload, label }: TooltipProps) {
+function TooltipContent({ active, payload, label, fmt = formatTokens }: TooltipProps) {
   if (!active || !payload?.length) return null;
   const sorted = [...payload].reverse().filter((p) => p.value > 0);
   const total = sorted.reduce((s, p) => s + p.value, 0);
@@ -71,15 +72,15 @@ function TooltipContent({ active, payload, label }: TooltipProps) {
       {sorted.map((p) => (
         <p key={p.name} className="text-xs flex items-center justify-between gap-3">
           <span className="flex items-center gap-1.5" style={{ color: p.color }}>
-            <span className="w-2 h-2 rounded-full inline-block flex-shrink-0" style={{ backgroundColor: p.color }} />
+            <span className="w-2 h-2 rounded-full inline-block shrink-0" style={{ backgroundColor: p.color }} />
             {FEATURE_LABELS[p.name] ?? p.name}
           </span>
-          <span className="font-semibold text-text-primary">{formatTokens(p.value)}</span>
+          <span className="font-semibold text-text-primary">{fmt(p.value)}</span>
         </p>
       ))}
       <p className="text-xs font-semibold text-text-primary border-t border-border pt-1 mt-0.5 flex justify-between">
         <span>Total</span>
-        <span>{formatTokens(total)}</span>
+        <span>{fmt(total)}</span>
       </p>
     </div>
   );
@@ -92,27 +93,29 @@ type Props = {
   isCost: boolean;
 };
 
-export function TokenUsageChart({ data, features, totalTokens }: Props) {
+export function TokenUsageChart({ data, features, totalTokens, isCost }: Props) {
   const isEmpty = totalTokens === 0;
+  const formatValue = isCost ? formatCost : formatTokens;
+  const unit = isCost ? "cost" : "tokens";
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-      <div className="flex items-start justify-between mb-5">
-        <div>
-          <h2 className="text-base font-semibold text-text-primary">Token Usage (14 days)</h2>
+      <div className="flex items-start gap-4 mb-5">
+        <div className="shrink-0">
+          <h2 className="text-base font-semibold text-text-primary">{isCost ? "AI Cost (14 days)" : "Token Usage (14 days)"}</h2>
           {!isEmpty && (
             <p className="text-2xl font-bold text-text-primary mt-0.5">
-              {formatTokens(totalTokens)}
-              <span className="text-sm font-normal text-text-muted ml-1.5">tokens</span>
+              {formatValue(totalTokens)}
+              <span className="text-sm font-normal text-text-muted ml-1.5">{unit}</span>
             </p>
           )}
         </div>
         {!isEmpty && (
-          <div className="flex flex-wrap justify-end gap-x-3 gap-y-1.5 max-w-56">
+          <div className="flex flex-wrap justify-end gap-x-3 gap-y-1.5 flex-1">
             {features.map((f, i) => (
               <span key={f} className="flex items-center gap-1 text-xs text-text-muted">
                 <span
-                  className="w-2 h-2 rounded-full inline-block flex-shrink-0"
+                  className="w-2 h-2 rounded-full inline-block shrink-0"
                   style={{ backgroundColor: PALETTE[i % PALETTE.length] }}
                 />
                 {FEATURE_LABELS[f] ?? f}
@@ -141,13 +144,13 @@ export function TokenUsageChart({ data, features, totalTokens }: Props) {
               axisLine={false}
             />
             <YAxis
-              tickFormatter={formatTokens}
+              tickFormatter={formatValue}
               tick={{ fill: "var(--color-text-muted)", fontSize: 11 }}
               tickLine={false}
               axisLine={false}
             />
             <Tooltip
-              content={(props) => <TooltipContent {...(props as unknown as TooltipProps)} />}
+              content={(props) => <TooltipContent {...(props as unknown as TooltipProps)} fmt={formatValue} />}
               cursor={{ stroke: "var(--color-border)", strokeWidth: 1 }}
             />
             {features.map((f, i) => (
