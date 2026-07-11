@@ -103,7 +103,7 @@ HARD RULES — every field must pass:
 
     const workHistory = workExp
       .map((w: WorkExperience) => {
-        const bullets = (w.responsibilities as string[] | null)?.slice(0, 3).map((r) => `  - ${r}`).join("\n") ?? "";
+        const bullets = (w.responsibilities as unknown as string[] | null)?.slice(0, 3).map((r) => `  - ${r}`).join("\n") ?? "";
         return `${w.title} at ${w.company}${bullets ? "\n" + bullets : ""}`;
       })
       .join("\n");

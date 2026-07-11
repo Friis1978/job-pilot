@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@insforge/sdk";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+const stripe = new Stripe(process.env.STRIPE_SK!);
 
 // Webhook handler has no user session — use anon key with SECURITY DEFINER RPC
 const insforge = createClient({
