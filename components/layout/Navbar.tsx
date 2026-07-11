@@ -20,7 +20,7 @@ export type NavUser = {
   avatarUrl?: string | null;
 };
 
-type Props = { user?: NavUser; hasAccount?: boolean; isAdmin?: boolean };
+type Props = { user?: NavUser; hasAccount?: boolean; isAdmin?: boolean; creditBalance?: number };
 
 function getInitials(name?: string | null, email?: string | null): string {
   if (name?.trim()) {
@@ -33,7 +33,7 @@ function getInitials(name?: string | null, email?: string | null): string {
   return "?";
 }
 
-export function Navbar({ user, hasAccount, isAdmin }: Props) {
+export function Navbar({ user, hasAccount, isAdmin, creditBalance }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -84,6 +84,19 @@ export function Navbar({ user, hasAccount, isAdmin }: Props) {
         )}
 
         {user ? (
+          <div className="flex items-center gap-2">
+            {creditBalance !== undefined && (
+              <Link
+                href="/payment"
+                className={`text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
+                  creditBalance < 2
+                    ? "text-error border-error/30 bg-error/5 hover:bg-error/10"
+                    : "text-text-muted border-border bg-surface-secondary hover:bg-surface"
+                }`}
+              >
+                ${creditBalance.toFixed(2)}
+              </Link>
+            )}
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setOpen((o) => !o)}
@@ -134,6 +147,7 @@ export function Navbar({ user, hasAccount, isAdmin }: Props) {
                 </button>
               </div>
             )}
+          </div>
           </div>
         ) : (
           <Link

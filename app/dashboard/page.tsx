@@ -83,7 +83,7 @@ export default async function DashboardPage() {
       .eq("user_id", user.id),
     insforge.database
       .from("profiles")
-      .select("avatar_url, is_admin, onboarding_seen")
+      .select("avatar_url, is_admin, onboarding_seen, credit_balance_usd")
       .eq("id", user.id)
       .maybeSingle(),
   ]);
@@ -181,7 +181,7 @@ export default async function DashboardPage() {
 
   // Redirect new users to profile page so they complete their profile first
   const profileData = profileResult.status === "fulfilled"
-    ? (profileResult.value.data as { avatar_url?: string | null; is_admin?: boolean; onboarding_seen?: boolean } | null)
+    ? (profileResult.value.data as { avatar_url?: string | null; is_admin?: boolean; onboarding_seen?: boolean; credit_balance_usd?: number | null } | null)
     : null;
 
   if (profileData !== null && !profileData.onboarding_seen) {
@@ -192,7 +192,7 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <Navbar user={{ name: userMeta?.full_name ?? userMeta?.name, email: user.email, avatarUrl: profileData?.avatar_url ?? userMeta?.avatar_url }} isAdmin={profileData?.is_admin ?? false} />
+      <Navbar user={{ name: userMeta?.full_name ?? userMeta?.name, email: user.email, avatarUrl: profileData?.avatar_url ?? userMeta?.avatar_url }} isAdmin={profileData?.is_admin ?? false} creditBalance={profileData?.credit_balance_usd !== undefined ? Number(profileData.credit_balance_usd) : undefined} />
       <main className="min-h-screen bg-background">
         <div className="w-full max-w-360 mx-auto px-4 sm:px-6 py-8 flex flex-col gap-5">
           <StatsBar {...statsData} />

@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
     // so we create a one-off client with the token directly.
     let approvalStatus: "pending" | "approved" | "rejected" = "pending";
     let isAdmin = false;
+    let creditBalance = 0;
 
     if (userId) {
       const tempClient = createServerClient({
@@ -87,13 +88,14 @@ export async function GET(request: NextRequest) {
 
       const { data: profile } = await tempClient.database
         .from("profiles")
-        .select("email, full_name, approval_status, is_admin, welcomed_at")
+        .select("email, full_name, approval_status, is_admin, welcomed_at, credit_balance_usd")
         .eq("id", userId)
         .maybeSingle();
 
       if (profile) {
         approvalStatus = profile.approval_status as "pending" | "approved" | "rejected";
         isAdmin = profile.is_admin as boolean;
+        creditBalance = Number(profile.credit_balance_usd ?? 0);
 
         // First login: set welcomed_at and send emails if still pending
         if (profile.welcomed_at === null) {
@@ -118,7 +120,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const destination = approvalStatus === "approved" ? "/dashboard" : "/pending";
+    let destination: string;
+    if (approvalStatus !== "approved") {
+      destination = "/pending";
+    } else if (creditBalance <= 0) {
+      destination = "/payment";
+    } else {
+      destination = "/dashboard";
+    }
     const response = NextResponse.redirect(`${origin}${destination}`);
 
     response.cookies.delete("insforge_pkce_verifier");
@@ -136,6 +145,17 @@ export async function GET(request: NextRequest) {
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
         maxAge: 60 * 60 * 24 * 7, // 7 days — matches token lifetime
+        path: "/",
+      });
+    }
+
+    // Set credit cookie — proxy gates all protected routes on this
+    if (approvalStatus === "approved" && creditBalance > 0) {
+      response.cookies.set("jp_has_credit", "1", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 7,
         path: "/",
       });
     }

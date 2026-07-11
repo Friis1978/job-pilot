@@ -1,7 +1,7 @@
 import { updateSession } from "@insforge/sdk/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED_PATHS = ["/dashboard", "/profile", "/find-jobs"];
+const PROTECTED_PATHS = ["/dashboard", "/profile", "/find-jobs", "/payment"];
 const ADMIN_PATHS = ["/admin"];
 
 // Routes where we skip updateSession — the route handler manages its own refresh
@@ -57,6 +57,11 @@ export async function proxy(request: NextRequest) {
     const isApproved = request.cookies.get("jp_approved")?.value === "1";
     if (!isApproved) {
       return NextResponse.redirect(new URL("/pending", request.url));
+    }
+    // Approved but no credit — redirect to payment page (allow /payment itself through)
+    const hasCredit = request.cookies.get("jp_has_credit")?.value === "1";
+    if (!hasCredit && !pathname.startsWith("/payment")) {
+      return NextResponse.redirect(new URL("/payment", request.url));
     }
   }
 
