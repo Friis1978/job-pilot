@@ -210,6 +210,7 @@ export default async function DashboardPage() {
             features={tokenUsageData.features}
             totalTokens={tokenUsageData.totalTokens}
             isCost={tokenUsageData.isCost}
+            creditBalance={profileData?.credit_balance_usd !== undefined ? Number(profileData.credit_balance_usd) : undefined}
           />
         </div>
       </main>

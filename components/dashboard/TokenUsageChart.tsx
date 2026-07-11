@@ -91,9 +91,10 @@ type Props = {
   features: string[];
   totalTokens: number;
   isCost: boolean;
+  creditBalance?: number;
 };
 
-export function TokenUsageChart({ data, features, totalTokens, isCost }: Props) {
+export function TokenUsageChart({ data, features, totalTokens, isCost, creditBalance }: Props) {
   const isEmpty = totalTokens === 0;
   const formatValue = isCost ? formatCost : formatTokens;
   const unit = isCost ? "cost" : "tokens";
@@ -110,6 +111,14 @@ export function TokenUsageChart({ data, features, totalTokens, isCost }: Props) 
             </p>
           )}
         </div>
+        {creditBalance !== undefined && (
+          <div className="ml-auto text-right shrink-0">
+            <p className="text-xs text-text-muted">Balance</p>
+            <p className={`text-lg font-bold ${creditBalance < 2 ? "text-error" : "text-text-primary"}`}>
+              ${creditBalance.toFixed(2)}
+            </p>
+          </div>
+        )}
         {!isEmpty && (
           <div className="flex flex-wrap justify-end gap-x-3 gap-y-1.5 flex-1">
             {features.map((f, i) => (

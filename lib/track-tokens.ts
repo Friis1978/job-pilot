@@ -1,11 +1,5 @@
 import { getPostHogClient } from "@/lib/posthog-server";
-import { createClient } from "@insforge/sdk";
 import type OpenAI from "openai";
-
-const insforgeAnon = createClient({
-  baseUrl: process.env.NEXT_PUBLIC_INSFORGE_URL!,
-  anonKey: process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY!,
-});
 
 type ModelType = "gpt-4o" | "gpt-4o-mini" | string;
 
@@ -43,11 +37,24 @@ export function trackTokens(
   });
   void posthog.shutdown();
 
-  // Decrement credit balance — fire and forget
+  // Record usage — trigger on token_usage recomputes credit_balance_usd automatically
   if (costUsd > 0) {
-    void insforgeAnon.database.rpc("decrement_credit_balance", {
-      p_user_id: userId,
-      p_amount: Math.round(costUsd * 100000) / 100000,
+    const anonKey = process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY!;
+    void fetch(`${process.env.NEXT_PUBLIC_INSFORGE_URL}/api/database/rpc/insert_token_usage`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": anonKey,
+        "Authorization": `Bearer ${anonKey}`,
+      },
+      body: JSON.stringify({
+        p_user_id: userId,
+        p_cost_usd: Math.round(costUsd * 100000) / 100000,
+        p_feature: feature,
+        p_model: model,
+        p_prompt_tokens: promptTokens,
+        p_completion_tokens: completionTokens,
+      }),
     });
   }
 }

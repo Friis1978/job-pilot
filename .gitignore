@@ -63,3 +63,9 @@ ds-bundle/
 .design-sync/node_modules
 .design-sync/.cache
 .design-sync/styles-with-fonts.css
+.venv
+.playwright-mcp
+memory
+.claude
+.codex
+.agents

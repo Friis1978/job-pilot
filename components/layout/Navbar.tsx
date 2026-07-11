@@ -85,18 +85,6 @@ export function Navbar({ user, hasAccount, isAdmin, creditBalance }: Props) {
 
         {user ? (
           <div className="flex items-center gap-2">
-            {creditBalance !== undefined && (
-              <Link
-                href="/payment"
-                className={`text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
-                  creditBalance < 2
-                    ? "text-error border-error/30 bg-error/5 hover:bg-error/10"
-                    : "text-text-muted border-border bg-surface-secondary hover:bg-surface"
-                }`}
-              >
-                ${creditBalance.toFixed(2)}
-              </Link>
-            )}
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setOpen((o) => !o)}
@@ -138,6 +126,13 @@ export function Navbar({ user, hasAccount, isAdmin, creditBalance }: Props) {
                   className="block px-3 py-2 text-sm text-text-primary hover:bg-surface-secondary transition-colors"
                 >
                   Profile
+                </Link>
+                <Link
+                  href="/payment"
+                  onClick={() => setOpen(false)}
+                  className="block px-3 py-2 text-sm text-text-primary hover:bg-surface-secondary transition-colors"
+                >
+                  Credits
                 </Link>
                 <button
                   onClick={handleSignOut}
