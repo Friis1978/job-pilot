@@ -42,7 +42,8 @@ Rules:
 - bullets: 3-5 per role, start with a past-tense action verb (Led, Built, Reduced, Designed, etc.)
 - For currentlyWorking roles, use present-tense action verbs (Leads, Builds, etc.)
 - Preserve ALL roles from the input — do not add or remove any
-- startDate / endDate / currentlyWorking: copy exactly from input, do not change`;
+- startDate / endDate / currentlyWorking: copy exactly from input, do not change
+- No fabrication: every bullet must be grounded in the input data. Do not invent percentages, team sizes, user counts, cost savings, or any metric not present in the input. If the role has no description, write general responsibility bullets based only on the title and company — never invent outcomes`;
 
 type SkillGroup = { label: string; skills: string[] };
 

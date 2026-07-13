@@ -59,8 +59,9 @@ Last updated: 2026-07-11
 
 Visually verify the resume PDF — check education/languages/interests on page 1, spacing, "LinkedIn/GitHub/Website" labels in header, recommendations appearing.
 
-## Open questions
+## Resolved
 
-- Is `portfolio_url` always GitHub? The label "GitHub" was assumed — might need to be "Portfolio".
-- `find_jobs` costs ~$0.52 per run (78k tokens) — worth investigating prompt trimming.
-- Previous open questions still apply: resume generation cliché risk, `agent/edit-cover-letter.ts` unused.
+- `portfolio_url` is always the user's GitHub URL — "GitHub" label in ResumePDF is correct.
+- `agent/edit-cover-letter.ts` was dead code — deleted.
+- `find_jobs` token cost: job descriptions truncated to 2000 chars in scoring prompt (`agent/find-jobs.ts`).
+- Resume bullet fabrication: no-fabrication rule added directly to `SYSTEM_PROMPT` in `app/api/resume/generate/route.ts`.

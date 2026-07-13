@@ -408,7 +408,7 @@ Scoring rules:
 Title: ${job.title}
 Company: ${job.company}
 Location: ${job.location}
-Description: ${job.description}
+Description: ${job.description.slice(0, 2000)}
 
 CANDIDATE:
 Current title: ${profile.current_title ?? "Not specified"}
