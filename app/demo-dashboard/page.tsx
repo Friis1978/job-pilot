@@ -7,12 +7,18 @@ import { MatchScoreChart } from "@/components/dashboard/MatchScoreChart";
 import { PipelineCard } from "@/components/dashboard/PipelineCard";
 
 const DEMO_STATS = {
-  totalJobs: 47,
-  avgMatchRate: 74,
-  companiesResearched: 23,
+  jobsThisMonth: 47,
+  jobsLastMonth: 38,
   jobsThisWeek: 8,
-  totalJobsTrend: 23,
+  jobsLastWeek: 12,
+  avgMatchRate: 74,
+  avgMatchRateLastWeek: 71,
+  appliedThisWeek: 3,
+  appliedLastWeek: 5,
+  monthTrend: 23,
+  weekTrend: -33,
   matchRateTrend: 5,
+  appliedTrend: -40,
 };
 
 const DEMO_ACTIVITIES = [
