@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
     revalidatePath(`/find-jobs/${jobId}`);
     revalidatePath("/dashboard");
-    return NextResponse.json({ success: true, text: result.text });
+    return NextResponse.json({ success: true, text: result.text, saplingFeedback: result.saplingFeedback });
   } catch (err) {
     console.error("[api/agent/cover-letter]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

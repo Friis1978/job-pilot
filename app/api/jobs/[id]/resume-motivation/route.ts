@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { detectLanguage } from "@/lib/detect-language";
 import type { Profile } from "@/types";
 import { trackTokens } from "@/lib/track-tokens";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(
   _req: NextRequest,
@@ -65,23 +63,44 @@ export async function POST(
       ? ` Write exclusively in the language of the job post (detected: ${detectedLang}). Do not use English.`
       : "";
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json({ error: "AI generation is not configured (missing ANTHROPIC_API_KEY)." }, { status: 503 });
+    }
+
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const MODEL = "claude-sonnet-4-6";
+
+    const systemPrompt = `You write a motivation section for a tailored resume. It is a short paragraph (3–5 sentences) explaining why this candidate is a good fit for this specific role — drawing on their background, values, and what motivates them professionally. It is NOT a cover letter: no greeting, no closing, no "Hi [Company]", no "Best regards". Plain prose only — no bullet points, no headers, no markdown.${langInstruction}
+
+Structure:
+1. Who the candidate is professionally: title + domain + 1–2 specific technologies. One sentence.
+2. What they bring that is relevant to this role — one concrete aspect from their work history or skills that matches the job. Name it specifically.
+3. Why this type of work fits them — use the candidate's motivation, career_vision, or energy_tasks to explain the genuine connection. Factual, not flattering.
+4. (Optional) One more relevant strength or interest if the profile data supports it.
+
+Hard rules:
+- No greeting, no closing, no candidate name, no company name.
+- Never open a sentence with "I".
+- No three-part lists — break into separate statements.
+- Forbidden words: excited, passionate, thrilled, inspired, eager, leverage, aligns, dynamic, impactful, synergize, seamlessly, transformative.
+- No fabrication — only use details present in the profile and job data.
+- Return plain text only.`;
+
+    const completion = await anthropic.messages.create({
+      model: MODEL,
+      system: systemPrompt,
       max_tokens: 400,
+      temperature: 0.7,
       messages: [
         {
-          role: "system",
-          content: `You write a motivation section for a resume. Write in first person, maximum 8 lines, prose format (no bullet points, no headers). Be specific to this company and role — mention the company by name and connect the candidate's background and interests to what this role offers. Do not sound like a cover letter opening or a suck-up — be genuine, direct, and grounded. Never fabricate experience or achievements not present in the profile. Write plain text only, no markdown.${langInstruction}`,
-        },
-        {
           role: "user",
-          content: `Candidate profile:\n${profileContext}\n\nJob:\n${jobContext}\n\nWrite the motivation section now.`,
+          content: `CANDIDATE DATA (use as source material only):\n${profileContext}\n\nTARGET JOB:\n${jobContext}\n\nWrite a 3–5 sentence motivation paragraph. NO greeting, NO closing, NO candidate name, NO company name. Plain prose only.`,
         },
       ],
     });
 
-    const text = completion.choices[0]?.message?.content?.trim() ?? "";
-    trackTokens(userId, "resume_motivation", "gpt-4o-mini", completion.usage?.prompt_tokens ?? 0, completion.usage?.completion_tokens ?? 0);
+    const text = completion.content[0]?.type === "text" ? completion.content[0].text.trim() : "";
+    trackTokens(userId, "resume_motivation", MODEL, completion.usage.input_tokens, completion.usage.output_tokens);
 
     await insforge.database
       .from("jobs")

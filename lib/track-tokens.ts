@@ -1,11 +1,15 @@
 import { getPostHogClient } from "@/lib/posthog-server";
 import type OpenAI from "openai";
 
-type ModelType = "gpt-4o" | "gpt-4o-mini" | string;
+type ModelType = "gpt-4o" | "gpt-4o-mini" | "claude-sonnet-4-6" | "claude-opus-4-8" | "claude-haiku-4-5" | string;
 
+// Prices per 1 000 tokens (input / output)
 const PRICING: Record<string, { input: number; output: number }> = {
-  "gpt-4o": { input: 0.005, output: 0.015 },
-  "gpt-4o-mini": { input: 0.00015, output: 0.0006 },
+  "gpt-4o":            { input: 0.005,    output: 0.015  },
+  "gpt-4o-mini":       { input: 0.00015,  output: 0.0006 },
+  "claude-sonnet-4-6": { input: 0.003,    output: 0.015  },
+  "claude-opus-4-8":   { input: 0.015,    output: 0.075  },
+  "claude-haiku-4-5":  { input: 0.0008,   output: 0.004  },
 };
 
 // Fire-and-forget — does not need to be awaited.
@@ -59,14 +63,21 @@ export function trackTokens(
   }
 }
 
-// Helper to sum usage across multiple completions (for agents that call OpenAI several times).
+// Helper to sum usage across multiple completions.
 export class TokenAccumulator {
   promptTokens = 0;
   completionTokens = 0;
 
+  // OpenAI usage (prompt_tokens / completion_tokens)
   add(usage: OpenAI.CompletionUsage | null | undefined) {
     this.promptTokens += usage?.prompt_tokens ?? 0;
     this.completionTokens += usage?.completion_tokens ?? 0;
+  }
+
+  // Anthropic usage (input_tokens / output_tokens)
+  addAnthropic(usage: { input_tokens: number; output_tokens: number } | null | undefined) {
+    this.promptTokens += usage?.input_tokens ?? 0;
+    this.completionTokens += usage?.output_tokens ?? 0;
   }
 
   flush(userId: string, feature: string, model: ModelType) {

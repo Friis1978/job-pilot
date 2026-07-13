@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { computeSkillYears } from "@/lib/utils";
@@ -18,7 +19,8 @@ const LANGUAGE_NAMES: Record<string, string> = {
   en: "English",
 };
 
-type Result = { success: boolean; text?: string; error?: string };
+type SaplingFeedback = { score: number | null; action: string; flaggedSentences: number; sentenceScores: { sentence: string; score: number }[] };
+type Result = { success: boolean; text?: string; error?: string; saplingFeedback?: SaplingFeedback };
 
 
 /**
@@ -121,29 +123,38 @@ export async function generateCoverLetter(
     ? `COMPANY RESEARCH:\n${JSON.stringify(job.company_research, null, 2)}`
     : "";
 
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return { success: false, error: "AI generation is not configured (missing ANTHROPIC_API_KEY)." };
+  }
+
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); // used only for humanizeText
 
-    // Use structured JSON generation to bypass GPT-4o's strong "cover letter" priors.
-    // Free-form generation reliably produces banned enthusiasm language regardless of instructions.
-    // Filling discrete JSON fields forces deliberate, constrained output per section.
-    const FORBIDDEN = `"passion", "excited", "excites", "resonates", "inspires", "thrive", "seamlessly", "empowering", "leverage", "transformative", "aligns perfectly", "real value", "deliver value", "appreciate the intricacies", "unique combination", "In my professional journey"`;
+    // Build system prompt from user's own cover letter instructions (primary source of truth).
+    // Fall back to minimal defaults only when no profile instructions exist.
+    const defaultInstructions = `Write a professional cover letter in ${language}.
+- First person only. Never write the candidate's name in the body. Never use third person.
+- Never open a sentence with "I" — vary openings (use the role, a technology, a company name, or a result instead).
+- No enthusiasm, no emotional language, no fabrication. Facts only.
+- Name at least 2 specific technologies the candidate actually uses, with context.
+- Reference at least one real project or past role by name and what was built/achieved.
+- No three-part lists ("X, Y, and Z") — break them into separate statements.
+- No hedging: "I believe", "I feel", "I think" — remove the hedge entirely.
+- Forbidden words (any form or tense): passion, excited, thrilled, leverage, align, dynamic, impactful, seamlessly, empower, transformative, synergize, robust, scalable, furthermore, moreover, additionally.`;
 
-    const systemPrompt = `You are a JSON generator. Return a JSON object with exactly these 5 keys. Write in ${language}.
+    const writingInstructions = customInstructions?.trim() || defaultInstructions;
 
+    const systemPrompt = `${writingInstructions}
+
+OUTPUT FORMAT — return a JSON object with exactly these 4 keys. Write in ${language}.
 {
   "greeting": "${language === "Danish" ? "Hej [Company name]," : "Hi [Company name],"}",
-  "intro": "1-2 sentences. Write in first person (I/my). State who the candidate is professionally and name at least 2 specific technologies they actually use (e.g. TypeScript, React, Rust, Next.js, Vue 3). Do NOT open the sentence with the word 'I' — vary the sentence structure instead (e.g. 'With 8 years building...', 'As a senior...', 'My background is...'). Do NOT write in 3rd person. Do NOT express enthusiasm.",
-  "achievement": "1-2 sentences. Write in first person (I/my/we). Name one specific project or work achievement from the profile. Include what was built and what technology was used. Factual only.",
-  "fit": "1-2 sentences. Write in first person (I/my). Connect one specific skill or experience from the profile to a concrete requirement from the job. Do not invent connections not supported by the data.",
-  "closing": "${language === "Danish" ? "Med venlig hilsen," : "Best regards,"}"
+  "intro": "1-2 sentences: what the candidate does professionally, naming 2+ specific technologies they actually use — no generic openers",
+  "achievement": "1-2 sentences: one specific project or past-role achievement — name the project/company, the technology used, and the concrete outcome (number, scale, or result if the data supports it — never invent one)",
+  "fit": "1 sentence: name a past company or project, a specific technology or decision made, and the result — no future-tense promises, no connector phrases like 'which is why' or 'making me'"
 }
-
-HARD RULES — every field must pass these checks:
-- No banned words/concepts: ${FORBIDDEN}
-- No emotional language of any kind. No statements about what the candidate feels, loves, wants, or is passionate about.
-- Only facts that appear in the profile data. TypeScript IS JavaScript — never claim the candidate lacks JS experience.
-- Do NOT fabricate connections between unrelated domains (e.g. audio engineering ≠ physical machinery).`;
+Return valid JSON only. No markdown. No code fences. Do NOT include a closing line or the candidate's name in any field — those are added separately.`;
 
     const candidateData = `JOB:
 Title: ${job.title}
@@ -160,8 +171,7 @@ Skills: ${(profile.skills as string[] | null)?.join(", ") ?? "Not provided"}${sk
 Work history (newest first):
 ${recentWork || "Not provided"}${projectsText ? `\n\nPersonal projects:\n${projectsText}` : ""}${(profile.career_vision as string | null) ? `\n\nCareer direction (context only, do not quote): ${profile.career_vision}` : ""}${(profile.linkedin_url as string | null) ? `\n\nLinkedIn: ${profile.linkedin_url}` : ""}${(profile.portfolio_url as string | null) ? `\nPortfolio: ${profile.portfolio_url}` : ""}`;
 
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: "system", content: systemPrompt },
+    const userMessages: Anthropic.MessageParam[] = [
       ...(coverLetterExamples.length > 0 ? [{
         role: "user" as const,
         content: `Voice reference — mirror the sentence rhythm and directness of these examples. Do not copy content:\n\n${coverLetterExamples.map((ex, i) => `--- Example ${i + 1} ---\n${ex.trim()}`).join("\n\n")}`,
@@ -173,20 +183,25 @@ ${recentWork || "Not provided"}${projectsText ? `\n\nPersonal projects:\n${proje
       }] : []),
     ];
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      response_format: { type: "json_object" },
-      temperature: 0.4,
+    const MODEL = "claude-sonnet-4-6";
+    const response = await anthropic.messages.create({
+      model: MODEL,
+      system: systemPrompt,
+      temperature: 0.7,
       max_tokens: style === "detailed" ? 900 : 500,
-      messages,
+      messages: userMessages,
     });
 
-    const rawJson = response.choices[0]?.message?.content?.trim();
-    trackTokens(userId, "cover_letter", "gpt-4o", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
+    const rawText = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
+    // Strip markdown code fences Claude sometimes wraps around JSON
+    const rawJson = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    trackTokens(userId, "cover_letter", MODEL, response.usage.input_tokens, response.usage.output_tokens);
     if (!rawJson) {
       await posthog.shutdown();
       return { success: false, error: "Generation failed. Please try again." };
     }
+
+    const BANNED_REGEX = /\b(align(?:s|ing|ed)?|match(?:es|ing|ed)? (the|your) (backend|frontend|full.stack|tech|stack|requirement)|additionally|furthermore|moreover|passion(?:ate)?|excited|excites|resonates|inspires|thrives?|seamlessly|empowering|leverage|leverages?|transformative|complemented by|I bring|spans (across|over|both)|showcas(?:ing|ed)?|scalable solutions|scalable platform|scalable architecture|consistently delivered|various platforms|robust (applications?|backend|platform|solution|technical)|(?:strong|solid) foundation|focusing on performance and user experience|enhancing user experience|improving functionality|effective (collaboration|technical solutions)|critical business processes|impactful|dynamic|synergize[sd]?|high-value|continuous improvement|thrilled|appealing|enhanced development processes|technical foundations?|well-covered|tenure|were honed|modern tech stacks?|meets your need|will support your|key components of your|integral to)\b/gi;
 
     let parsed: { greeting?: string; intro?: string; achievement?: string; fit?: string; closing?: string };
     try {
@@ -196,17 +211,51 @@ ${recentWork || "Not provided"}${projectsText ? `\n\nPersonal projects:\n${proje
       return { success: false, error: "Generation failed. Please try again." };
     }
 
+    // Auto-retry once if banned words slipped through
+    const firstDraft = [parsed.intro, parsed.achievement, parsed.fit].join(" ");
+    const violations = [...new Set((firstDraft.match(BANNED_REGEX) ?? []).map(w => w.toLowerCase()))];
+    if (violations.length > 0) {
+      console.log(`[cover-letter] Banned words detected (${violations.join(", ")}), retrying...`);
+      const retryResponse = await anthropic.messages.create({
+        model: MODEL,
+        system: systemPrompt,
+        temperature: 0.5,
+        max_tokens: style === "detailed" ? 900 : 500,
+        messages: [
+          ...userMessages,
+          { role: "assistant", content: rawJson },
+          { role: "user", content: `BANNED WORDS FOUND: ${violations.join(", ")}. These are absolutely forbidden. Rewrite the JSON replacing every instance with direct, factual phrasing. Do not use them in any form or tense.` },
+        ],
+      });
+      const retryRaw = retryResponse.content[0]?.type === "text" ? retryResponse.content[0].text.trim() : "";
+      const retryJson = retryRaw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+      trackTokens(userId, "cover_letter", MODEL, retryResponse.usage.input_tokens, retryResponse.usage.output_tokens);
+      if (retryJson) {
+        try { parsed = JSON.parse(retryJson); } catch { /* keep original parsed */ }
+      }
+    }
+
+    // Hardcode closing — never trust the model with it, it always appends the candidate's name
+    const closingText = language === "Danish" ? "Med venlig hilsen," : "Best regards,";
+
     const sections = [
       parsed.greeting,
       parsed.intro,
       parsed.achievement,
       parsed.fit,
-      parsed.closing,
+      closingText,
       profile.full_name ?? "",
     ].filter(Boolean);
 
     const raw = sections.join("\n\n");
-    const coverLetter = customInstructions ? raw : await humanizeText(raw, openai);
+    const humanizeResult = await humanizeText(raw, openai, userId);
+    const coverLetter = humanizeResult.text;
+    const saplingFeedback = {
+      score: humanizeResult.saplingScore,
+      action: humanizeResult.action,
+      flaggedSentences: humanizeResult.flaggedSentences,
+      sentenceScores: humanizeResult.sentenceScores,
+    };
 
     // Archive existing cover letter before overwriting
     const { data: existingJob } = await insforge.database
@@ -239,7 +288,7 @@ ${recentWork || "Not provided"}${projectsText ? `\n\nPersonal projects:\n${proje
     });
     await posthog.shutdown();
 
-    return { success: true, text: coverLetter };
+    return { success: true, text: coverLetter, saplingFeedback };
   } catch (err) {
     console.error("[agent/generate-cover-letter]", err);
     await posthog.shutdown();

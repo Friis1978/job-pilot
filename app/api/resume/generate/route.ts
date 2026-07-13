@@ -1,7 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { NextResponse, type NextRequest } from "next/server";
 import { renderToBuffer } from "@react-pdf/renderer";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { createElement, type ReactElement } from "react";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { computeSkillYears, computeTotalYearsExperience } from "@/lib/utils";
@@ -30,7 +30,7 @@ const SYSTEM_PROMPT = `You are a professional resume writer. Given a candidate's
 }
 
 Rules:
-- summary: 2-3 sentences, third-person present tense, no first-person "I". If personalProjects are provided, briefly mention one notable project by name
+- summary: 2-3 sentences, third-person present tense, no "I"/"my"/"me". Sentence 1: title + years + 2 specific named technologies. Sentence 2: one concrete thing they built or achieved (name the project/company if available). Sentence 3 (optional): a notable personal project by name if one exists in the data — skip this sentence if no projects are provided.
 - skillGroups: categorize ALL skills from the input into labelled groups. Use exactly these short labels. Order groups as follows:
   1. "Frameworks" — UI frameworks, backend frameworks, ORMs, component libraries (e.g. React, Next.js, Express, Django, Prisma)
   2. "Languages" — programming and markup languages (e.g. TypeScript, Python, SQL, HTML, CSS)
@@ -111,14 +111,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // Download failed — fall through to regenerate
     }
 
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json(
         { error: "AI generation is not configured yet." },
         { status: 503 },
       );
     }
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const profileInput = {
       fullName: profile.full_name,
@@ -137,26 +137,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 - Forbidden phrases (never use in summary or bullets): "passion for", "aligns perfectly", "thrive in environments", "delivering high-value solutions", "empowering", "leverage", "synergize", "dynamic", "impactful", "unique combination of", "not just X but Y", "In my professional journey", "aligns seamlessly"
 - Bullets: start with a strong past-tense action verb. Be specific — name tools, outcomes, or scale where the data supports it.`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      response_format: { type: "json_object" },
+    const customInstructions = (profile.cover_letter_instructions as string | null)?.trim() ?? null;
+    const summaryStyleNote = customInstructions
+      ? `\n\nCANDIDATE WRITING STYLE (apply to the summary only — do NOT apply to bullets or skill groups):\n${customInstructions}`
+      : "";
+
+    const MODEL = "claude-sonnet-4-6";
+    const response = await anthropic.messages.create({
+      model: MODEL,
+      system: `${SYSTEM_PROMPT}\n\n${RESUME_CRITICAL_REMINDER}${summaryStyleNote}`,
       temperature: 0.6,
       max_tokens: 1800,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
         {
           role: "user",
           content: `Generate a professional resume for this candidate:\n\n${JSON.stringify(profileInput, null, 2)}`,
         },
-        {
-          role: "user",
-          content: RESUME_CRITICAL_REMINDER,
-        },
       ],
     });
 
-    const raw = response.choices[0]?.message?.content;
-    trackTokens(userId, "resume_generate", "gpt-4o", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
+    const rawText = response.content[0]?.type === "text" ? response.content[0].text : null;
+    const raw = rawText?.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim() ?? null;
+    trackTokens(userId, "resume_generate", MODEL, response.usage.input_tokens, response.usage.output_tokens);
     if (!raw) {
       return NextResponse.json(
         { error: "Generation failed. Please try again." },

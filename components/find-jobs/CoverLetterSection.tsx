@@ -122,6 +122,7 @@ export function CoverLetterSection({ jobId, initialCoverLetter, initialHumanized
   const [adviceSaved, setAdviceSaved] = useState(false);
   const [geminiCopied, setGeminiCopied] = useState(false);
   const [loadingRewrite, setLoadingRewrite] = useState(false);
+  const [saplingFeedback, setSaplingFeedback] = useState<{ score: number | null; action: string; flaggedSentences: number; sentenceScores?: { sentence: string; score: number }[] } | null>(null);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const optionsRef = useRef<HTMLDivElement>(null);
 
@@ -145,9 +146,10 @@ export function CoverLetterSection({ jobId, initialCoverLetter, initialHumanized
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobId, style: letterStyle }),
       });
-      const json = await res.json() as { success?: boolean; text?: string; error?: string };
+      const json = await res.json() as { success?: boolean; text?: string; error?: string; saplingFeedback?: { score: number | null; action: string; flaggedSentences: number; sentenceScores?: { sentence: string; score: number }[] } };
       if (!res.ok || json.error) { toast(json.error ?? "Failed to generate cover letter. Please try again.", "error"); return; }
       setCoverLetter(json.text ?? "");
+      setSaplingFeedback(json.saplingFeedback ?? null);
       toast("Cover letter generated!", "success");
     } catch {
       toast("Failed to generate cover letter. Please try again.", "error");
@@ -472,6 +474,37 @@ export function CoverLetterSection({ jobId, initialCoverLetter, initialHumanized
                 <code className="bg-surface-tertiary px-1 rounded text-[11px]">*italic*</code>{" "}
                 <code className="bg-surface-tertiary px-1 rounded text-[11px]">[text](url)</code>
               </p>
+            </div>
+          )}
+
+          {saplingFeedback && (
+            <div className="mt-3 px-3 py-2.5 bg-surface-secondary border border-border rounded-lg text-xs text-text-muted leading-relaxed space-y-1.5">
+              <div>
+                <span className="font-medium text-text-secondary">AI detection: </span>
+                {saplingFeedback.score === null
+                  ? "Sapling unavailable — GPT-4o aggressive rewrite applied as fallback."
+                  : saplingFeedback.action === "skipped"
+                    ? `Score ${Math.round(saplingFeedback.score * 100)}% — reads as human, no rewrite needed.`
+                    : saplingFeedback.action === "aggressive"
+                      ? `Score ${Math.round(saplingFeedback.score * 100)}% — full aggressive rewrite applied.`
+                      : `Score ${Math.round(saplingFeedback.score * 100)}% — targeted rewrite applied to ${saplingFeedback.flaggedSentences} flagged sentence${saplingFeedback.flaggedSentences !== 1 ? "s" : ""}.`
+                }
+              </div>
+              {saplingFeedback.sentenceScores && saplingFeedback.sentenceScores.length > 0 && (
+                <details className="cursor-pointer">
+                  <summary className="text-text-secondary font-medium select-none">Per-sentence scores ({saplingFeedback.sentenceScores.length})</summary>
+                  <ul className="mt-1 space-y-1">
+                    {saplingFeedback.sentenceScores.map((s, i) => (
+                      <li key={i} className="flex gap-2 items-start">
+                        <span className={`shrink-0 font-mono ${s.score >= 0.5 ? "text-error" : "text-success"}`}>
+                          {Math.round(s.score * 100)}%
+                        </span>
+                        <span className="text-text-muted">{s.sentence}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             </div>
           )}
 
