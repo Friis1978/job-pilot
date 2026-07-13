@@ -20,9 +20,9 @@ Three steps. No manual searching.
 
 | Step | What happens |
 |---|---|
-| **1. Build your profile** | Enter your work history, skills, and cover letter style rules once. Upload a PDF resume — GPT-4o pre-fills everything automatically. |
-| **2. Search & score** | Type a job title and location. The agent queries five job boards in parallel and GPT-4o scores every result 0–100 against your actual skills. |
-| **3. Apply with confidence** | Research the company, generate a tailored cover letter and resume, find a warm intro in your LinkedIn network — all from one page. |
+| **1. Build your profile** | Enter your work history, skills, and cover letter style rules once. Upload a PDF resume — AI pre-fills everything automatically. |
+| **2. Search & score** | Type a job title and location. The agent queries five job boards in parallel and AI scores every result 0–100 against your actual skills. |
+| **3. Apply with confidence** | Research the company, generate a tailored cover letter and resume, write a motivation paragraph, find a warm intro in your LinkedIn network — all from one page. |
 
 ---
 
@@ -55,7 +55,7 @@ Falls back to GPT-4o synthesis from the job description if the site can't be rea
 
 ### AI cover letter — with humanise workflow
 
-One click generates a personalised cover letter using your profile, the full job description, and the company research dossier. Letters are always written in the **detected language of the job posting** (Danish, Swedish, Norwegian, German, Dutch, French, Spanish, English).
+One click generates a personalised cover letter using Claude, your profile, the full job description, and the company research dossier. Letters are always written in the **detected language of the job posting** (Danish, Swedish, Norwegian, German, Dutch, French, Spanish, English).
 
 **Getting a more human-sounding letter:**
 
@@ -70,9 +70,11 @@ Download as PDF (compact or detailed layout, with optional photo, job title, and
 
 ### Tailored resume
 
-Generate a job-specific resume PDF in one click from any job detail page. The resume is optimised for the target role, pulling from your full profile and up to three of your best past cover letter examples as a style reference.
+Generate a job-specific resume PDF in one click from any job detail page. Claude optimises the resume for the target role, pulling from your full profile and up to three of your best past cover letter examples as a style reference.
 
-Upload an existing PDF on the Profile page to pre-fill your entire profile automatically using GPT-4o extraction.
+You can also generate a **motivation paragraph** for your resume directly from the job page — a short first-person paragraph describing what you bring to this specific role.
+
+Upload an existing PDF on the Profile page to pre-fill your entire profile automatically using AI extraction.
 
 ---
 
@@ -117,6 +119,8 @@ For each job, the AI:
 
 The dashboard shows application pipeline status, jobs added over time, match score distribution, company research activity, and a live activity feed. PostHog powers the analytics charts.
 
+An **AI token usage chart** is also displayed on the dashboard — a 14-day stacked area chart breaking down Claude token consumption by feature (cover letter, resume, motivation, company research, etc.), so you can track how much AI capacity you are using.
+
 The agent log records every AI action — job scoring runs, research sessions, cover letter generations — so you can trace what happened and when.
 
 ---
@@ -135,18 +139,19 @@ New users are walked through profile setup, job search, and company research ste
 | Feature | Details |
 |---|---|
 | Job discovery | Adzuna, JobTech, Jooble, CareerJet, Glassdoor searched in parallel |
-| Job import | Paste any URL — GPT-4o extracts the posting |
-| AI scoring | GPT-4o scores 0–100 with matched + missing skills per job |
+| Job import | Paste any URL — AI extracts the posting |
+| AI scoring | Scores 0–100 with matched + missing skills per job |
 | Company research | Browserbase live browsing → structured dossier with interview prep |
-| Cover letter | GPT-4o, language-detected, humanise workflow, PDF + plain text |
-| Tailored resume | Job-specific PDF generated per role |
-| Resume extraction | Upload existing PDF — GPT-4o pre-fills your profile |
+| Cover letter | Claude, language-detected, humanise workflow, PDF + plain text |
+| Resume motivation | Claude generates a first-person motivation paragraph tailored to the role |
+| Tailored resume | Claude generates a job-specific PDF per role |
+| Resume extraction | Upload existing PDF — AI pre-fills your profile |
 | Cover letter examples | Unlimited; newest three used as style reference on every generation |
 | Cover letter rules | Markdown rules file — sole AI system prompt when set |
 | LinkedIn recommendations | Store and display recommendations on your profile |
 | Network intelligence | LinkedIn connection import, AI contact selection, message generation |
 | Application tracking | Saved → Applied → Interviewing → Offer pipeline with more statuses |
-| Dashboard analytics | Charts for activity, scores, and research via PostHog |
+| Dashboard analytics | Activity, scores, research, and AI token usage charts via PostHog |
 | User approval gate | Admin-controlled sign-up approval with Resend email notifications |
 
 ---
@@ -157,7 +162,7 @@ New users are walked through profile setup, job search, and company research ste
 |---|---|
 | Framework | Next.js 16 (App Router) |
 | Backend (DB, Auth, Storage) | InsForge |
-| AI model | OpenAI GPT-4o / GPT-4o-mini |
+| AI models | Claude (Anthropic) for cover letters, resumes, motivation; OpenAI GPT-4o for scoring and extraction |
 | Cloud browser | Browserbase |
 | Browser automation | Stagehand |
 | Job sources | Adzuna, JobTech, Jooble, CareerJet, RapidAPI (Glassdoor) |
@@ -189,7 +194,8 @@ New users are walked through profile setup, job search, and company research ste
 
 - Node.js 20+
 - An [InsForge](https://insforge.dev) project with Google and/or GitHub OAuth configured
-- An [OpenAI](https://platform.openai.com) account with GPT-4o access
+- An [Anthropic](https://console.anthropic.com) account for cover letter, resume, and motivation generation (Claude)
+- An [OpenAI](https://platform.openai.com) account with GPT-4o access for job scoring and profile extraction
 - A [Browserbase](https://browserbase.com) account for company research
 - Job source API keys (Adzuna required; Jooble, CareerJet, RapidAPI optional but recommended)
 - A [PostHog](https://posthog.com) project for analytics (optional)
