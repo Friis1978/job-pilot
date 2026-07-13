@@ -125,6 +125,16 @@ The agent log records every AI action — job scoring runs, research sessions, c
 
 ---
 
+### Credit system and payments
+
+Access to the app requires purchasing credits via Stripe. After sign-up approval, users are redirected to a payment page where they can buy a credit package. The app is fully gated behind the credit check — unapproved or unpaid users cannot access any protected route.
+
+- Payments are handled via **Stripe Checkout** (test and live modes supported)
+- A Stripe webhook updates the user's credit balance in the database on successful payment
+- Credit balance and payment history are visible in the user's account settings
+
+---
+
 ### Onboarding
 
 New users are walked through profile setup, job search, and company research step by step before reaching the full app.
@@ -152,6 +162,7 @@ New users are walked through profile setup, job search, and company research ste
 | Network intelligence | LinkedIn connection import, AI contact selection, message generation |
 | Application tracking | Saved → Applied → Interviewing → Offer pipeline with more statuses |
 | Dashboard analytics | Activity, scores, research, and AI token usage charts via PostHog |
+| Credit system | Stripe-powered one-time credit purchase; access gated until credits purchased |
 | User approval gate | Admin-controlled sign-up approval with Resend email notifications |
 
 ---
@@ -163,6 +174,8 @@ New users are walked through profile setup, job search, and company research ste
 | Framework | Next.js 16 (App Router) |
 | Backend (DB, Auth, Storage) | InsForge |
 | AI models | Claude (Anthropic) for cover letters, resumes, motivation; OpenAI GPT-4o for scoring and extraction |
+| Payments | Stripe (Checkout + webhooks) |
+| Error tracking | Sentry |
 | Cloud browser | Browserbase |
 | Browser automation | Stagehand |
 | Job sources | Adzuna, JobTech, Jooble, CareerJet, RapidAPI (Glassdoor) |
@@ -197,6 +210,7 @@ New users are walked through profile setup, job search, and company research ste
 - An [Anthropic](https://console.anthropic.com) account for cover letter, resume, and motivation generation (Claude)
 - An [OpenAI](https://platform.openai.com) account with GPT-4o access for job scoring and profile extraction
 - A [Browserbase](https://browserbase.com) account for company research
+- A [Stripe](https://stripe.com) account for the credit payment system
 - Job source API keys (Adzuna required; Jooble, CareerJet, RapidAPI optional but recommended)
 - A [PostHog](https://posthog.com) project for analytics (optional)
 - A [Resend](https://resend.com) account with a verified sender domain for approval emails
@@ -264,7 +278,8 @@ Open [http://localhost:3000](http://localhost:3000).
 |---|---|---|
 | `NEXT_PUBLIC_INSFORGE_URL` | Yes | InsForge backend base URL |
 | `NEXT_PUBLIC_INSFORGE_ANON_KEY` | Yes | InsForge public anon key |
-| `OPENAI_API_KEY` | Yes | OpenAI API key — needs GPT-4o access |
+| `ANTHROPIC_API_KEY` | Yes | Anthropic API key — used for cover letters, resumes, and motivation |
+| `OPENAI_API_KEY` | Yes | OpenAI API key — needs GPT-4o access for scoring and extraction |
 | `BROWSERBASE_API_KEY` | Yes | Browserbase API key for company research |
 | `BROWSERBASE_PROJECT_ID` | Yes | Browserbase project ID |
 | `ADZUNA_APP_ID` | Yes | Adzuna app ID |
@@ -273,6 +288,9 @@ Open [http://localhost:3000](http://localhost:3000).
 | `RESEND_FROM_EMAIL` | Yes | Verified sender address (e.g. `noreply@yourdomain.com`) |
 | `ADMIN_EMAIL` | Yes | Admin email — receives new sign-up notifications |
 | `NEXT_PUBLIC_APP_URL` | Yes | Public app URL — used in email login links |
+| `STRIPE_SK` | Yes | Stripe secret key |
+| `STRIPE_PK` | Yes | Stripe publishable key |
+| `STRIPE_WEBHOOK_SECRET` | Yes | Stripe webhook signing secret — required for payment verification |
 | `JOOBLE_API_KEY` | No | Jooble API key |
 | `CAREERJET_API_KEY` | No | CareerJet API key |
 | `RAPIDAPI_KEY` | No | RapidAPI key — used for Glassdoor integration |
@@ -281,6 +299,9 @@ Open [http://localhost:3000](http://localhost:3000).
 | `POSTHOG_PERSONAL_API_KEY` | No | PostHog personal API key — used for dashboard chart queries |
 | `POSTHOG_API_HOST` | No | PostHog API host (`https://eu.posthog.com` for EU) |
 | `POSTHOG_PROJECT_ID` | No | PostHog project ID |
+| `NEXT_PUBLIC_SENTRY_DSN` | No | Sentry DSN for error tracking |
+| `SAPLING_API_KEY` | No | Sapling API key (grammar/style checks) |
+| `SAPLING_PUBLIC_KEY` | No | Sapling public key |
 
 ---
 
