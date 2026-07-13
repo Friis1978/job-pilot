@@ -10,6 +10,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    console.log("[motivation] POST START");
     const { id: jobId } = await params;
 
     const insforge = await createInsforgeServer();
@@ -22,13 +23,13 @@ export async function POST(
     const [jobRes, profileRes] = await Promise.all([
       insforge.database
         .from("jobs")
-        .select("title, company, about_role, responsibilities, requirements, company_research")
+        .select("title, about_role, responsibilities, requirements")
         .eq("id", jobId)
         .eq("user_id", userId)
         .single(),
       insforge.database
         .from("profiles")
-        .select("full_name, current_title, skills, work_experience, motivation, career_vision, energy_tasks, personal_interests, company_type_preference")
+        .select("current_title, skills, motivation, career_vision, energy_tasks, personal_interests")
         .eq("id", userId)
         .single(),
     ]);
@@ -40,18 +41,17 @@ export async function POST(
     const profile = profileRes.data as Partial<Profile>;
 
     const jobContext = [
-      `Company: ${job.company}`,
-      `Role: ${job.title}`,
-      job.about_role ? `About the role: ${job.about_role}` : "",
+      `Role title: ${job.title}`,
+      job.about_role ? `Role description: ${job.about_role}` : "",
       job.responsibilities?.length ? `Responsibilities: ${(job.responsibilities as string[]).join("; ")}` : "",
       job.requirements?.length ? `Requirements: ${(job.requirements as string[]).join("; ")}` : "",
-      job.company_research ? `Company context: ${JSON.stringify(job.company_research).slice(0, 800)}` : "",
     ].filter(Boolean).join("\n");
 
+    const isCoverLetter = (s: string) => /^Hi\b|^Dear\b|Best regards|Yours sincerely|Kind regards/i.test(s);
     const profileContext = [
-      profile.current_title ? `Current title: ${profile.current_title}` : "",
+      profile.current_title ? `Title: ${profile.current_title}` : "",
       profile.skills?.length ? `Skills: ${(profile.skills as string[]).join(", ")}` : "",
-      profile.motivation ? `Personal motivation: ${profile.motivation}` : "",
+      profile.motivation && !isCoverLetter(profile.motivation) ? `Motivation: ${profile.motivation}` : "",
       profile.career_vision ? `Career vision: ${profile.career_vision}` : "",
       profile.energy_tasks ? `Energised by: ${profile.energy_tasks}` : "",
       profile.personal_interests ? `Interests: ${profile.personal_interests}` : "",
@@ -70,33 +70,25 @@ export async function POST(
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const MODEL = "claude-sonnet-4-6";
 
-    const systemPrompt = `You write a motivation section for a tailored resume. It is a short paragraph (3–5 sentences) explaining why this candidate is a good fit for this specific role — drawing on their background, values, and what motivates them professionally. It is NOT a cover letter: no greeting, no closing, no "Hi [Company]", no "Best regards". Plain prose only — no bullet points, no headers, no markdown.${langInstruction}
+    const systemPrompt = `You write a resume motivation paragraph in first person ("I"). 3-5 sentences explaining what the candidate brings to this specific role and why they are motivated for it. Match the candidate's concrete skills and experience to the role's needs.${langInstruction}
 
-Structure:
-1. Who the candidate is professionally: title + domain + 1–2 specific technologies. One sentence.
-2. What they bring that is relevant to this role — one concrete aspect from their work history or skills that matches the job. Name it specifically.
-3. Why this type of work fits them — use the candidate's motivation, career_vision, or energy_tasks to explain the genuine connection. Factual, not flattering.
-4. (Optional) One more relevant strength or interest if the profile data supports it.
+Rules:
+- Write in first person ("I have", "I bring", "My experience")
+- Focus on what the candidate offers THIS role specifically
+- NO greeting, NO closing, NO sign-off
+- NO person names, NO company or organisation names
+- NO bullet points, headers, or markdown
+- Plain prose sentences only
+- Use only facts present in the input`;
 
-Hard rules:
-- No greeting, no closing, no candidate name, no company name.
-- Never open a sentence with "I".
-- No three-part lists — break into separate statements.
-- Forbidden words: excited, passionate, thrilled, inspired, eager, leverage, aligns, dynamic, impactful, synergize, seamlessly, transformative.
-- No fabrication — only use details present in the profile and job data.
-- Return plain text only.`;
+    const userMessage = `CANDIDATE:\n${profileContext}\n\nROLE:\n${jobContext}\n\nWrite a 3-5 sentence first-person motivation paragraph. What does the candidate bring to this role? No greeting. No closing. No names.`;
 
     const completion = await anthropic.messages.create({
       model: MODEL,
       system: systemPrompt,
       max_tokens: 400,
-      temperature: 0.7,
-      messages: [
-        {
-          role: "user",
-          content: `CANDIDATE DATA (use as source material only):\n${profileContext}\n\nTARGET JOB:\n${jobContext}\n\nWrite a 3–5 sentence motivation paragraph. NO greeting, NO closing, NO candidate name, NO company name. Plain prose only.`,
-        },
-      ],
+      temperature: 0.3,
+      messages: [{ role: "user", content: userMessage }],
     });
 
     const text = completion.content[0]?.type === "text" ? completion.content[0].text.trim() : "";
@@ -110,7 +102,7 @@ Hard rules:
 
     return NextResponse.json({ text });
   } catch (err) {
-    console.error("[api/jobs/resume-motivation POST]", err);
+    console.error("[motivation] POST ERROR:", err);
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
 }
