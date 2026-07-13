@@ -24,6 +24,19 @@ Three steps. No manual searching.
 | **2. Search & score** | Type a job title and location. The agent queries five job boards in parallel and AI scores every result 0–100 against your actual skills. |
 | **3. Apply with confidence** | Research the company, generate a tailored cover letter and resume, write a motivation paragraph, find a warm intro in your LinkedIn network — all from one page. |
 
+### Dashboard stats
+
+The dashboard shows four stat cards with week-over-week and month-over-month comparisons:
+
+| Card | Source | Comparison |
+|---|---|---|
+| **Jobs found this month** | PostHog `job_found` events | vs previous calendar month |
+| **Avg. Match Rate** | PostHog `job_found` events (matchScore property) | vs previous 7-day window |
+| **Applied this week** | `jobs` table (`status = applied`, `updated_at`) | vs previous calendar week (Mon–Sun) |
+| **Jobs this week** | PostHog `job_found` events | vs previous calendar week |
+
+Each card shows the percentage change and the raw prior-period number.
+
 ---
 
 ## Features
@@ -95,6 +108,8 @@ Build a structured profile with:
 ### Application pipeline
 
 Move jobs through **Saved → Applied → Interviewing → Offer → No answer → Rejected after interview**. When a job is marked Applied, the cover letter is automatically archived as a style example for future generations.
+
+Every status change is tracked as a `job_status_changed` PostHog event so application velocity can be analysed over time.
 
 ![Application pipeline](public/images/pipeline-2026-07-10.jpeg)
 

@@ -143,17 +143,38 @@ export default async function DashboardPage() {
     return counts;
   })();
 
+  const { appliedThisWeek, appliedLastWeek } = (() => {
+    const now = new Date();
+    const dayOfWeek = now.getUTCDay(); // 0=Sun, 1=Mon...
+    const daysSinceMonday = (dayOfWeek + 6) % 7;
+    const startOfThisWeek = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysSinceMonday)).getTime();
+    const startOfLastWeek = startOfThisWeek - 7 * 24 * 60 * 60 * 1000;
+    let thisWeek = 0;
+    let lastWeek = 0;
+    if (pipelineResult.status === "fulfilled" && pipelineResult.value.data) {
+      for (const row of pipelineResult.value.data as { status: string; updated_at: string }[]) {
+        if (row.status !== "applied") continue;
+        const t = new Date(row.updated_at).getTime();
+        if (t >= startOfThisWeek) thisWeek++;
+        else if (t >= startOfLastWeek) lastWeek++;
+      }
+    }
+    return { appliedThisWeek: thisWeek, appliedLastWeek: lastWeek };
+  })();
+
   const statsData = {
-    totalJobs: phStats?.totalJobs ?? 0,
-    avgMatchRate: phStats?.avgMatchRate ?? 0,
-    companiesResearched: phStats?.companiesResearched ?? 0,
+    jobsThisMonth: phStats?.jobsThisMonth ?? 0,
+    jobsLastMonth: phStats?.jobsLastMonth ?? 0,
     jobsThisWeek: phStats?.jobsThisWeek ?? 0,
-    totalJobsTrend: phStats
-      ? weekTrend(phStats.jobsThisWeek, phStats.jobsLastWeek)
-      : null,
-    matchRateTrend: phStats
-      ? weekTrend(phStats.avgMatchRateThisWeek, phStats.avgMatchRateLastWeek)
-      : null,
+    jobsLastWeek: phStats?.jobsLastWeek ?? 0,
+    avgMatchRate: phStats?.avgMatchRate ?? 0,
+    avgMatchRateLastWeek: phStats?.avgMatchRateLastWeek ?? 0,
+    appliedThisWeek,
+    appliedLastWeek,
+    monthTrend: phStats ? weekTrend(phStats.jobsThisMonth, phStats.jobsLastMonth) : null,
+    weekTrend: phStats ? weekTrend(phStats.jobsThisWeek, phStats.jobsLastWeek) : null,
+    matchRateTrend: phStats ? weekTrend(phStats.avgMatchRateThisWeek, phStats.avgMatchRateLastWeek) : null,
+    appliedTrend: weekTrend(appliedThisWeek, appliedLastWeek),
   };
 
   const runActivities: Timestamped[] = ((rawRuns ?? []) as AgentRunRow[])

@@ -1,49 +1,73 @@
 export type StatsData = {
-  totalJobs: number;
-  avgMatchRate: number;
-  companiesResearched: number;
+  jobsThisMonth: number;
+  jobsLastMonth: number;
   jobsThisWeek: number;
-  totalJobsTrend: number | null;   // percentage change vs last 7 days, null = no prior data
+  jobsLastWeek: number;
+  avgMatchRate: number;
+  avgMatchRateLastWeek: number;
+  appliedThisWeek: number;
+  appliedLastWeek: number;
+  monthTrend: number | null;
+  weekTrend: number | null;
   matchRateTrend: number | null;
+  appliedTrend: number | null;
 };
 
-function TrendBadge({ value }: { value: number }) {
-  const isPositive = value > 0;
-  const label = `${isPositive ? "+" : ""}${value}%`;
+function TrendBadge({
+  value,
+  prior,
+  priorLabel,
+  positiveIsGood = true,
+}: {
+  value: number;
+  prior: number;
+  priorLabel: string;
+  positiveIsGood?: boolean;
+}) {
+  const isGood = positiveIsGood ? value > 0 : value < 0;
+  const isNeutral = value === 0;
   return (
     <div className="flex items-center gap-2">
       <span
         className={`px-2 py-0.5 rounded-sm text-xs font-medium ${
-          isPositive
-            ? "bg-success-lightest text-success-darker"
-            : "bg-surface-secondary text-text-secondary"
+          isNeutral
+            ? "bg-surface-secondary text-text-secondary"
+            : isGood
+              ? "bg-success-lightest text-success-darker"
+              : "bg-error/10 text-error"
         }`}
       >
-        {label}
+        {value > 0 ? "+" : ""}{value}%
       </span>
-      <span className="text-xs text-text-muted">vs last week</span>
+      <span className="text-xs text-text-muted">{prior} {priorLabel}</span>
     </div>
   );
 }
 
 export function StatsBar({
-  totalJobs,
-  avgMatchRate,
-  companiesResearched,
+  jobsThisMonth,
+  jobsLastMonth,
   jobsThisWeek,
-  totalJobsTrend,
+  jobsLastWeek,
+  avgMatchRate,
+  avgMatchRateLastWeek,
+  appliedThisWeek,
+  appliedLastWeek,
+  monthTrend,
+  weekTrend,
   matchRateTrend,
+  appliedTrend,
 }: StatsData) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-        <p className="text-sm font-medium text-text-secondary">Total Jobs Found</p>
-        <p className="mt-2 text-3xl font-semibold text-text-primary">{totalJobs}</p>
+        <p className="text-sm font-medium text-text-secondary">Jobs found this month</p>
+        <p className="mt-2 text-3xl font-semibold text-text-primary">{jobsThisMonth}</p>
         <div className="mt-2 h-5 flex items-center">
-          {totalJobsTrend !== null ? (
-            <TrendBadge value={totalJobsTrend} />
+          {monthTrend !== null ? (
+            <TrendBadge value={monthTrend} prior={jobsLastMonth} priorLabel="last month" />
           ) : (
-            <span className="text-xs text-text-muted">vs last week</span>
+            <span className="text-xs text-text-muted">{jobsLastMonth} last month</span>
           )}
         </div>
       </div>
@@ -51,30 +75,38 @@ export function StatsBar({
       <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
         <p className="text-sm font-medium text-text-secondary">Avg. Match Rate</p>
         <p className="mt-2 text-3xl font-semibold text-text-primary">
-          {totalJobs > 0 ? `${avgMatchRate}%` : "—"}
+          {jobsThisMonth > 0 ? `${avgMatchRate}%` : "—"}
         </p>
         <div className="mt-2 h-5 flex items-center">
           {matchRateTrend !== null ? (
-            <TrendBadge value={matchRateTrend} />
+            <TrendBadge value={matchRateTrend} prior={avgMatchRateLastWeek} priorLabel="% last week" />
           ) : (
-            <span className="text-xs text-text-muted">vs last week</span>
+            <span className="text-xs text-text-muted">{avgMatchRateLastWeek}% last week</span>
           )}
         </div>
       </div>
 
       <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-        <p className="text-sm font-medium text-text-secondary">Companies Researched</p>
-        <p className="mt-2 text-3xl font-semibold text-text-primary">{companiesResearched}</p>
+        <p className="text-sm font-medium text-text-secondary">Applied this week</p>
+        <p className="mt-2 text-3xl font-semibold text-text-primary">{appliedThisWeek}</p>
         <div className="mt-2 h-5 flex items-center">
-          <span className="text-xs text-text-muted">Total researched</span>
+          {appliedTrend !== null ? (
+            <TrendBadge value={appliedTrend} prior={appliedLastWeek} priorLabel="last week" />
+          ) : (
+            <span className="text-xs text-text-muted">{appliedLastWeek} last week</span>
+          )}
         </div>
       </div>
 
       <div className="bg-surface border border-border rounded-2xl p-6 shadow-sm">
-        <p className="text-sm font-medium text-text-secondary">Jobs This Week</p>
+        <p className="text-sm font-medium text-text-secondary">Jobs this week</p>
         <p className="mt-2 text-3xl font-semibold text-text-primary">{jobsThisWeek}</p>
         <div className="mt-2 h-5 flex items-center">
-          <span className="text-xs text-text-muted">New this week</span>
+          {weekTrend !== null ? (
+            <TrendBadge value={weekTrend} prior={jobsLastWeek} priorLabel="last week" />
+          ) : (
+            <span className="text-xs text-text-muted">{jobsLastWeek} last week</span>
+          )}
         </div>
       </div>
     </div>

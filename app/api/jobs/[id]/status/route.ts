@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createInsforgeServer } from "@/lib/insforge-server";
+import { getPostHogClient } from "@/lib/posthog-server";
 
 const VALID_STATUSES = ["saved", "applied", "interviewing", "offer", "rejected", "rejected_after_interview", "no_fit"];
 
@@ -30,6 +31,18 @@ export async function PATCH(
 
   if (error) {
     return NextResponse.json({ error: "Failed to update status." }, { status: 500 });
+  }
+
+  // Track status change in PostHog
+  try {
+    const posthog = getPostHogClient();
+    posthog.capture({
+      distinctId: user.id,
+      event: "job_status_changed",
+      properties: { jobId: id, status },
+    });
+  } catch {
+    // non-blocking
   }
 
   // When marking as applied, append the job's cover letter to profile examples (max 10)

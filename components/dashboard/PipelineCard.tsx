@@ -33,7 +33,7 @@ export function PipelineCard({ data }: { data: PipelineData }) {
         <div className="flex items-center gap-3">
           {interviewPct !== null && (
             <span className="text-xs font-medium text-text-muted">
-              Interview rate: <span className="text-accent font-semibold">{interviewPct}%</span>
+              Interview rate: <span className="text-success font-semibold">{interviewPct}%</span>
             </span>
           )}
           {noAnswerPct !== null && noAnswerPct > 0 && (

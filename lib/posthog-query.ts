@@ -65,13 +65,13 @@ const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 // ── Dashboard Stats ──────────────────────────────────────────────────────────
 
 export type DashboardStats = {
-  totalJobs: number;
+  jobsThisMonth: number;
+  jobsLastMonth: number;
   jobsThisWeek: number;
   jobsLastWeek: number;
   avgMatchRate: number;
   avgMatchRateThisWeek: number;
   avgMatchRateLastWeek: number;
-  companiesResearched: number;
 };
 
 /** Coerces a HogQL result cell (string, number, or null) to a number, returning 0 for NaN/null. */
@@ -85,38 +85,30 @@ function safeNum(v: string | number | null | undefined): number {
  * All counts are scoped to the given user's `distinct_id`.
  */
 export async function getDashboardStats(userId: string): Promise<DashboardStats> {
-  const [jobResults, researchResults] = await Promise.all([
-    hogql(
-      `SELECT
-         count() AS totalJobs,
-         countIf(timestamp >= now() - INTERVAL 7 DAY) AS jobsThisWeek,
-         countIf(timestamp >= now() - INTERVAL 14 DAY AND timestamp < now() - INTERVAL 7 DAY) AS jobsLastWeek,
-         avg(properties.matchScore) AS avgMatchRate,
-         avgIf(properties.matchScore, timestamp >= now() - INTERVAL 7 DAY) AS avgMatchRateThisWeek,
-         avgIf(properties.matchScore, timestamp >= now() - INTERVAL 14 DAY AND timestamp < now() - INTERVAL 7 DAY) AS avgMatchRateLastWeek
-       FROM events
-       WHERE event = 'job_found'
-         AND distinct_id = '${userId}'`,
-    ),
-    hogql(
-      `SELECT count() AS companiesResearched
-       FROM events
-       WHERE event = 'company_researched'
-         AND distinct_id = '${userId}'`,
-    ),
-  ]);
+  const jobResults = await hogql(
+    `SELECT
+       countIf(toStartOfMonth(timestamp) = toStartOfMonth(now())) AS jobsThisMonth,
+       countIf(toStartOfMonth(timestamp) = toStartOfMonth(now() - INTERVAL 1 MONTH)) AS jobsLastMonth,
+       countIf(timestamp >= now() - INTERVAL 7 DAY) AS jobsThisWeek,
+       countIf(timestamp >= now() - INTERVAL 14 DAY AND timestamp < now() - INTERVAL 7 DAY) AS jobsLastWeek,
+       avg(properties.matchScore) AS avgMatchRate,
+       avgIf(properties.matchScore, timestamp >= now() - INTERVAL 7 DAY) AS avgMatchRateThisWeek,
+       avgIf(properties.matchScore, timestamp >= now() - INTERVAL 14 DAY AND timestamp < now() - INTERVAL 7 DAY) AS avgMatchRateLastWeek
+     FROM events
+     WHERE event = 'job_found'
+       AND distinct_id = '${userId}'`,
+  );
 
   const row = jobResults.results[0] ?? [];
-  const resRow = researchResults.results[0] ?? [];
 
   return {
-    totalJobs: safeNum(row[0]),
-    jobsThisWeek: safeNum(row[1]),
-    jobsLastWeek: safeNum(row[2]),
-    avgMatchRate: Math.round(safeNum(row[3])),
-    avgMatchRateThisWeek: Math.round(safeNum(row[4])),
-    avgMatchRateLastWeek: Math.round(safeNum(row[5])),
-    companiesResearched: safeNum(resRow[0]),
+    jobsThisMonth: safeNum(row[0]),
+    jobsLastMonth: safeNum(row[1]),
+    jobsThisWeek: safeNum(row[2]),
+    jobsLastWeek: safeNum(row[3]),
+    avgMatchRate: Math.round(safeNum(row[4])),
+    avgMatchRateThisWeek: Math.round(safeNum(row[5])),
+    avgMatchRateLastWeek: Math.round(safeNum(row[6])),
   };
 }
 
