@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  serverExternalPackages: ["pdf-parse", "@react-pdf/renderer", "@browserbasehq/stagehand"],
+  serverExternalPackages: ["pdf-parse", "@react-pdf/renderer"],
   async rewrites() {
     return [
       {

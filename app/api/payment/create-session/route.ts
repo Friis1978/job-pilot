@@ -1,15 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createInsforgeServer } from "@/lib/insforge-server";
 
 const stripe = new Stripe(process.env.STRIPE_SK!);
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   const insforge = await createInsforgeServer();
   const { data: { user } } = await insforge.auth.getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const origin = req.headers.get("origin") ?? req.headers.get("referer")?.replace(/\/$/, "") ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl = origin.startsWith("http") ? new URL(origin).origin : origin;
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",

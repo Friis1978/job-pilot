@@ -53,14 +53,14 @@ You can also paste any job URL directly to import a posting that didn't appear i
 
 ### Company research
 
-Click **Research Company** and an autonomous agent opens the company's public website, reads the homepage, About, and Engineering/Blog pages, then produces a structured dossier:
+Click **Research Company** and the agent fetches the company's public website over HTTP, reads the homepage, About, and Engineering/Blog pages, then produces a structured dossier:
 
 - Business overview and product
 - Tech stack and engineering culture signals
 - Why this role exists
 - Smart interview prep talking points
 
-Falls back to GPT-4o synthesis from the job description if the site can't be reached.
+Also searches DuckDuckGo for the original job posting to extract contact names, emails, and phone numbers. Falls back to GPT-4o synthesis from the job description if the site can't be reached.
 
 ![Company research dossier](public/images/research-2026-06-30.jpeg)
 
@@ -166,7 +166,7 @@ New users are walked through profile setup, job search, and company research ste
 | Job discovery | Adzuna, JobTech, Jooble, CareerJet, Glassdoor searched in parallel |
 | Job import | Paste any URL — AI extracts the posting |
 | AI scoring | Scores 0–100 with matched + missing skills per job |
-| Company research | Browserbase live browsing → structured dossier with interview prep |
+| Company research | HTTP fetch + DuckDuckGo + GPT-4o → structured dossier with interview prep |
 | Cover letter | Claude, language-detected, humanise workflow, PDF + plain text |
 | Resume motivation | Claude generates a first-person motivation paragraph tailored to the role |
 | Tailored resume | Claude generates a job-specific PDF per role |
@@ -191,8 +191,6 @@ New users are walked through profile setup, job search, and company research ste
 | AI models | Claude (Anthropic) for cover letters, resumes, motivation; OpenAI GPT-4o for scoring and extraction |
 | Payments | Stripe (Checkout + webhooks) |
 | Error tracking | Sentry |
-| Cloud browser | Browserbase |
-| Browser automation | Stagehand |
 | Job sources | Adzuna, JobTech, Jooble, CareerJet, RapidAPI (Glassdoor) |
 | Analytics | PostHog |
 | Email | Resend |
@@ -224,7 +222,6 @@ New users are walked through profile setup, job search, and company research ste
 - An [InsForge](https://insforge.dev) project with Google and/or GitHub OAuth configured
 - An [Anthropic](https://console.anthropic.com) account for cover letter, resume, and motivation generation (Claude)
 - An [OpenAI](https://platform.openai.com) account with GPT-4o access for job scoring and profile extraction
-- A [Browserbase](https://browserbase.com) account for company research
 - A [Stripe](https://stripe.com) account for the credit payment system
 - Job source API keys (Adzuna required; Jooble, CareerJet, RapidAPI optional but recommended)
 - A [PostHog](https://posthog.com) project for analytics (optional)
@@ -251,10 +248,6 @@ NEXT_PUBLIC_INSFORGE_ANON_KEY=your-anon-key
 
 # OpenAI — job matching, cover letters, resume generation, research synthesis
 OPENAI_API_KEY=sk-...
-
-# Browserbase — headless browser for company research
-BROWSERBASE_API_KEY=bb_live_...
-BROWSERBASE_PROJECT_ID=your-project-id
 
 # Job sources
 ADZUNA_APP_ID=your-adzuna-app-id        # developer.adzuna.com
@@ -295,8 +288,6 @@ Open [http://localhost:3000](http://localhost:3000).
 | `NEXT_PUBLIC_INSFORGE_ANON_KEY` | Yes | InsForge public anon key |
 | `ANTHROPIC_API_KEY` | Yes | Anthropic API key — used for cover letters, resumes, and motivation |
 | `OPENAI_API_KEY` | Yes | OpenAI API key — needs GPT-4o access for scoring and extraction |
-| `BROWSERBASE_API_KEY` | Yes | Browserbase API key for company research |
-| `BROWSERBASE_PROJECT_ID` | Yes | Browserbase project ID |
 | `ADZUNA_APP_ID` | Yes | Adzuna app ID |
 | `ADZUNA_APP_KEY` | Yes | Adzuna app key |
 | `RESEND_API_KEY` | Yes | Resend API key for approval emails |
@@ -326,7 +317,7 @@ Open [http://localhost:3000](http://localhost:3000).
 /
 ├── agent/                      # AI agent logic — no React, no UI
 │   ├── find-jobs.ts            # Multi-source job discovery + GPT-4o scoring
-│   ├── research-company.ts     # Browserbase + Stagehand company dossier
+│   ├── research-company.ts     # HTTP fetch + GPT-4o company dossier
 │   ├── generate-cover-letter.ts
 │   ├── humanize-text.ts        # GPT-4o-mini second pass for natural tone
 │   └── import-job-from-url.ts
@@ -367,7 +358,7 @@ See [`context/app-map.md`](context/app-map.md) for a full reference of every rou
 
 ### Company research
 1. Open a job's detail page and click **Research Company**
-2. The agent opens a Browserbase session, browses the company's public website (homepage, About, Engineering/Blog pages), and synthesises a structured dossier
+2. The agent fetches the company's public website over HTTP (homepage, About, Engineering/Blog pages), also searches DuckDuckGo for the job posting to find contact details, and synthesises a structured dossier
 3. Fallback: if the site can't be reached, GPT-4o generates a best-effort dossier from the company name and job description alone
 
 ### Cover letter
@@ -434,7 +425,6 @@ Remember to set all required environment variables in your InsForge deployment s
 
 ## Notes
 
-- **Browserbase** is required for company research. Without it the agent falls back to GPT-4o synthesis only (no live browsing).
 - **Agent routes** (`/api/agent/*`) can run for up to 5 minutes. On short-timeout serverless platforms, max execution time may need to be increased.
 - **Job language detection** covers Danish, Swedish, Norwegian, German, Dutch, French, Spanish, and English. Letters are always written in the detected language of the job posting.
 - **LinkedIn CSV import** — export from LinkedIn → Settings → Data Privacy → Get a copy of your data → Connections. The CSV is parsed client-side; raw files are not stored.

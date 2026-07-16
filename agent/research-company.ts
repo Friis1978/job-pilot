@@ -1,9 +1,6 @@
-import { z } from "zod";
 import OpenAI from "openai";
-import { Stagehand } from "@browserbasehq/stagehand";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
-import { browserbase } from "@/lib/browserbase";
 import { stripHtml } from "@/lib/utils";
 import type { Profile } from "@/types";
 import { TokenAccumulator } from "@/lib/track-tokens";
@@ -38,83 +35,6 @@ type CompanyResearchRaw = {
   recruiterContact: ContactInfo | null;
   sourceUrls: string[];
 };
-
-const homepageSchema = z.object({
-  oneLiner: z.string().describe("What the company does in one sentence"),
-  productSummary: z
-    .string()
-    .describe("What they build/sell and who it's for"),
-  signals: z
-    .array(z.string())
-    .describe(
-      "Funding, notable customers, scale, mission, recent news",
-    ),
-  pageLinks: z
-    .array(
-      z.object({
-        url: z.string(),
-        kind: z.enum([
-          "about",
-          "contact",
-          "careers",
-          "blog",
-          "engineering",
-          "product",
-          "team",
-          "other",
-        ]),
-      }),
-    )
-    .describe("Internal links worth visiting"),
-});
-
-const jobPostingContactSchema = z.object({
-  contactName: z.string().nullable().describe("Internal hiring manager or HR contact full name (works at the hiring company)"),
-  contactTitle: z.string().nullable().describe("Their job title e.g. 'IT-udviklingschef', 'HR Manager'"),
-  contactEmail: z.string().nullable().describe("Internal contact email address"),
-  contactPhone: z.string().nullable().describe("Internal contact phone number"),
-  companyAddress: z.string().nullable().describe("Full postal address of the hiring company if shown on this page"),
-  recruiterName: z.string().nullable().describe("External recruiter full name (works at a recruiting/staffing agency, NOT the hiring company)"),
-  recruiterTitle: z.string().nullable().describe("Recruiter's job title"),
-  recruiterEmail: z.string().nullable().describe("Recruiter's email address"),
-  recruiterPhone: z.string().nullable().describe("Recruiter's phone number"),
-  recruiterCompany: z.string().nullable().describe("Name of the recruiting/staffing agency"),
-});
-
-const subPageSchema = z.object({
-  keyPoints: z.array(z.string()),
-  technologies: z
-    .array(z.string())
-    .describe(
-      "Specific languages, frameworks, tools, platforms",
-    ),
-  valuesOrCulture: z
-    .array(z.string())
-    .describe("Stated values, working style, team norms"),
-  notable: z
-    .array(z.string())
-    .describe("Customers, funding, scale, projects, awards"),
-  address: z
-    .string()
-    .nullable()
-    .describe("Full physical/postal address of the company if found on this page, otherwise null"),
-  contactName: z
-    .string()
-    .nullable()
-    .describe("Full name of a contact person (HR manager, hiring contact, or general enquiry contact) found on this page, otherwise null"),
-  contactTitle: z
-    .string()
-    .nullable()
-    .describe("Job title of the contact person, otherwise null"),
-  contactEmail: z
-    .string()
-    .nullable()
-    .describe("Email address of the contact person or general enquiry email, otherwise null"),
-  contactPhone: z
-    .string()
-    .nullable()
-    .describe("Phone number of the contact person or general enquiry phone, otherwise null"),
-});
 
 const PREFERRED_PAGE_KINDS = [
   "contact",
@@ -431,8 +351,6 @@ Only return a URL you are confident about — do not guess. Return JSON: { "url"
       }
     }
 
-    // Browser research — declared outside try so finally can close
-    let stagehand: Stagehand | null = null;
     const companyResearchRaw: CompanyResearchRaw = {
       oneLiner: "",
       productSummary: "",
@@ -448,7 +366,6 @@ Only return a URL you are confident about — do not guess. Return JSON: { "url"
     // and company culture sections before any browser research. When about_role
     // contains the full job text (enriched via Browserbase), this is the most
     // reliable source — no browser needed for contacts/address on aggregator jobs.
-    let contactFoundFromJobDescription = false;
     if (job.about_role) {
       try {
         const jdExtractResponse = await openai.chat.completions.create({
@@ -504,7 +421,6 @@ Only extract contacts explicitly named in the text. Distinguish carefully: inter
               email: jdParsed.contactEmail ?? null,
               phone: jdParsed.contactPhone ?? null,
             };
-            contactFoundFromJobDescription = true;
           }
 
           if (jdParsed.recruiterName || jdParsed.recruiterEmail || jdParsed.recruiterPhone) {
@@ -515,7 +431,6 @@ Only extract contacts explicitly named in the text. Distinguish carefully: inter
               phone: jdParsed.recruiterPhone ?? null,
               company: jdParsed.recruiterCompany ?? null,
             };
-            contactFoundFromJobDescription = true;
           }
 
           if (jdParsed.companyAddress) {
@@ -630,27 +545,99 @@ Only include contacts explicitly named in the text. Distinguish internal contact
       console.log(`[research-company] after HTTP extract: contact=${JSON.stringify(companyResearchRaw.contactFromJobPosting)}, recruiter=${JSON.stringify(companyResearchRaw.recruiterContact)}`);
     }
 
+    // ── HTTP-based research (no browser required) ─────────────────────────
     try {
-      const session = await browserbase.sessions.create({
-        projectId: process.env.BROWSERBASE_PROJECT_ID!,
-        timeout: 120,
-        region: "eu-central-1",
-      });
+      // Strip HTML to plain text
+      const stripHtmlToText = (html: string): string =>
+        html
+          .replace(/<style[\s\S]*?<\/style>/gi, " ")
+          .replace(/<script[\s\S]*?<\/script>/gi, " ")
+          .replace(/<!--[\s\S]*?-->/g, " ")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
 
-      stagehand = new Stagehand({
-        env: "BROWSERBASE",
-        apiKey: process.env.BROWSERBASE_API_KEY!,
-        projectId: process.env.BROWSERBASE_PROJECT_ID!,
-        browserbaseSessionID: session.id,
-        // library-docs.md: model is always gpt-4o for stagehand
-        model: { modelName: "gpt-4o", apiKey: process.env.OPENAI_API_KEY! },
-        disablePino: true,
-      });
+      // Extract and classify internal links from raw HTML
+      const extractInternalLinks = (html: string, baseUrl: string): Array<{ url: string; kind: string }> => {
+        try {
+          const base = new URL(baseUrl);
+          const links: Array<{ url: string; kind: string }> = [];
+          const seen = new Set<string>();
+          const regex = /href=["']([^"'#\s]+)["']/gi;
+          let m;
+          while ((m = regex.exec(html)) !== null) {
+            try {
+              const url = new URL(m[1], baseUrl);
+              if (url.hostname !== base.hostname) continue;
+              const path = url.pathname.toLowerCase();
+              if (seen.has(path) || path === "/" || path === "") continue;
+              seen.add(path);
+              let kind = "other";
+              if (/\b(about|om-os|uber-uns|a-propos|sobre)\b/i.test(path)) kind = "about";
+              else if (/\b(contact|kontakt)\b/i.test(path)) kind = "contact";
+              else if (/\b(career|jobs|work|join|vacancy|hiring)\b/i.test(path)) kind = "careers";
+              else if (/\b(blog|news|article|press|story)\b/i.test(path)) kind = "blog";
+              else if (/\b(team|people|staff)\b/i.test(path)) kind = "team";
+              else if (/\b(engineering|tech|developer|platform)\b/i.test(path)) kind = "engineering";
+              else if (/\b(product|solution|feature|service)\b/i.test(path)) kind = "product";
+              if (kind !== "other") links.push({ url: url.href, kind });
+            } catch { /* skip malformed */ }
+          }
+          return links.slice(0, 10);
+        } catch { return []; }
+      };
 
-      await stagehand.init();
-      const page = stagehand.context.activePage()!;
+      // Fetch a URL and return stripped plain text
+      const fetchText = async (url: string, timeoutMs = 10000): Promise<{ text: string; finalUrl: string }> => {
+        try {
+          const res = await fetch(url, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "Accept-Language": "en-US,en;q=0.5,da;q=0.3",
+            },
+            redirect: "follow",
+            signal: AbortSignal.timeout(timeoutMs),
+          });
+          if (!res.ok) return { text: "", finalUrl: url };
+          const html = await res.text();
+          return { text: stripHtmlToText(html), finalUrl: res.url || url };
+        } catch { return { text: "", finalUrl: url }; }
+      };
 
-      // Helper: extract text from a page and process it with GPT-4o, updating companyResearchRaw
+      // Fetch raw HTML for link extraction
+      const fetchHtml = async (url: string, timeoutMs = 10000): Promise<{ html: string; finalUrl: string }> => {
+        try {
+          const res = await fetch(url, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "Accept-Language": "en-US,en;q=0.5,da;q=0.3",
+            },
+            redirect: "follow",
+            signal: AbortSignal.timeout(timeoutMs),
+          });
+          if (!res.ok) return { html: "", finalUrl: url };
+          const html = await res.text();
+          return { html, finalUrl: res.url || url };
+        } catch { return { html: "", finalUrl: url }; }
+      };
+
+      // Parse DuckDuckGo HTML result links (uddg= param or direct hrefs)
+      const parseDdgLinks = (html: string): string[] => {
+        const links: string[] = [];
+        const uddgRegex = /uddg=([^&"'\s]+)/gi;
+        let m;
+        while ((m = uddgRegex.exec(html)) !== null) {
+          try {
+            const url = decodeURIComponent(m[1]);
+            if (url.startsWith("http")) links.push(url);
+          } catch { /* skip */ }
+        }
+        return [...new Set(links)];
+      };
+
+      // Extract job posting contact info and update companyResearchRaw
       const extractPageForJobPosting = async (pageText: string): Promise<boolean> => {
         if (!pageText || pageText.length < 300) return false;
         try {
@@ -674,8 +661,7 @@ Return ONLY valid JSON:
   "recruiterEmail": "<recruiter email — or null>",
   "recruiterPhone": "<recruiter phone — or null>",
   "recruiterCompany": "<recruiting agency name — or null>",
-  "culturePoints": ["<sentences from About us / Om os / company description sections>"],
-  "fullJobText": "<the complete job description: all responsibilities, requirements, about the company — NOT a summary>"
+  "culturePoints": ["<sentences from About us / Om os / company description sections>"]
 }
 Only extract contacts explicitly named in the text.`,
               },
@@ -690,8 +676,7 @@ Only extract contacts explicitly named in the text.`,
             contactEmail?: string | null; contactPhone?: string | null;
             recruiterName?: string | null; recruiterTitle?: string | null;
             recruiterEmail?: string | null; recruiterPhone?: string | null;
-            recruiterCompany?: string | null;
-            culturePoints?: string[]; fullJobText?: string | null;
+            recruiterCompany?: string | null; culturePoints?: string[];
           };
           if (parsed.contactName || parsed.contactEmail || parsed.contactPhone) {
             const ex = companyResearchRaw.contactFromJobPosting;
@@ -712,60 +697,24 @@ Only extract contacts explicitly named in the text.`,
               company: ex?.company ?? parsed.recruiterCompany ?? null,
             };
           }
-          if (parsed.culturePoints?.length) {
+          if ((parsed.culturePoints?.length ?? 0) > 0) {
             companyResearchRaw.subPages.push({
               keyPoints: [], technologies: [],
-              valuesOrCulture: parsed.culturePoints,
+              valuesOrCulture: parsed.culturePoints ?? [],
               notable: [], address: null,
             });
           }
-          if (parsed.fullJobText && parsed.fullJobText.length > (job.about_role?.length ?? 0) + 200) {
-            console.log(`[research-company] found fuller JD: ${parsed.fullJobText.length} chars (was ${job.about_role?.length ?? 0})`);
-            job.about_role = parsed.fullJobText;
-            await insforge.database.from("jobs").update({ about_role: parsed.fullJobText }).eq("id", jobId).eq("user_id", userId);
-          }
-          const foundContact = !!(parsed.contactName || parsed.contactEmail);
-          console.log(`[research-company] job page extract: contact=${parsed.contactName ?? "none"}, email=${parsed.contactEmail ?? "none"}, jdLen=${parsed.fullJobText?.length ?? 0}`);
-          return foundContact;
-        } catch {
-          return false;
-        }
+          return !!(parsed.contactName || parsed.contactEmail || parsed.contactPhone || parsed.recruiterName || parsed.recruiterEmail);
+        } catch { return false; }
       };
 
-      // ── DuckDuckGo: find original job posting ──────────────────────────────
-      // Searches for the job posting on indexed pages (Jobbank.dk, company careers
-      // page, etc.) to find the full description and contact person. This bypasses
-      // Cloudflare-protected source URLs entirely.
-      let contactFoundViaSearch = false;
-
+      // ── DDG: search for job posting to find contact info ─────────────────
       const PREFER_JOB_BOARDS = ["jobbank.dk", "jobindex.dk", "karriere.dk", "thehub.io", "linkedin.com"];
       const SKIP_JOB_SEARCH = ["careerjet", "jooble", "jobviewtrack", "stepstone", "adzuna", "facebook.com", "twitter.com", "youtube.com"];
 
-      const extractDdgLinks = async (): Promise<string[]> => {
-        const links = await page.evaluate(() =>
-          Array.from(document.querySelectorAll(".result__a"))
-            .slice(0, 8)
-            .map((a) => {
-              const href = (a as HTMLAnchorElement).href ?? "";
-              const m = href.match(/[?&]uddg=([^&]+)/);
-              return m ? decodeURIComponent(m[1]) : href;
-            })
-            .filter((u) => u.startsWith("http"))
-        ) as string[];
-        return [
-          ...links.filter((u) => PREFER_JOB_BOARDS.some((d) => u.includes(d))),
-          ...links.filter((u) => !PREFER_JOB_BOARDS.some((d) => u.includes(d)) && !SKIP_JOB_SEARCH.some((d) => u.includes(d))),
-        ];
-      };
-
       try {
-        // Extract brand alias from "YouSee søger …" pattern — brand in title often differs
-        // from the stored company name (e.g. "YouSee" vs "Nuuday")
         const brandMatch = job.title.match(/^([\w\s]{2,30}?)\s+søger\b/i);
         const titleBrand = brandMatch ? brandMatch[1].trim() : null;
-
-        // Extract meaningful technical keywords from the core job title
-        // (strip the "BrandName søger" prefix and common function words)
         const TITLE_STOP_WORDS = new Set(["søger", "senior", "junior", "lead", "and", "for", "med", "til", "ved", "hos"]);
         const coreTitleTerms = job.title
           .replace(/^[\w\s]+?\s+søger\s*/i, "")
@@ -773,476 +722,330 @@ Only extract contacts explicitly named in the text.`,
           .split(/[\s/]+/)
           .filter((w) => w.length > 3 && !TITLE_STOP_WORDS.has(w.toLowerCase()))
           .slice(0, 4);
-
-        // Include brand alias so we match both "Nuuday" and "YouSee" on job boards
         const companyTerms = [job.company];
-        if (titleBrand && titleBrand.toLowerCase() !== job.company.toLowerCase()) {
-          companyTerms.push(titleBrand);
-        }
+        if (titleBrand && titleBrand.toLowerCase() !== job.company.toLowerCase()) companyTerms.push(titleBrand);
 
         const jobSearchQuery = `${companyTerms.join(" ")} ${coreTitleTerms.join(" ")} kontakt jobbank jobindex karriere`;
-        console.log(`[research-company] job posting DDG query: ${jobSearchQuery}`);
-        await page.goto(
-          `https://html.duckduckgo.com/html/?q=${encodeURIComponent(jobSearchQuery)}&kl=dk-da`,
-          { waitUntil: "load", timeoutMs: 15000 },
-        );
-        let sortedLinks = await extractDdgLinks();
+        console.log(`[research-company] DDG job posting query: ${jobSearchQuery}`);
 
-        // Fallback: if first search returned nothing, try simpler company + job query
-        if (sortedLinks.length === 0) {
+        let { html: ddgHtml } = await fetchHtml(
+          `https://html.duckduckgo.com/html/?q=${encodeURIComponent(jobSearchQuery)}&kl=dk-da`,
+          12000,
+        );
+        let ddgLinks = parseDdgLinks(ddgHtml);
+
+        if (ddgLinks.length === 0) {
           const fallbackQuery = `"${job.company}" job kontakt stillingsbeskrivelse`;
-          console.log(`[research-company] job posting DDG fallback: ${fallbackQuery}`);
-          await page.goto(
+          console.log(`[research-company] DDG job posting fallback: ${fallbackQuery}`);
+          ({ html: ddgHtml } = await fetchHtml(
             `https://html.duckduckgo.com/html/?q=${encodeURIComponent(fallbackQuery)}&kl=dk-da`,
-            { waitUntil: "load", timeoutMs: 15000 },
-          );
-          sortedLinks = await extractDdgLinks();
+            12000,
+          ));
+          ddgLinks = parseDdgLinks(ddgHtml);
         }
 
-        console.log(`[research-company] job posting DDG found ${sortedLinks.length} candidates`);
+        const sortedLinks = [
+          ...ddgLinks.filter((u) => PREFER_JOB_BOARDS.some((d) => u.includes(d))),
+          ...ddgLinks.filter((u) => !PREFER_JOB_BOARDS.some((d) => u.includes(d)) && !SKIP_JOB_SEARCH.some((d) => u.includes(d))),
+        ];
+
+        console.log(`[research-company] DDG job posting found ${sortedLinks.length} candidates`);
         for (const url of sortedLinks.slice(0, 3)) {
-          try {
-            await page.goto(url, { waitUntil: "networkidle", timeoutMs: 20000 });
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const text = (await page.evaluate(() => (document as any).body.innerText)) as string;
-            console.log(`[research-company] visiting DDG result: ${url} (${text?.length ?? 0} chars)`);
-            const found = await extractPageForJobPosting(text);
-            if (found) { contactFoundViaSearch = true; break; }
-          } catch { /* try next */ }
+          const { text } = await fetchText(url, 15000);
+          if (text.length < 300) continue;
+          const found = await extractPageForJobPosting(text);
+          if (found) break;
         }
       } catch (jobSearchErr) {
-        console.error("[research-company] job posting DDG search failed", jobSearchErr);
+        console.error("[research-company] DDG job posting search failed", jobSearchErr);
       }
 
-      // Job posting contact extraction — runs first, uses real browser to handle JS-rendered ATS pages.
-      // Skip for aggregator source URLs (Careerjet, jobviewtrack) when contacts and address were
-      // already extracted from about_role — the full job text is more reliable than re-scraping
-      // the job board page, and avoids an unnecessary Browserbase page load.
-      const isAggregatorSourceUrl = ["careerjet", "jobviewtrack", "jooble", "adzuna", "glassdoor"].some(
-        (d) => (job.source_url ?? "").includes(d),
-      );
-      // Only skip if about_role is the full job text (> 1000 chars = browser enrichment worked)
-      // AND we found a contact in it. A short snippet means enrichment failed — don't skip.
-      const skipSourceUrlBrowser = contactFoundFromJobDescription && isAggregatorSourceUrl && (job.about_role?.length ?? 0) > 1000;
-      if (job.source_url && !skipSourceUrlBrowser) {
-        try {
-          try {
-            await page.goto(job.source_url, { waitUntil: "networkidle", timeoutMs: 25000 });
-          } catch {
-            // Timeout waiting for networkidle — proceed with whatever is rendered
-          }
-
-          // If we landed on a job board AGGREGATOR (Careerjet, Jooble, etc.), the full
-          // job description and named contacts are on the employer's original posting —
-          // try to click through to it before extracting.
-          // IMPORTANT: Do NOT click through from ATS platforms (Emply, Greenhouse,
-          // Teamtailor, etc.) — those ARE the employer's own job posting page.
-          const JOB_BOARD_CLICKTHROUGH_DOMAINS = [
-            "careerjet", "jooble", "jobindex", "stepstone", "monster",
-            "glassdoor", "simplyhired", "ziprecruiter", "adzuna", "indeed",
-            "jobviewtrack",
-          ];
-
-          // ── Pre-click-through extraction ─────────────────────────────────────
-          // Job boards (Careerjet, Jobbank, etc.) show the FULL job description
-          // on their own page. Extract it NOW before navigating away.
-          try {
-            const preClickUrl = page.url();
-            const onJobBoardPreClick = JOB_BOARD_CLICKTHROUGH_DOMAINS.some((d) => preClickUrl.includes(d));
-            if (onJobBoardPreClick && !contactFoundViaSearch) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const boardText = (await page.evaluate(() => (document as any).body.innerText)) as string;
-              console.log(`[research-company] job board pre-click: ${boardText?.length ?? 0} chars from ${preClickUrl}`);
-              await extractPageForJobPosting(boardText);
-            }
-          } catch (preClickErr) {
-            console.error("[research-company] pre-click extraction failed", preClickErr);
-          }
-
-          try {
-            const landedUrl = page.url();
-            const onJobBoard = JOB_BOARD_CLICKTHROUGH_DOMAINS.some((d) => landedUrl.includes(d));
-            if (onJobBoard) {
-              await stagehand.act(
-                "Click the button or link that takes you to the full job posting or lets you apply at the employer's own website. Ignore internal Careerjet/Jooble links.",
-              );
-              // Race against a 10s timeout — networkidle can hang on pages with background polling
-              await Promise.race([
-                page.waitForLoadState("networkidle"),
-                new Promise<void>((r) => setTimeout(r, 10000)),
-              ]);
-            }
-          } catch {
-            // Click failed or not on a job board — continue with current page
-          }
-
-          // On job board aggregators only: extract mailto: links from the DOM to find
-          // the employer's direct email (job boards sometimes hide it in HTML while
-          // obfuscating it visually). On ATS pages (Emply, Greenhouse, etc.) this must
-          // NOT run — ATS pages may contain recruiter agency emails (e.g. Right People
-          // Group) which would wrongly override the employer's homepage URL and classify
-          // the recruiter as the internal "hiring contact".
-          const currentLandedUrl = page.url();
-          const stillOnJobBoard = JOB_BOARD_CLICKTHROUGH_DOMAINS.some((d) => currentLandedUrl.includes(d));
-          if (stillOnJobBoard) {
-            const GENERIC_EMAIL_DOMAINS = new Set([
-              "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "live.com", "icloud.com",
-            ]);
-            let applyEmail: string | null = null;
-            try {
-              const mailtoLinks = await page.evaluate(() =>
-                Array.from(document.querySelectorAll('a[href^="mailto:"]'))
-                  .map((a) => a.getAttribute("href")?.replace(/^mailto:/i, "").split("?")[0].trim() ?? "")
-                  .filter((e) => e.includes("@"))
-              ) as string[];
-              applyEmail = mailtoLinks.find(
-                (e) => !GENERIC_EMAIL_DOMAINS.has(e.split("@")[1]?.toLowerCase() ?? ""),
-              ) ?? null;
-            } catch {
-              // page.evaluate unavailable — continue without
-            }
-
-            // If the email domain differs from our GPT-4o homepage guess, it's more reliable
-            // (e.g. source_url → careerjet → GPT-4o guessed wrong brand domain)
-            if (applyEmail) {
-              const emailDomain = applyEmail.split("@")[1]?.toLowerCase();
-              if (emailDomain && !homepageUrl.toLowerCase().includes(emailDomain)) {
-                homepageUrl = `https://www.${emailDomain}`;
-                companyResearchRaw.sourceUrls = [homepageUrl];
-              }
-              companyResearchRaw.contactFromJobPosting = {
-                name: null, title: null, email: applyEmail, phone: null,
-              };
-            }
-          }
-
-          // Primary contact extraction — read full rendered page text
-          console.log(`[research-company] navigated to source_url, current URL: ${page.url()}`);
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const pageText = (await page.evaluate(() => (document as any).body.innerText)) as string;
-            console.log(`[research-company] body.innerText length: ${pageText?.length ?? 0}`);
-            await extractPageForJobPosting(pageText);
-          } catch (pageTextErr) {
-            console.error("[agent/research-company] page text extraction failed", pageTextErr);
-          }
-          console.log(`[research-company] after page-text extract: contact=${JSON.stringify(companyResearchRaw.contactFromJobPosting)}, recruiter=${JSON.stringify(companyResearchRaw.recruiterContact)}`);
-
-          // Secondary contact extraction: Stagehand screenshot-based extract fills any gaps
-          // left by the page text step (e.g. address, or contacts page text missed).
-          // Wrapped in its own try/catch so a Stagehand failure never skips other work.
-          try {
-            const postingData = await stagehand.extract(
-              "This is a job posting. Extract the contact person (recruiter or hiring manager) including their name, title, email and phone. Also extract the company's full postal address if shown.",
-              jobPostingContactSchema,
-            );
-            if (postingData.contactName || postingData.contactEmail || postingData.contactPhone) {
-              const existing = companyResearchRaw.contactFromJobPosting;
-              companyResearchRaw.contactFromJobPosting = {
-                name: existing?.name ?? postingData.contactName ?? null,
-                title: existing?.title ?? postingData.contactTitle ?? null,
-                email: existing?.email ?? postingData.contactEmail ?? null,
-                phone: existing?.phone ?? postingData.contactPhone ?? null,
-              };
-            }
-            if (postingData.recruiterName || postingData.recruiterEmail || postingData.recruiterPhone) {
-              const existing = companyResearchRaw.recruiterContact;
-              companyResearchRaw.recruiterContact = {
-                name: existing?.name ?? postingData.recruiterName ?? null,
-                title: existing?.title ?? postingData.recruiterTitle ?? null,
-                email: existing?.email ?? postingData.recruiterEmail ?? null,
-                phone: existing?.phone ?? postingData.recruiterPhone ?? null,
-                company: existing?.company ?? postingData.recruiterCompany ?? null,
-              };
-            }
-            if (postingData.companyAddress) {
-              companyResearchRaw.address = postingData.companyAddress;
-            }
-          } catch (stagehandErr) {
-            console.error("[agent/research-company] stagehand extract failed", stagehandErr);
-          }
-        } catch (postingErr) {
-          console.error("[agent/research-company] job posting contact extraction failed", postingErr);
-        }
-      }
-
-      // Homepage extraction — always try both the resolved URL and the .com version.
-      // Local TLD sites (e.g. pandektes.dk) often redirect to .com but Stagehand may
-      // still fail to extract content. Trying .com explicitly ensures we always have
-      // a fallback with real content.
+      // ── Homepage extraction ───────────────────────────────────────────────
       const slug = companySlug(job.company);
       const slugH = companySlugHyphen(job.company);
       const comCandidates = [
-        `https://${slug}.com`,
-        `https://www.${slug}.com`,
+        `https://${slug}.com`, `https://www.${slug}.com`,
         ...(slugH !== slug ? [`https://${slugH}.com`, `https://www.${slugH}.com`] : []),
-        `https://${slug}.io`,
-        `https://www.${slug}.io`,
-        `https://${slug}.ai`,
-        `https://www.${slug}.ai`,
+        `https://${slug}.io`, `https://www.${slug}.io`,
+        `https://${slug}.ai`, `https://www.${slug}.ai`,
       ];
-      // Build the ordered list of homepage URLs to try: resolved URL first, then country TLD
-      // variants, then .com/.io/.ai alternatives. Country TLD variants come before .com to honour
-      // the rule "always try the local domain (e.g. .dk) as well as .com".
       const countryTldsForHomepage = countryTldsFromLocation(job.location);
       const countryTldCandidates = countryTldsForHomepage.flatMap((tld) => [
-        `https://${slug}.${tld}`,
-        `https://www.${slug}.${tld}`,
+        `https://${slug}.${tld}`, `https://www.${slug}.${tld}`,
         ...(slugH !== slug ? [`https://${slugH}.${tld}`, `https://www.${slugH}.${tld}`] : []),
       ]);
       const homepagesToTry: string[] = [homepageUrl];
       for (const c of [...countryTldCandidates, ...comCandidates]) {
         try {
-          if (new URL(c).hostname !== new URL(homepageUrl).hostname) {
-            homepagesToTry.push(c);
-          }
+          if (new URL(c).hostname !== new URL(homepageUrl).hostname) homepagesToTry.push(c);
         } catch { /* skip malformed */ }
       }
 
-      try {
-        let homepageData: { oneLiner?: string; productSummary?: string; signals?: string[]; pageLinks?: Array<{ url: string; kind: string }> } | null = null;
-        let usedHomepageUrl = homepageUrl;
+      let homepageData: {
+        oneLiner?: string; productSummary?: string; signals?: string[];
+        pageLinks?: Array<{ url: string; kind: string }>;
+      } | null = null;
+      let usedHomepageUrl = homepageUrl;
 
-        for (const candidateUrl of homepagesToTry) {
-          try {
-            await page.goto(candidateUrl, { waitUntil: "networkidle", timeoutMs: 20000 });
-            const data = await stagehand.extract(
-              "This is a company's homepage. Capture what the company actually does, who it's for, and any concrete signals (funding, customers, scale, mission, recent launches). Then find the internal links most worth visiting to research them as an employer.",
-              homepageSchema,
-            );
-            if (data.oneLiner || data.productSummary) {
-              homepageData = data;
-              usedHomepageUrl = page.url(); // use the final URL after any redirects
-              homepageUrl = usedHomepageUrl; // update so fallback path construction uses the correct base
-              companyResearchRaw.sourceUrls = [usedHomepageUrl];
-              console.log(`[research-company] homepage found at: ${usedHomepageUrl}`);
-              break;
-            }
-            console.log(`[research-company] homepage empty at: ${candidateUrl} — trying next`);
-          } catch {
-            console.log(`[research-company] homepage failed at: ${candidateUrl} — trying next`);
-          }
-        }
-
-        companyResearchRaw.oneLiner = homepageData?.oneLiner ?? "";
-        companyResearchRaw.productSummary = homepageData?.productSummary ?? "";
-        companyResearchRaw.signals = homepageData?.signals ?? [];
-
-        // Always visit /about directly in the browser — regardless of whether the homepage
-        // extraction succeeded. Homepages are often animated/JS-heavy and Stagehand may fail
-        // to extract links from them. /about reliably contains address, team, and culture info.
-        // Try both plain and language-prefixed variants (e.g. /da/about).
-        const aboutVariants = ["/about", "/about-us", "/om-os"];
-        // Detect language prefix from the current page URL after any redirects
+      for (const candidateUrl of homepagesToTry) {
         try {
-          const finalPathname = new URL(page.url()).pathname;
-          const m = finalPathname.match(/^\/([a-z]{2})(?:\/|$)/);
-          if (m) {
-            const lp = `/${m[1]}`;
-            aboutVariants.unshift(...["/about", "/about-us", "/om-os"].map((p) => `${lp}${p}`));
+          const { html: homeHtml, finalUrl } = await fetchHtml(candidateUrl, 12000);
+          if (!homeHtml || homeHtml.length < 500) continue;
+          const homeText = stripHtmlToText(homeHtml).slice(0, 5000);
+          if (homeText.length < 200) continue;
+          const htmlLinks = extractInternalLinks(homeHtml, finalUrl);
+
+          const homeExtract = await openai.chat.completions.create({
+            model: "gpt-4o",
+            response_format: { type: "json_object" },
+            temperature: 0,
+            max_tokens: 600,
+            messages: [
+              {
+                role: "system",
+                content: `This is a company homepage. Extract what the company does and identify internal pages worth visiting.
+Return ONLY valid JSON:
+{
+  "oneLiner": "<what the company does in one sentence>",
+  "productSummary": "<what they build/sell and who it's for>",
+  "signals": ["<funding, customers, scale, mission, news>"],
+  "pageLinks": [{ "url": "<absolute URL>", "kind": "<about|contact|blog|engineering|product|team|other>" }]
+}
+For pageLinks, select the most useful internal pages to research the company as an employer. Use only URLs from the provided links list.`,
+              },
+              {
+                role: "user",
+                content: `Page text:\n${homeText}\n\nInternal links found:\n${htmlLinks.map((l) => `${l.url} (${l.kind})`).join("\n")}`,
+              },
+            ],
+          });
+
+          tokenAcc.add(homeExtract.usage);
+          const homeRaw = homeExtract.choices[0]?.message?.content;
+          if (!homeRaw) continue;
+          const homeParsed = JSON.parse(homeRaw) as {
+            oneLiner?: string; productSummary?: string; signals?: string[];
+            pageLinks?: Array<{ url: string; kind: string }>;
+          };
+          if (homeParsed?.oneLiner || homeParsed?.productSummary) {
+            const gptLinks = homeParsed?.pageLinks ?? [];
+            const extraLinks = htmlLinks.filter((hl) => !gptLinks.some((gl: { url: string }) => gl.url === hl.url));
+            homepageData = { ...homeParsed, pageLinks: [...gptLinks, ...extraLinks] };
+            usedHomepageUrl = finalUrl;
+            homepageUrl = finalUrl;
+            companyResearchRaw.sourceUrls = [finalUrl];
+            console.log(`[research-company] homepage found at: ${finalUrl}`);
+            break;
           }
-        } catch { /* keep defaults */ }
-
-        for (const aboutPath of aboutVariants) {
-          const currentAddressReal = !!companyResearchRaw.address && /\d/.test(companyResearchRaw.address);
-          if (currentAddressReal) break;
-          try {
-            const aboutUrl = new URL(aboutPath, page.url()).href;
-            await page.goto(aboutUrl, { waitUntil: "networkidle", timeoutMs: 15000 });
-            const aboutData = await stagehand.extract(
-              `Extract the full postal address (street number, city, zip, country), any email addresses, phone numbers, and contact person names/titles. Also capture what the company does, their values, team size, funding, and culture. The address is often in a section labelled 'Office', 'Contact', or at the bottom of the page — do not skip it. If multiple office addresses are listed, prefer the one in the same country as the job location: ${job.location ?? "unknown"}.`,
-              subPageSchema,
-            );
-            if (aboutData.address && /\d/.test(aboutData.address)) {
-              companyResearchRaw.address = aboutData.address;
-            }
-            if (!companyResearchRaw.contactFromJobPosting && (aboutData.contactName || aboutData.contactEmail)) {
-              companyResearchRaw.contactFromJobPosting = {
-                name: aboutData.contactName ?? null,
-                title: aboutData.contactTitle ?? null,
-                email: aboutData.contactEmail ?? null,
-                phone: aboutData.contactPhone ?? null,
-              };
-            }
-            if (aboutData.keyPoints?.length || aboutData.valuesOrCulture?.length || aboutData.technologies?.length) {
-              companyResearchRaw.subPages.push({
-                keyPoints: aboutData.keyPoints ?? [],
-                technologies: aboutData.technologies ?? [],
-                valuesOrCulture: aboutData.valuesOrCulture ?? [],
-                notable: aboutData.notable ?? [],
-                address: aboutData.address ?? null,
-              });
-            }
-            companyResearchRaw.sourceUrls.push(page.url());
-            if (companyResearchRaw.address && /\d/.test(companyResearchRaw.address)) break;
-          } catch { /* try next variant */ }
+          console.log(`[research-company] homepage empty at: ${candidateUrl} — trying next`);
+        } catch {
+          console.log(`[research-company] homepage fetch failed at: ${candidateUrl} — trying next`);
         }
+      }
 
-        // Bail if parked domain or wrong site — fall through to DuckDuckGo search
-        if (!homepageData?.oneLiner && !homepageData?.productSummary) {
-          console.log(
-            "[agent/research-company] no homepage content — skipping sub-pages",
-          );
-        } else {
-          // Sub-page extraction — max 3, prefer about/blog/engineering/product over careers
-          const subPageLinks = (homepageData?.pageLinks ?? [])
-            .filter((l) => l.kind !== "careers")
-            .sort((a, b) => {
-              const ai = PREFERRED_PAGE_KINDS.indexOf(a.kind);
-              const bi = PREFERRED_PAGE_KINDS.indexOf(b.kind);
-              return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-            })
-            .slice(0, 3);
+      companyResearchRaw.oneLiner = homepageData?.oneLiner ?? "";
+      companyResearchRaw.productSummary = homepageData?.productSummary ?? "";
+      companyResearchRaw.signals = homepageData?.signals ?? [];
 
-          for (const link of subPageLinks) {
-            try {
-              await page.goto(link.url, { waitUntil: "networkidle" });
-              // Contact pages need a different prompt — the generic "ignore footers/marketing" instruction
-              // causes the AI to skip addresses and phone numbers which look like footer/marketing content.
-              const extractInstruction = (link.kind === "contact" || link.kind === "about")
-                ? `Extract the full postal address (street number, city, zip, country), any email addresses, phone numbers, and contact person names/titles. Also extract what the company does, their values, and team culture. The address may appear at the bottom of the page in a section like 'Office', 'Contact', or similar — do not skip it. If multiple office addresses are listed, prefer the one in the same country as the job location: ${job.location ?? "unknown"}.`
+      // ── About page extraction ─────────────────────────────────────────────
+      const aboutVariants = ["/about", "/about-us", "/om-os"];
+      try {
+        const m = new URL(usedHomepageUrl).pathname.match(/^\/([a-z]{2})(?:\/|$)/);
+        if (m) {
+          const lp = `/${m[1]}`;
+          aboutVariants.unshift(...["/about", "/about-us", "/om-os"].map((p) => `${lp}${p}`));
+        }
+      } catch { /* keep defaults */ }
+
+      for (const aboutPath of aboutVariants) {
+        const currentAddressReal = !!companyResearchRaw.address && /\d/.test(companyResearchRaw.address);
+        if (currentAddressReal) break;
+        try {
+          const aboutUrl = new URL(aboutPath, usedHomepageUrl).href;
+          const { text: aboutText } = await fetchText(aboutUrl, 12000);
+          if (aboutText.length < 200) continue;
+          const slice = aboutText.length > 9000
+            ? aboutText.slice(0, 1000) + " … " + aboutText.slice(-8000)
+            : aboutText;
+
+          const aboutExtract = await openai.chat.completions.create({
+            model: "gpt-4o",
+            response_format: { type: "json_object" },
+            temperature: 0,
+            max_tokens: 600,
+            messages: [
+              {
+                role: "system",
+                content: `Extract from this company about/contact page. May be in any language.
+Return ONLY valid JSON:
+{
+  "keyPoints": ["<key facts about the company>"],
+  "technologies": ["<specific languages, frameworks, tools>"],
+  "valuesOrCulture": ["<values, working style, team norms>"],
+  "notable": ["<customers, funding, scale, awards>"],
+  "address": "<full postal address including street, city, zip, country — or null>",
+  "contactName": "<contact person name — or null>",
+  "contactTitle": "<their job title — or null>",
+  "contactEmail": "<email address — or null>",
+  "contactPhone": "<phone number — or null>"
+}
+If multiple office addresses are listed, prefer the one in the same country as the job location: ${job.location ?? "unknown"}.`,
+              },
+              { role: "user", content: slice },
+            ],
+          });
+
+          tokenAcc.add(aboutExtract.usage);
+          const aboutRaw = aboutExtract.choices[0]?.message?.content;
+          if (!aboutRaw) continue;
+          const aboutData = JSON.parse(aboutRaw) as {
+            keyPoints?: string[]; technologies?: string[]; valuesOrCulture?: string[];
+            notable?: string[]; address?: string | null;
+            contactName?: string | null; contactTitle?: string | null;
+            contactEmail?: string | null; contactPhone?: string | null;
+          };
+
+          if (aboutData.address && /\d/.test(aboutData.address)) {
+            companyResearchRaw.address = aboutData.address;
+          }
+          if (!companyResearchRaw.contactFromJobPosting && (aboutData.contactName || aboutData.contactEmail)) {
+            companyResearchRaw.contactFromJobPosting = {
+              name: aboutData.contactName ?? null,
+              title: aboutData.contactTitle ?? null,
+              email: aboutData.contactEmail ?? null,
+              phone: aboutData.contactPhone ?? null,
+            };
+          }
+          if ((aboutData.keyPoints?.length ?? 0) > 0 || (aboutData.valuesOrCulture?.length ?? 0) > 0 || (aboutData.technologies?.length ?? 0) > 0) {
+            companyResearchRaw.subPages.push({
+              keyPoints: aboutData.keyPoints ?? [],
+              technologies: aboutData.technologies ?? [],
+              valuesOrCulture: aboutData.valuesOrCulture ?? [],
+              notable: aboutData.notable ?? [],
+              address: aboutData.address ?? null,
+            });
+          }
+          companyResearchRaw.sourceUrls.push(aboutUrl);
+          if (companyResearchRaw.address && /\d/.test(companyResearchRaw.address)) break;
+        } catch { /* try next variant */ }
+      }
+
+      // ── Sub-page extraction from homepage links ───────────────────────────
+      if (homepageData?.oneLiner || homepageData?.productSummary) {
+        const subPageLinks = (homepageData.pageLinks ?? [])
+          .filter((l) => l.kind !== "careers")
+          .sort((a, b) => {
+            const ai = PREFERRED_PAGE_KINDS.indexOf(a.kind);
+            const bi = PREFERRED_PAGE_KINDS.indexOf(b.kind);
+            return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+          })
+          .slice(0, 3);
+
+        for (const link of subPageLinks) {
+          try {
+            const { text: subText } = await fetchText(link.url, 12000);
+            if (subText.length < 200) continue;
+            const slice = subText.length > 7000
+              ? subText.slice(0, 1000) + " … " + subText.slice(-6000)
+              : subText;
+            const extractInstruction =
+              link.kind === "contact" || link.kind === "about"
+                ? `Extract the full postal address (street number, city, zip, country), any email addresses, phone numbers, and contact person names/titles. Also extract what the company does, their values, and team culture. If multiple office addresses are listed, prefer the one in the same country as the job location: ${job.location ?? "unknown"}.`
                 : "Extract substance that helps a candidate understand this company before applying: what they do, their values and how they work, the specific technologies and tools they use, notable projects or customers, and how the team operates. Ignore nav, footers, cookie banners, and generic marketing copy.";
-              const subData = await stagehand.extract(extractInstruction, subPageSchema);
-              const subAddress = subData.address ?? null;
-              const currentAddressIsReal = !!companyResearchRaw.address && /\d/.test(companyResearchRaw.address);
-              if (subAddress && (!companyResearchRaw.address || !currentAddressIsReal)) {
-                companyResearchRaw.address = subAddress;
-              }
-              if (
-                !companyResearchRaw.contactFromJobPosting &&
-                (subData.contactName || subData.contactEmail || subData.contactPhone)
-              ) {
-                companyResearchRaw.contactFromJobPosting = {
-                  name: subData.contactName ?? null,
-                  title: subData.contactTitle ?? null,
-                  email: subData.contactEmail ?? null,
-                  phone: subData.contactPhone ?? null,
-                };
-              }
+
+            const subExtract = await openai.chat.completions.create({
+              model: "gpt-4o",
+              response_format: { type: "json_object" },
+              temperature: 0,
+              max_tokens: 500,
+              messages: [
+                {
+                  role: "system",
+                  content: `${extractInstruction}
+Return ONLY valid JSON:
+{
+  "keyPoints": ["<key facts>"],
+  "technologies": ["<languages, frameworks, tools, platforms>"],
+  "valuesOrCulture": ["<values, working style, team culture>"],
+  "notable": ["<funding, headcount, customers, partnerships, awards>"],
+  "address": "<full postal address — or null>",
+  "contactName": "<contact name — or null>",
+  "contactEmail": "<contact email — or null>",
+  "contactPhone": "<contact phone — or null>"
+}`,
+                },
+                { role: "user", content: slice },
+              ],
+            });
+
+            tokenAcc.add(subExtract.usage);
+            const subRaw = subExtract.choices[0]?.message?.content;
+            if (!subRaw) continue;
+            const subData = JSON.parse(subRaw) as {
+              keyPoints?: string[]; technologies?: string[]; valuesOrCulture?: string[];
+              notable?: string[]; address?: string | null;
+              contactName?: string | null; contactEmail?: string | null; contactPhone?: string | null;
+            };
+
+            if ((subData.keyPoints?.length ?? 0) > 0 || (subData.technologies?.length ?? 0) > 0 || (subData.valuesOrCulture?.length ?? 0) > 0 || (subData.notable?.length ?? 0) > 0) {
               companyResearchRaw.subPages.push({
                 keyPoints: subData.keyPoints ?? [],
                 technologies: subData.technologies ?? [],
                 valuesOrCulture: subData.valuesOrCulture ?? [],
                 notable: subData.notable ?? [],
-                address: subAddress,
+                address: subData.address ?? null,
               });
-              companyResearchRaw.sourceUrls.push(link.url);
-            } catch (subErr) {
-              console.error(
-                "[agent/research-company] sub-page failed",
-                link.url,
-                subErr,
-              );
-            }
-          }
-        }
-
-        // ── Browser address/contact fallback ──────────────────────────────────
-        // If the sub-page extraction didn't produce a real postal address (one with
-        // a digit), explicitly visit /about and /contact via the real browser.
-        // JS-rendered sites (React, Next.js) are invisible to plain HTTP fetches
-        // so this must run inside the Stagehand session while it's still open.
-        const addressIsRealAfterSubPages = !!companyResearchRaw.address && /\d/.test(companyResearchRaw.address);
-        if (!addressIsRealAfterSubPages || !companyResearchRaw.contactFromJobPosting) {
-          // Detect language prefix from the current page URL (e.g. pandektes.com/da/... → prefix "da")
-          // Many sites use /da/, /en/, /de/ etc. as URL prefixes for localised content.
-          let langPrefix = "";
-          try {
-            const currentPathname = new URL(page.url()).pathname;
-            const prefixMatch = currentPathname.match(/^\/([a-z]{2})(?:\/|$)/);
-            if (prefixMatch) langPrefix = `/${prefixMatch[1]}`;
-          } catch { /* keep empty */ }
-
-          const basePaths = ["/about", "/about-us", "/om-os", "/contact", "/kontakt", "/contact-us"];
-          // Always try both plain paths and language-prefixed paths
-          const fallbackPaths = langPrefix
-            ? [...basePaths.map((p) => `${langPrefix}${p}`), ...basePaths]
-            : basePaths;
-          for (const path of fallbackPaths) {
-            const addressNowReal = !!companyResearchRaw.address && /\d/.test(companyResearchRaw.address);
-            if (addressNowReal && companyResearchRaw.contactFromJobPosting) break;
-            try {
-              const fallbackUrl = new URL(path, homepageUrl).href;
-              await page.goto(fallbackUrl, { waitUntil: "networkidle", timeoutMs: 15000 });
-              const extractInstruction = `This is a company page. Extract the full postal address (street number, city, zip, country), any email addresses, phone numbers, and names/titles of contact persons. These are the primary details we need — do not skip them. If multiple office addresses are listed, prefer the one in the same country as the job location: ${job.location ?? "unknown"}.`;
-              const fallbackData = await stagehand.extract(extractInstruction, subPageSchema);
-              if (fallbackData.address && /\d/.test(fallbackData.address)) {
-                companyResearchRaw.address = fallbackData.address;
-              }
-              if (!companyResearchRaw.contactFromJobPosting && (fallbackData.contactName || fallbackData.contactEmail || fallbackData.contactPhone)) {
+              if (subData.address && !companyResearchRaw.address) companyResearchRaw.address = subData.address;
+              if (!companyResearchRaw.contactFromJobPosting && (subData.contactName || subData.contactEmail)) {
                 companyResearchRaw.contactFromJobPosting = {
-                  name: fallbackData.contactName ?? null,
-                  title: fallbackData.contactTitle ?? null,
-                  email: fallbackData.contactEmail ?? null,
-                  phone: fallbackData.contactPhone ?? null,
+                  name: subData.contactName ?? null, title: null,
+                  email: subData.contactEmail ?? null, phone: subData.contactPhone ?? null,
                 };
               }
-              companyResearchRaw.sourceUrls.push(fallbackUrl);
-            } catch {
-              // try next path
+              companyResearchRaw.sourceUrls.push(link.url);
             }
+          } catch (subErr) {
+            console.error(`[research-company] sub-page fetch failed: ${link.url}`, subErr);
           }
         }
+      }
 
-        // ── DuckDuckGo search for supplementary company signals ────────────────
-        // Finds news articles, engineering blogs, LinkedIn pages, and original job
-        // postings that are indexed but not reachable from the company homepage.
-        // Runs after homepage so we don't duplicate pages already visited.
-        // Always runs — even good homepages miss funding rounds, key people, culture
-        // articles, and the full job posting contact info.
+      // ── DDG: company research (fallback when homepage yielded nothing) ────
+      if (!companyResearchRaw.oneLiner && !companyResearchRaw.productSummary) {
         try {
-          const ddgQuery = `${job.company} ${job.location ?? "Denmark"} engineering culture tech stack about`;
-          const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(ddgQuery)}&kl=dk-da`;
-          await page.goto(ddgUrl, { waitUntil: "load", timeoutMs: 15000 });
+          const companySearchQuery = `${job.company} ${job.title} company`;
+          console.log(`[research-company] DDG company research query: ${companySearchQuery}`);
+          const { html: companyDdgHtml } = await fetchHtml(
+            `https://html.duckduckgo.com/html/?q=${encodeURIComponent(companySearchQuery)}&kl=dk-da`,
+            12000,
+          );
+          const companyLinks = parseDdgLinks(companyDdgHtml).filter(
+            (u) => !SKIP_JOB_SEARCH.some((d) => u.includes(d)),
+          );
 
-          // Extract result hrefs — DDG HTML wraps them in redirect links, resolve via evaluate
-          const ddgLinks = await page.evaluate(() => {
-            return Array.from(document.querySelectorAll(".result__a"))
-              .slice(0, 6)
-              .map((a) => {
-                const href = (a as HTMLAnchorElement).href ?? "";
-                // DDG redirect: //duckduckgo.com/l/?uddg=<encoded-url>
-                const match = href.match(/[?&]uddg=([^&]+)/);
-                return match ? decodeURIComponent(match[1]) : href;
-              })
-              .filter((u) => u.startsWith("http"));
-          }) as string[];
-
-          console.log(`[research-company] DDG found ${ddgLinks.length} result URLs`);
-
-          // Visit each result that isn't the homepage we just scraped or a social media site
-          const SKIP_DDG = ["facebook.com", "twitter.com", "x.com", "youtube.com", "instagram.com", "tiktok.com"];
-          const homepageHostname = (() => { try { return new URL(homepageUrl).hostname; } catch { return ""; } })();
           let ddgVisited = 0;
-
-          for (const resultUrl of ddgLinks) {
-            if (ddgVisited >= 3) break;
+          for (const resultUrl of companyLinks.slice(0, 3)) {
+            if (ddgVisited >= 2) break;
             try {
-              const resultHostname = new URL(resultUrl).hostname;
-              if (SKIP_DDG.some((d) => resultHostname.includes(d))) continue;
-              if (resultHostname === homepageHostname) continue; // already scraped
-
-              await page.goto(resultUrl, { waitUntil: "networkidle", timeoutMs: 15000 });
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const resultText = (await page.evaluate(() => (document as any).body.innerText)) as string;
-              if (!resultText || resultText.length < 300) continue;
+              const { text: resultText } = await fetchText(resultUrl, 12000);
+              if (resultText.length < 200) continue;
 
               const ddgExtract = await openai.chat.completions.create({
                 model: "gpt-4o",
                 response_format: { type: "json_object" },
                 temperature: 0,
-                max_tokens: 700,
+                max_tokens: 500,
                 messages: [
                   {
                     role: "system",
-                    content: `Extract from this web page about a company. Translate everything to English.
+                    content: `Extract company information from this page.
 Return ONLY valid JSON:
 {
-  "keyPoints": ["<concrete facts about what the company does, their product, customers>"],
-  "technologies": ["<specific tech: languages, frameworks, tools, platforms>"],
-  "valuesOrCulture": ["<values, working style, team culture, engineering practices>"],
-  "notable": ["<funding, headcount, revenue, customers, partnerships, awards, news>"],
-  "contactName": "<hiring manager or HR contact name — or null>",
+  "keyPoints": ["<key facts>"],
+  "technologies": ["<languages, frameworks, tools, platforms>"],
+  "valuesOrCulture": ["<values, working style, team culture>"],
+  "notable": ["<funding, headcount, customers, partnerships, awards>"],
+  "contactName": "<contact name — or null>",
   "contactEmail": "<contact email — or null>",
   "contactPhone": "<contact phone — or null>",
   "address": "<full postal address — or null>"
@@ -1255,62 +1058,41 @@ Skip nav, footers, cookie banners, and marketing boilerplate.`,
 
               tokenAcc.add(ddgExtract.usage);
               const ddgRaw = ddgExtract.choices[0]?.message?.content;
-              if (ddgRaw) {
-                const ddg = JSON.parse(ddgRaw) as {
-                  keyPoints?: string[]; technologies?: string[];
-                  valuesOrCulture?: string[]; notable?: string[];
-                  contactName?: string | null; contactEmail?: string | null;
-                  contactPhone?: string | null; address?: string | null;
-                };
-                if (
-                  (ddg.keyPoints?.length ?? 0) > 0 ||
-                  (ddg.technologies?.length ?? 0) > 0 ||
-                  (ddg.valuesOrCulture?.length ?? 0) > 0 ||
-                  (ddg.notable?.length ?? 0) > 0
-                ) {
-                  companyResearchRaw.subPages.push({
-                    keyPoints: ddg.keyPoints ?? [],
-                    technologies: ddg.technologies ?? [],
-                    valuesOrCulture: ddg.valuesOrCulture ?? [],
-                    notable: ddg.notable ?? [],
-                    address: ddg.address ?? null,
-                  });
-                  companyResearchRaw.sourceUrls.push(resultUrl);
-                  if (ddg.address && !companyResearchRaw.address) companyResearchRaw.address = ddg.address;
-                  if (!companyResearchRaw.contactFromJobPosting && (ddg.contactName || ddg.contactEmail)) {
-                    companyResearchRaw.contactFromJobPosting = {
-                      name: ddg.contactName ?? null, title: null,
-                      email: ddg.contactEmail ?? null, phone: ddg.contactPhone ?? null,
-                    };
-                  }
-                  console.log(`[research-company] DDG result ${resultUrl}: ${ddg.keyPoints?.length ?? 0} keyPoints, ${ddg.technologies?.length ?? 0} tech, ${ddg.notable?.length ?? 0} notable`);
-                  ddgVisited++;
+              if (!ddgRaw) continue;
+              const ddg = JSON.parse(ddgRaw) as {
+                keyPoints?: string[]; technologies?: string[]; valuesOrCulture?: string[];
+                notable?: string[]; contactName?: string | null; contactEmail?: string | null;
+                contactPhone?: string | null; address?: string | null;
+              };
+              if ((ddg.keyPoints?.length ?? 0) > 0 || (ddg.technologies?.length ?? 0) > 0 || (ddg.valuesOrCulture?.length ?? 0) > 0 || (ddg.notable?.length ?? 0) > 0) {
+                companyResearchRaw.subPages.push({
+                  keyPoints: ddg.keyPoints ?? [],
+                  technologies: ddg.technologies ?? [],
+                  valuesOrCulture: ddg.valuesOrCulture ?? [],
+                  notable: ddg.notable ?? [],
+                  address: ddg.address ?? null,
+                });
+                companyResearchRaw.sourceUrls.push(resultUrl);
+                if (ddg.address && !companyResearchRaw.address) companyResearchRaw.address = ddg.address;
+                if (!companyResearchRaw.contactFromJobPosting && (ddg.contactName || ddg.contactEmail)) {
+                  companyResearchRaw.contactFromJobPosting = {
+                    name: ddg.contactName ?? null, title: null,
+                    email: ddg.contactEmail ?? null, phone: ddg.contactPhone ?? null,
+                  };
                 }
+                ddgVisited++;
               }
             } catch (ddgResultErr) {
               console.error("[research-company] DDG result visit failed", resultUrl, ddgResultErr);
             }
           }
         } catch (ddgErr) {
-          console.error("[research-company] DuckDuckGo search failed", ddgErr);
+          console.error("[research-company] DuckDuckGo company search failed", ddgErr);
         }
-      } catch (homepageErr) {
-        console.error(
-          "[agent/research-company] homepage extraction failed",
-          homepageErr,
-        );
       }
-    } catch (browserErr) {
-      console.error(
-        "[agent/research-company] browser session error",
-        browserErr,
-      );
-      // Never rethrow — fall through to GPT-4o synthesis with whatever was collected
-    } finally {
-      // ALWAYS close — never leave sessions open even if research fails
-      if (stagehand) {
-        await stagehand.close();
-      }
+    } catch (httpResearchErr) {
+      console.error("[agent/research-company] HTTP research error", httpResearchErr);
+      // Never rethrow — fall through to synthesis with whatever was collected
     }
 
     // A real postal address always contains a digit (street number or zip code).

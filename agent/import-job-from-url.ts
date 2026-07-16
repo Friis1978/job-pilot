@@ -1,9 +1,7 @@
 import OpenAI from "openai";
-import { Stagehand } from "@browserbasehq/stagehand";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { stripHtml, normalizeLocationToEnglish } from "@/lib/utils";
-import { browserbase } from "@/lib/browserbase";
 import { scoreJob, summarizeDescription } from "@/agent/find-jobs";
 import type { Profile, NormalizedJob } from "@/types";
 import { TokenAccumulator } from "@/lib/track-tokens";
@@ -65,48 +63,6 @@ function extractEmbeddedState(html: string): string | null {
   return null;
 }
 
-/**
- * Render a JS-heavy page with a real browser via Stagehand/Browserbase.
- * Used as a fallback when plain fetch returns an empty SPA shell.
- */
-async function fetchWithBrowser(url: string): Promise<string | null> {
-  let stagehand: Stagehand | null = null;
-  let sessionId: string | null = null;
-  try {
-    const session = await browserbase.sessions.create({
-      projectId: process.env.BROWSERBASE_PROJECT_ID!,
-      timeout: 60,
-    });
-    sessionId = session.id;
-    stagehand = new Stagehand({
-      env: "BROWSERBASE",
-      apiKey: process.env.BROWSERBASE_API_KEY!,
-      projectId: process.env.BROWSERBASE_PROJECT_ID!,
-      browserbaseSessionID: sessionId,
-      model: { modelName: "gpt-4o", apiKey: process.env.OPENAI_API_KEY! },
-      disablePino: true,
-    });
-    await stagehand.init();
-    const page = stagehand.context.activePage()!;
-    await page.goto(url, { waitUntil: "networkidle" });
-    // Get the fully-rendered text content (JS has already populated the DOM)
-    const innerText = await page.evaluate(() => document.body.innerText);
-    const text = (typeof innerText === "string" ? innerText : "")
-      .replace(/\s+/g, " ").trim();
-    return text.length > 200 ? text : null;
-  } catch {
-    return null;
-  } finally {
-    if (stagehand) {
-      await stagehand.close().catch(() => null);
-    } else if (sessionId) {
-      // Stagehand never fully initialised — release the Browserbase session directly
-      await browserbase.sessions
-        .update(sessionId, { status: "REQUEST_RELEASE" })
-        .catch(() => null);
-    }
-  }
-}
 
 /**
  * Fetch a LinkedIn job via the public guest API (no auth required).
@@ -238,18 +194,13 @@ export async function importJobFromUrl(userId: string, url: string, pastedText?:
         }
       }
 
-      // Pure client-side SPA with no embedded state — spin up a real browser
+      // Pure client-side SPA with no embedded state — nothing more we can do
       if (rawText.length < 200) {
-        console.log("[agent/import-job-from-url] static fetch got empty page, trying browser render…");
-        const browserText = await fetchWithBrowser(url);
-        if (!browserText) {
-          await posthog.shutdown();
-          return {
-            success: false,
-            error: "Could not read this page — it may require login or block automated access.",
-          };
-        }
-        rawText = browserText;
+        await posthog.shutdown();
+        return {
+          success: false,
+          error: "Could not read this page — it may require login or block automated access.",
+        };
       }
     }
   } catch {
