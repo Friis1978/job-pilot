@@ -321,6 +321,9 @@ function mergeExtracted(
     educations: extracted.educations?.length
       ? extracted.educations.map((e) => ({ ...e, id: crypto.randomUUID() }))
       : base.educations,
+    personalProjects: extracted.personalProjects?.length
+      ? extracted.personalProjects.map((p) => ({ ...p, id: crypto.randomUUID(), skillInput: "" }))
+      : base.personalProjects,
   };
 }
 
@@ -347,7 +350,9 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
   const [openEducations, setOpenEducations] = useState<Set<string>>(new Set());
   const [skillDupeError, setSkillDupeError] = useState(false);
   const [industryDupeError, setIndustryDupeError] = useState(false);
-  const [savedSnapshot, setSavedSnapshot] = useState(() => snapshot(data));
+  const [savedSnapshot, setSavedSnapshot] = useState(() =>
+    snapshot(extractedFormData ? profileToFormData(initialData) : data)
+  );
 
   function snapshot(d: typeof data) {
     return JSON.stringify({
@@ -494,6 +499,48 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
       setShouldScrollToRole(false);
     }
   }, [shouldScrollToRole, data.workExperience.length]);
+
+  const doSave = useCallback(async (formData: FormData) => {
+    const errors: Record<string, Set<string>> = {};
+    for (const role of formData.workExperience) {
+      const missing = new Set<string>();
+      if (!role.company.trim()) missing.add("company");
+      if (!role.title.trim()) missing.add("title");
+      if (!role.startDate.trim()) missing.add("startDate");
+      if (!role.currentlyWorking && !role.endDate.trim()) missing.add("endDate");
+      if (missing.size > 0) errors[role.id] = missing;
+    }
+    if (Object.keys(errors).length > 0) {
+      setRoleErrors(errors);
+      setOpenRoles((prev) => new Set([...prev, ...Object.keys(errors)]));
+      requestAnimationFrame(() => {
+        firstErrorRoleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      return;
+    }
+    setRoleErrors({});
+    setSaving(true);
+    setSaveSuccess(false);
+    const result = await saveProfile({
+      ...formData,
+      workExperience: formData.workExperience.map(({ skillInput: _si, ...r }) => r),
+      personalProjects: formData.personalProjects.map(({ id: _id, skillInput: _si, ...r }) => r),
+      educations: formData.educations.map(({ id: _id, ...e }) => e),
+      spokenLanguages: formData.spokenLanguages,
+    });
+    setSaving(false);
+    if (result.success) {
+      setSaveSuccess(true);
+      setSavedSnapshot(snapshot(formData));
+      setHasUnreviewedExtraction(false);
+      toast("Profile saved successfully.", "success");
+    } else {
+      toast(result.error ?? "Something went wrong. Please try again.", "error");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
 
   function addRoleSkill(roleId: string) {
     setField(
@@ -726,51 +773,7 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
       <form
         onSubmit={async (e) => {
           e.preventDefault();
-
-          // Validate work experience required fields
-          const errors: Record<string, Set<string>> = {};
-          for (const role of data.workExperience) {
-            const missing = new Set<string>();
-            if (!role.company.trim()) missing.add("company");
-            if (!role.title.trim()) missing.add("title");
-            if (!role.startDate.trim()) missing.add("startDate");
-            if (!role.currentlyWorking && !role.endDate.trim()) missing.add("endDate");
-            if (missing.size > 0) errors[role.id] = missing;
-          }
-
-          if (Object.keys(errors).length > 0) {
-            setRoleErrors(errors);
-            setOpenRoles((prev) => new Set([...prev, ...Object.keys(errors)]));
-            // Scroll to first invalid role on next paint
-            requestAnimationFrame(() => {
-              firstErrorRoleRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-            });
-            return;
-          }
-
-          setRoleErrors({});
-          setSaving(true);
-                setSaveSuccess(false);
-          const result = await saveProfile({
-            ...data,
-            workExperience: data.workExperience.map(
-              ({ skillInput: _si, ...r }) => r,
-            ),
-            personalProjects: data.personalProjects.map(
-              ({ id: _id, skillInput: _si, ...r }) => r,
-            ),
-            educations: data.educations.map(({ id: _id, ...e }) => e),
-            spokenLanguages: data.spokenLanguages,
-          });
-          setSaving(false);
-          if (result.success) {
-            setSaveSuccess(true);
-            setSavedSnapshot(snapshot(data));
-            setHasUnreviewedExtraction(false);
-            toast("Profile saved successfully.", "success");
-          } else {
-            toast(result.error ?? "Something went wrong. Please try again.", "error");
-          }
+          await doSave(data);
         }}
         className="mt-6 flex flex-col gap-0"
       >
@@ -2179,23 +2182,26 @@ export function ProfileForm({ initialData, extractedFormData, userId, resumeSect
               startDate: "Start Date",
               endDate: "End Date",
             };
-            const items: { roleIndex: number; field: string }[] = [];
+            const items: { roleLabel: string; field: string }[] = [];
             data.workExperience.forEach((role, idx) => {
+              const roleLabel = role.title && role.company
+                ? `${role.title} at ${role.company}`
+                : role.title || role.company || `Role ${idx + 1}`;
               roleErrors[role.id]?.forEach((field) => {
-                items.push({ roleIndex: idx + 1, field });
+                items.push({ roleLabel, field });
               });
             });
             return (
               <div className="rounded-xl border border-error/30 bg-error/5 px-4 py-3 flex flex-col gap-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-error">Missing required fields</p>
                 <ul className="flex flex-col gap-1">
-                  {items.map(({ roleIndex, field }, i) => (
+                  {items.map(({ roleLabel, field }, i) => (
                     <li key={i} className="flex items-center gap-2 text-sm text-error">
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0">
                         <circle cx="6" cy="6" r="5.5" stroke="currentColor" strokeWidth="1.2" />
                         <path d="M6 3.5v3M6 8h.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
                       </svg>
-                      Role {roleIndex} — {FIELD_LABELS[field] ?? field}
+                      {roleLabel} — {FIELD_LABELS[field] ?? field}
                     </li>
                   ))}
                 </ul>

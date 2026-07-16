@@ -37,6 +37,18 @@ Return ONLY valid JSON with this exact shape — use empty string "" for missing
       "institution": string,
       "year": string
     }
+  ],
+  "personalProjects": [
+    {
+      "name": string,
+      "description": string,
+      "url": string,
+      "githubUrl": string,
+      "skills": string[],
+      "startDate": string,
+      "endDate": string,
+      "currentlyWorking": boolean
+    }
   ]
 }
 
@@ -49,10 +61,11 @@ Rules:
 - workExperience: maximum 10 most recent roles, oldest first
 - skills: individual technology or skill names, not sentences (e.g. ["React", "TypeScript", "AWS"])
 - educations: all degrees found, most recent first; degree must be one of "high_school", "associate", "bachelor", "master", "phd", "other", or "" if not determinable
+- personalProjects: side projects, open source work, or personal builds listed on the resume; omit if none found
 - Do NOT extract email — leave it out of the response entirely
 - Do NOT guess preference fields (jobTitlesSeeking, remotePreference, salary, etc.)`;
 
-export async function POST(): Promise<NextResponse> {
+export async function POST(req: Request): Promise<NextResponse> {
   try {
     const insforge = await createInsforgeServer();
     const { data: authData, error: authError } =
@@ -62,23 +75,22 @@ export async function POST(): Promise<NextResponse> {
     }
     const userId = authData.user.id;
 
-    const { data: blob, error: storageError } = await insforge.storage
-      .from("resumes")
-      .download(`${userId}/resume.pdf`);
+    const formData = await req.formData();
+    const file = formData.get("file");
 
-    if (storageError || !blob) {
+    if (!file || !(file instanceof Blob)) {
       return NextResponse.json(
-        { error: "No resume found. Please upload a resume first." },
-        { status: 404 },
+        { error: "No file provided." },
+        { status: 400 },
       );
     }
 
-    const arrayBuffer = await blob.arrayBuffer();
+    const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
     if (buffer.length === 0) {
       return NextResponse.json(
-        { error: "Resume file is empty. Please re-upload and try again." },
+        { error: "Resume file is empty. Please try a different file." },
         { status: 422 },
       );
     }
@@ -113,7 +125,6 @@ export async function POST(): Promise<NextResponse> {
       );
     }
 
-    // Trim extracted text to ~12k chars to stay well within context limits
     const trimmedText = extractedText.slice(0, 12000);
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });

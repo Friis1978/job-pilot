@@ -7,11 +7,10 @@ import type { Profile, ProfileFormInput } from "@/types";
 
 type Props = {
   profile: Profile | null;
-  initialResumeUrl: string | null;
   userId: string | null;
 };
 
-export function ProfilePageShell({ profile, initialResumeUrl, userId }: Props) {
+export function ProfilePageShell({ profile, userId }: Props) {
   const [extractedFormData, setExtractedFormData] =
     useState<Partial<ProfileFormInput> | null>(null);
   const [extractionCount, setExtractionCount] = useState(0);
@@ -23,7 +22,6 @@ export function ProfilePageShell({ profile, initialResumeUrl, userId }: Props) {
 
   const resumeUpload = (
     <ResumeUpload
-      initialResumeUrl={initialResumeUrl}
       userId={userId}
       onExtract={handleExtract}
       embedded={!!profile}

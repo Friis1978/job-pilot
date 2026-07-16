@@ -91,7 +91,6 @@ export default async function ProfilePage() {
           <CompletionIndicator percentage={percentage} missingFields={missingFields} />
           <ProfilePageShell
             profile={profile}
-            initialResumeUrl={profile?.resume_pdf_url ?? null}
             userId={userId ?? null}
           />
         </div>
