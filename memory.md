@@ -1,55 +1,66 @@
-# Memory — Resume Motivation Generation Fix
+# Memory — Dashboard Stats Overhaul
 
 Last updated: 2026-07-13
 
 ## What was built
 
-**Payment system (from prior session):**
-- Stripe integration with credit balance management
-- `PaymentClient` component, payment success handling
-- Credit balance display in dashboard
+### Dashboard StatsBar — full rebuild
+- `components/dashboard/StatsBar.tsx` — replaced old 4-card layout with new shape:
+  - **Jobs found this month** (vs last month, shows prior month count)
+  - **Avg. Match Rate** (vs last week, shows prior week % value)
+  - **Applied this week** (vs last week Mon–Sun calendar weeks, shows prior week count)
+  - **Jobs this week** (vs last week rolling, shows prior week count)
+- `TrendBadge` updated: negatives are red (`bg-error/10 text-error`), positives green, zero neutral. Shows `+X% · N last week/month` inline.
+- Old "Companies researched" card removed entirely.
 
-**Resume motivation generation (`app/api/jobs/[id]/resume-motivation/route.ts`):**
-- Completely rewrote the POST handler to produce a proper resume paragraph instead of a cover letter
-- Key fixes:
-  - Removed company name and `company_research` from the Claude prompt (they triggered cover-letter framing)
-  - Changed to `temperature: 0.3` (was 0.7 — too high for strict instruction-following)
-  - Simplified system prompt with explicit NO rules (no greeting, no closing, no names)
-  - Added `isCoverLetter()` guard to skip `profile.motivation` if it contains cover letter text
-  - System prompt now instructs first-person ("I have", "I bring") focused on what candidate brings to the role
+### PostHog query (`lib/posthog-query.ts`)
+- `DashboardStats` type updated: `jobsThisMonth`, `jobsLastMonth`, `jobsThisWeek`, `jobsLastWeek`, `avgMatchRate`, `avgMatchRateThisWeek`, `avgMatchRateLastWeek`
+- Single HogQL query for all job_found metrics (no longer parallel with a second query)
+- Companies researched PostHog query removed
 
-**Current system prompt approach:**
-- Tells Claude to write a first-person "I" paragraph (3-5 sentences)
-- Focus: what the candidate brings to this specific role + why they are motivated
-- Forbidden: greetings, sign-offs, person names, company/org names, bullet points, markdown
-- Job context: role title, about_role, responsibilities, requirements only (no company_research)
-- Profile context: title, skills, motivation (filtered), career_vision, energy_tasks, personal_interests
+### Dashboard page (`app/dashboard/page.tsx`)
+- `appliedThisWeek` / `appliedLastWeek` computed from already-fetched `pipelineResult` (jobs table, `status = applied`, `updated_at`) — no extra DB call
+- Week boundary = calendar week Mon 00:00 UTC, not rolling 7 days
+- `statsData` now passes all prior-period values to StatsBar for display
+
+### Status tracking (`app/api/jobs/[id]/status/route.ts`)
+- Added `job_status_changed` PostHog event on every status change: `{ jobId, status }`
+- Uses existing `lib/posthog-server.ts` singleton client
+- Non-blocking (try/catch around capture)
+
+### PipelineCard (`components/dashboard/PipelineCard.tsx`)
+- Interview rate percentage changed from `text-accent` to `text-success` (green)
+
+### TokenUsageChart (`components/dashboard/TokenUsageChart.tsx`)
+- Balance moved from separate right-aligned block to inline after "cost" label: `$4.66 cost balance: $37.19`
+- Red if balance < $2
+
+### Demo dashboard (`app/demo-dashboard/page.tsx`)
+- `DEMO_STATS` updated to match new `StatsData` type shape
 
 ## Decisions made
 
-- `company_research` JSON excluded from motivation prompt — it contains cover-letter-style talking points (`whyThisRole`, `yourEdge`) that anchor Claude into cover letter format
-- Company name excluded from motivation prompt for same reason
-- temperature 0.3 for motivation (not 0.7) — better rule-following
-- `isCoverLetter()` regex: `/^Hi\b|^Dear\b|Best regards|Yours sincerely|Kind regards/i`
+- **Applied count from DB, not PostHog** — pipelineResult (jobs table) already fetched for pipeline card; no need for a separate PostHog query. PostHog is used only for job_found metrics where DB doesn't have the data.
+- **Calendar week boundaries for "applied this week"** — rolling 7 days was wrong (today is Monday, so 7 days ago includes last week). Start of week = Monday 00:00 UTC.
+- **PostHog tracks all status changes** — event `job_status_changed` with `status` property allows future HogQL queries by status (applied, interviewing, offer, rejected, etc.)
 
 ## Problems solved
 
-- **Root cause of cover letter output**: The `.next` dev cache was serving a stale compiled route for months. All apparent "generation" was returning the cached DB value. After `rm -rf .next`, the real Claude calls ran — and Claude was generating cover letters because: (1) company name in prompt triggered "write to company" framing, (2) `company_research` JSON had cover-letter talking points, (3) temperature 0.7 was too high.
-- **Assistant prefill not supported**: `claude-sonnet-4-6` does not support assistant message prefill — throws 400 `invalid_request_error`.
-- **`require("fs")` in Next.js App Router**: Doesn't work reliably in ESM route handlers for file writes.
+- `DEMO_STATS` in `app/demo-dashboard/page.tsx` was using old StatsData shape — caused TS build error on deploy. Fixed by updating DEMO_STATS to new shape.
+- Applied count was showing inflated number (e.g. 5 instead of 2) because "7 days ago" window included days from the previous calendar week.
 
 ## Current state
 
-- Motivation generation working correctly in **production** (verified by user)
-- Local dev has stale `.next` cache issue — `rm -rf .next && npm run dev` needed each time changes don't reflect
-- Resume motivation: generates first-person paragraph focused on what candidate brings to role
-- All token tracking from prior session still in place
+- All four stat cards show correct data with prior-period comparison values
+- Job status changes tracked in PostHog for future analytics
+- TypeScript compiles clean (verified with `tsc --noEmit`)
+- README updated with dashboard stats table and PostHog tracking note
 
 ## Next session starts with
 
-Verify motivation output in local dev after cache clear. Then continue with whatever feature comes next — the resume PDF visual verification from the prior session was still pending.
+Whatever feature comes next. Dashboard stats are complete. PostHog event tracking for all status changes is wired. Applied count from DB is correct with calendar week boundaries.
 
 ## Open questions
 
-- Local dev `.next` cache issue: why does hot reload not pick up changes to this specific route? May need `experimental.turbo` config adjustment or a consistent `rm -rf .next` habit.
-- Resume PDF visual verification (from prior session) still not confirmed done.
+- `avgMatchRateLastWeek` in StatsBar shows `0%` for new users with no prior week data — may want to show "—" instead of "0% last week".
+- PostHog `job_found` events use rolling 7-day windows for week comparison (not calendar week) — inconsistency with the applied card which uses calendar weeks. May want to align these.
