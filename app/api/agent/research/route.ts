@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { researchCompany } from "@/agent/research-company";
 
+export const maxDuration = 300;
+
 export async function POST(req: NextRequest) {
   try {
     const insforge = await createInsforgeServer();
