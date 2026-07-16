@@ -86,6 +86,20 @@ export async function GET(request: NextRequest) {
         accessToken: data.accessToken,
       });
 
+      // Get user metadata (email, name) from the auth service
+      const { data: authUser } = await tempClient.auth.getCurrentUser();
+      const userEmail = authUser?.user?.email ?? null;
+      const userMeta = authUser?.user?.metadata as { full_name?: string; name?: string } | null;
+      const userFullName = userMeta?.full_name ?? userMeta?.name ?? null;
+
+      // Ensure a profile row exists — there is no DB trigger for this
+      await tempClient.database
+        .from("profiles")
+        .upsert(
+          { id: userId, email: userEmail, full_name: userFullName },
+          { onConflict: "id", ignoreDuplicates: true },
+        );
+
       const { data: profile } = await tempClient.database
         .from("profiles")
         .select("email, full_name, approval_status, is_admin, welcomed_at, credit_balance_usd")
