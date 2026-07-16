@@ -31,7 +31,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const parsedMinScore =
-      typeof minScore === "number" && minScore >= 50 && minScore <= 100
+      typeof minScore === "number" && minScore >= 0 && minScore <= 100
         ? minScore
         : undefined;
 
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     revalidatePath("/dashboard");
     revalidatePath("/find-jobs");
     return NextResponse.json({
-      data: { jobsFound: result.jobsFound, jobsSaved: result.jobsSaved, jobsSkipped: result.jobsSkipped },
+      data: { jobsFound: result.jobsFound, jobsSaved: result.jobsSaved, jobsSkipped: result.jobsSkipped, cappedAt20: result.cappedAt20 },
     });
   } catch (err) {
     Sentry.captureException(err);

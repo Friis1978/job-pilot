@@ -119,11 +119,14 @@ async function enrichJobDescription(job: NormalizedJob): Promise<NormalizedJob> 
   }
 }
 
+const MAX_JOBS_PER_SEARCH = 20;
+
 type FindJobsResult = {
   success: boolean;
   jobsFound?: number;
   jobsSaved?: number;
   jobsSkipped?: number;
+  cappedAt20?: boolean;
   error?: string;
 };
 
@@ -402,6 +405,10 @@ export async function findJobs(
 
   const profile = profileData as Profile;
 
+  // No profile data filled in — skip the score filter entirely so the user sees results
+  const profileIsEmpty = !profile.skills?.length && !profile.current_title && !profile.years_experience;
+  const effectiveMinScore = profileIsEmpty ? 0 : minScore;
+
   const posthog = getPostHogClient();
   posthog.capture({
     distinctId: userId,
@@ -531,9 +538,11 @@ export async function findJobs(
       enrichedJobs.map((job) => scoreJob(job, profile, openai, location, tokenAcc)),
     );
 
-    const qualifyingJobs = scoringResults.filter(
-      (r): r is ScoringResult => r !== null && r.matchScore >= minScore,
+    const allQualifying = scoringResults.filter(
+      (r): r is ScoringResult => r !== null && r.matchScore >= effectiveMinScore,
     );
+    const cappedAt20 = allQualifying.length > MAX_JOBS_PER_SEARCH;
+    const qualifyingJobs = cappedAt20 ? allQualifying.slice(0, MAX_JOBS_PER_SEARCH) : allQualifying;
 
     // Only skip jobs with no URL at all — all other links (including aggregator/tracking
     // links like jobviewtrack.com) are kept. enrichJobDescription already tries to resolve
@@ -633,6 +642,7 @@ export async function findJobs(
       jobsFound: allJobs.length,
       jobsSaved: jobsWithUrl.length,
       jobsSkipped: qualifyingJobs.length - jobsWithUrl.length,
+      cappedAt20,
     };
   } catch (err) {
     console.error("[agent/find-jobs]", err);

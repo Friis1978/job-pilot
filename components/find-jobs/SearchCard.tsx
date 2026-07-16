@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
 
@@ -15,7 +15,15 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
   // Search tab state
   const [jobTitle, setJobTitle] = useState("");
   const [location, setLocation] = useState(defaultLocation);
-  const [minScore, setMinScore] = useState(70);
+  const [minScore, setMinScore] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    const saved = localStorage.getItem("jp_min_score");
+    return saved !== null ? Number(saved) : 0;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("jp_min_score", String(minScore));
+  }, [minScore]);
   const [loading, setLoading] = useState(false);
 
   // URL tab state
@@ -51,12 +59,16 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
         return;
       }
 
-      const { jobsSaved, jobsSkipped } = json.data as { jobsFound: number; jobsSaved: number; jobsSkipped: number };
+      const { jobsSaved, jobsSkipped, cappedAt20 } = json.data as { jobsFound: number; jobsSaved: number; jobsSkipped: number; cappedAt20?: boolean };
 
       if (jobsSaved > 0) {
         toast(`Found ${jobsSaved} matching job${jobsSaved === 1 ? "" : "s"}.`, "success");
       } else {
         toast("No matching jobs found. Try a different title or lower the minimum match score.", "info");
+      }
+
+      if (cappedAt20) {
+        toast("Search returned 20 jobs. Click Find Jobs again to discover more.", "info");
       }
 
       if (jobsSkipped > 0) {
@@ -238,9 +250,9 @@ export function SearchCard({ recentSearches = [], defaultLocation = "" }: Props)
                   onChange={(e) => setMinScore(Number(e.target.value))}
                   className="px-3 py-2.5 border border-border rounded-lg text-sm text-text-primary bg-surface focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent"
                 >
-                  {[50, 60, 70].map((v) => (
+                  {[0, 10, 20, 30, 40, 50, 60, 70].map((v) => (
                     <option key={v} value={v}>
-                      {v}%
+                      {v === 0 ? "Any" : `${v}%`}
                     </option>
                   ))}
                 </select>
