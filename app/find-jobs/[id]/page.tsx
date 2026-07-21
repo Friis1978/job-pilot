@@ -5,6 +5,7 @@ import { formatDateAgo, computeSkillYears, shortenLocation } from "@/lib/utils";
 import { SalaryDisplay } from "@/components/find-jobs/SalaryDisplay";
 import type { Profile, Connection } from "@/types";
 import { Navbar } from "@/components/layout/Navbar";
+import { LimitedInfoBadge } from "@/components/ui/LimitedInfoBadge";
 import { ResearchButton } from "@/components/find-jobs/ResearchButton";
 import { CoverLetterSection } from "@/components/find-jobs/CoverLetterSection";
 import { ResumeSection } from "@/components/find-jobs/ResumeSection";
@@ -46,6 +47,7 @@ type Job = {
   salary: string | null;
   job_type: string | null;
   about_role: string | null;
+  description_word_count: number | null;
   match_score: number;
   experience_score: number | null;
   seniority_score: number | null;
@@ -202,6 +204,7 @@ export default async function JobDetailsPage({
                 <div className="flex flex-col items-center gap-1 shrink-0">
                   <MatchCircle score={job.match_score} colorClass={matchColor} />
                   <span className="text-xs text-text-muted">Match score</span>
+                  <LimitedInfoBadge wordCount={job.description_word_count} />
                 </div>
               </div>
 

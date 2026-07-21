@@ -428,6 +428,31 @@ unchanged profile returns the same match breakdown.
 Jobs imported before these fields existed may have little or no stored posting
 text; rescoring those cannot recover a meaningful breakdown.
 
+### Low-information postings
+
+Roughly half of all saved jobs only ever have a truncated snippet to score
+against. Careerjet's API returns ~250 characters ending in `...`, and the page
+behind the tracking URL serves a bot-check, so `enrichJobDescription` cannot
+recover the rest. The stored description averages **30 words** for these.
+
+That was actively misleading. Scores of up to 91 were being produced from text
+that omitted the disqualifying requirement — one graduate-only role
+("you should just have finished your bachelor or master") scored 80 with
+`experience_score: 100` for a candidate with ten years of experience, purely
+because that sentence had been truncated away.
+
+- `jobs.description_word_count` is a generated column measuring the scored text
+- Under `LOW_INFO_WORD_COUNT` (100 words), `scoreJob` caps `matchScore` at
+  `LOW_INFO_SCORE_CAP` (50) **in code**. The prompt states the same rule, but
+  GPT-4o ignored it for 46 of 60 such jobs, so it is enforced after parsing
+- `<LimitedInfoBadge />` marks those jobs in the list and on the detail page,
+  with a tooltip explaining why the score is capped
+- The scoring prompt also treats overqualification as a mismatch: a posting
+  aimed at recent graduates caps at 40 when the candidate is far more senior
+
+A capped score means "not enough information to judge", not "bad match" — open
+the original posting to decide.
+
 ### Company research
 1. Open a job's detail page and click **Research Company**
 2. The agent fetches the company's public website over HTTP (homepage, About, Engineering/Blog pages), also searches DuckDuckGo for the job posting to find contact details, and synthesises a structured dossier

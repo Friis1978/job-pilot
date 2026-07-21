@@ -11,6 +11,7 @@ import type { JobStatus } from "@/components/find-jobs/StatusBadge";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { SortIcon } from "@/components/ui/SortIcon";
 import { NetworkBadge } from "@/components/network/NetworkBadge";
+import { LimitedInfoBadge } from "@/components/ui/LimitedInfoBadge";
 import type { Connection } from "@/types";
 
 export type { JobRow };
@@ -446,7 +447,10 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
                               </span>
                               <NetworkBadge connections={jobConnections} />
                             </div>
-                            <SourceBadge source={job.source} />
+                            <div className="flex items-center gap-1.5">
+                              <SourceBadge source={job.source} />
+                              <LimitedInfoBadge wordCount={job.description_word_count} />
+                            </div>
                           </div>
                         );
                       })()}

@@ -2,6 +2,34 @@ import type { WorkExperience } from "@/types";
 
 export const MATCH_THRESHOLD = 70;
 
+/**
+ * Job aggregators (Careerjet in particular) return a truncated snippet rather
+ * than the posting, and the page behind it is usually bot-protected — so the
+ * requirements that would disqualify a candidate are simply absent. Scoring one
+ * of those is guesswork: a graduate-only role scored 80 for a 10-year candidate
+ * purely because the "newly graduated" requirement was truncated away.
+ *
+ * Descriptions shorter than this are treated as low-information, and their
+ * match score is capped. The scoring prompt states the same rule, but GPT-4o
+ * ignored it often enough (46 of 60 snippet jobs scored above the cap, one at
+ * 91) that it has to be enforced in code.
+ */
+export const LOW_INFO_WORD_COUNT = 100;
+export const LOW_INFO_SCORE_CAP = 50;
+
+/** Counts whitespace-separated words. Mirrors jobs.description_word_count. */
+export function countWords(text: string | null | undefined): number {
+  const trimmed = text?.trim();
+  if (!trimmed) return 0;
+  return trimmed.split(/\s+/).length;
+}
+
+/** True when a posting is too short to justify a confident match score. */
+export function isLowInformation(wordCountOrText: number | string | null | undefined): boolean {
+  const words = typeof wordCountOrText === "number" ? wordCountOrText : countWords(wordCountOrText);
+  return words < LOW_INFO_WORD_COUNT;
+}
+
 /** Fixed exchange rates to DKK (EUR pegged by ECB; others approximate). */
 export const CURRENCY_TO_DKK: Record<string, number> = {
   EUR: 7.46,

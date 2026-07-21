@@ -8,7 +8,7 @@ import { searchJobsSweden } from "@/lib/jobtech";
 import { searchJobsJooble } from "@/lib/jooble";
 import { searchJobsCareerjet } from "@/lib/careerjet";
 import { searchJobsGlassdoor } from "@/lib/glassdoor";
-import { MATCH_THRESHOLD, stripHtml, computeSkillYears, getLocationAliases, normalizeLocationToEnglish } from "@/lib/utils";
+import { MATCH_THRESHOLD, LOW_INFO_SCORE_CAP, isLowInformation, stripHtml, computeSkillYears, getLocationAliases, normalizeLocationToEnglish } from "@/lib/utils";
 import { summarizeDescription } from "@/lib/summarize-description";
 import type { Profile, AdzunaJob, NormalizedJob, ScoredJob, PersonalProject } from "@/types";
 
@@ -293,7 +293,8 @@ Scoring rules:
 - Be strict and realistic. A high score (80+) requires the job description to explicitly mention requirements that match the candidate's skills and experience level.
 - If the job description is a short snippet (under 100 words) without specific requirements, technologies, or experience criteria, set matchScore to 50 or below — there is not enough information to justify a high score.
 - Never infer requirements that are not stated. Missing information is a signal to score lower, not higher.
-- A mismatch in seniority, domain, or core technology stack should significantly reduce the score.${locationRule ? `\n${locationRule}` : ""}`,
+- A mismatch in seniority, domain, or core technology stack should significantly reduce the score.
+- Overqualification is a mismatch, not a bonus. If the posting targets recent graduates or entry-level candidates — "newly graduated", "nyuddannet", "nyuddannede", "just finished your bachelor or master", "recent graduate", "entry level", "graduate programme", "trainee" — and the candidate has substantially more experience than that, cap matchScore at 40 and set experienceScore and seniorityScore below 40. Employers hiring graduates will not hire a candidate with ten years of experience, however strong the skill overlap.${locationRule ? `\n${locationRule}` : ""}`,
         },
         {
           role: "user",
@@ -332,6 +333,15 @@ Recent work: ${JSON.stringify(
     if (!raw) return null;
 
     const scored = JSON.parse(raw) as ScoredJob;
+
+    // Enforce the low-information cap here rather than trusting the prompt to
+    // honour it. A truncated aggregator snippet omits the very requirements that
+    // would disqualify a candidate, so a confident score off 30 words is not a
+    // score — it is a guess wearing a number.
+    if (isLowInformation(job.description)) {
+      scored.matchScore = Math.min(scored.matchScore, LOW_INFO_SCORE_CAP);
+    }
+
     return { ...scored, job };
   } catch (err) {
     Sentry.captureException(err, { extra: { jobId: job.id, jobTitle: job.title, company: job.company } });
