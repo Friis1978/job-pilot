@@ -148,6 +148,30 @@ Access to the app requires purchasing credits via Stripe. After sign-up approval
 - A Stripe webhook updates the user's credit balance in the database on successful payment
 - Credit balance and payment history are visible in the user's account settings
 
+#### How the gate works
+
+`proxy.ts` checks two cookies on every protected route: `jp_approved` and
+`jp_has_credit`. Missing credit redirects to `/payment`, which is itself exempt
+so the redirect cannot loop.
+
+Two rules that are easy to break:
+
+1. **`PROTECTED_PATHS` and `config.matcher` must list the same routes.** A path in
+   `PROTECTED_PATHS` but missing from `matcher` is not protected at all — the proxy
+   never runs on it, so no session refresh happens and no auth header is forwarded.
+   `/payment` was in one and not the other, and the page broke as a result.
+2. **Cookies cannot be set from a Server Component.** Next allows cookie writes only
+   in a Server Action or Route Handler. `/payment` used to stamp `jp_has_credit`
+   during render, which threw at runtime and blanked the page for anyone with a
+   balance. `PaymentClient` now calls `POST /api/payment/activate` instead.
+
+`jp_has_credit` expires after 7 days and only the payment page re-stamps it, so a
+returning user is briefly redirected through `/payment` before continuing.
+
+Every early `return` in `proxy.ts` must carry the refreshed cookies via
+`withRefreshedCookies()`. InsForge rotates refresh tokens, so a redirect that drops
+them consumes a token and discards its replacement — which logs the user out.
+
 ---
 
 ### Onboarding
@@ -278,6 +302,14 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+A `predev` hook runs `scripts/free-port.sh` first. Next 16 refuses to start when
+another dev server owns the same project directory — *even on a different port* —
+and records the offender in `.next/dev/lock`. The script stops that server, frees
+the port, and escalates to `SIGKILL` if needed, so `npm run dev` always lands on
+3000 instead of silently starting on 3001 and serving stale state.
+
+Set `PORT` to target a different port.
+
 ---
 
 ## Environment variable reference
@@ -341,6 +373,9 @@ Open [http://localhost:3000](http://localhost:3000).
 │   ├── resend.ts               # Email functions (pending, approved, admin notification)
 │   └── utils.ts                # shortenLocation and other shared helpers
 ├── types/                      # Shared TypeScript types
+├── scripts/                    # Dev tooling
+│   └── free-port.sh            # predev — clears stale dev servers before next dev
+├── proxy.ts                    # Next 16 middleware — session refresh + route gating
 └── context/                    # Architecture docs and AI agent guidelines
 ```
 
