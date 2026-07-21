@@ -2,7 +2,8 @@ import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { stripHtml, normalizeLocationToEnglish } from "@/lib/utils";
-import { scoreJob, summarizeDescription } from "@/agent/find-jobs";
+import { scoreJob } from "@/agent/find-jobs";
+import { summarizeDescription } from "@/lib/summarize-description";
 import type { Profile, NormalizedJob } from "@/types";
 import { TokenAccumulator } from "@/lib/track-tokens";
 
@@ -314,7 +315,9 @@ If title or company cannot be determined, return them as empty strings.`,
   }
 
   // Generate a short summary for display (full text is kept in about_role for research)
-  const descriptionSummary = await summarizeDescription(job.description, openai, tokenAcc);
+  const summaryResult = await summarizeDescription(job.description, openai, { minLength: 500 });
+  tokenAcc.add(summaryResult.usage);
+  const descriptionSummary = summaryResult.text;
 
   // Save to DB
   // Note: no threshold check here — the user explicitly chose to import this job,

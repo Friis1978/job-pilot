@@ -2,33 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { trackTokens } from "@/lib/track-tokens";
-
-async function summarizeDescription(description: string, openai: OpenAI, userId: string): Promise<string | null> {
-  if (!description || description.length < 50) return null;
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    temperature: 0.3,
-    max_tokens: 700,
-    messages: [
-      {
-        role: "system",
-        content: `Summarize this job description as exactly 8–10 bullet points. Each bullet must be a full, informative sentence — not a fragment. Cover all of these areas (one or two bullets each):
-1. What the company does and its context
-2. What the role is and who it reports to
-3. Key day-to-day responsibilities (2–3 bullets)
-4. Must-have qualifications or experience
-5. Required technical skills or tools
-6. Nice-to-have or preferred skills
-7. What the company offers (culture, benefits, team)
-
-Return only the bullet points, each on its own line starting with "•". No intro, no headers, no trailing text.`,
-      },
-      { role: "user", content: description.slice(0, 5000) },
-    ],
-  });
-  trackTokens(userId, "regenerate_description", "gpt-4o-mini", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
-  return response.choices[0]?.message?.content?.trim() ?? null;
-}
+import { summarizeDescription } from "@/lib/summarize-description";
 
 export async function POST(
   _req: NextRequest,
@@ -61,11 +35,21 @@ export async function POST(
   }
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const summary = await summarizeDescription(aboutRole, openai, user.id);
+  // minLength 50: the user asked for this one explicitly, so summarise even a
+  // short posting rather than silently returning nothing.
+  const { text: summary, usage } = await summarizeDescription(aboutRole, openai, { minLength: 50 });
 
   if (!summary) {
     return NextResponse.json({ error: "Summarization failed. Please try again." }, { status: 500 });
   }
+
+  trackTokens(
+    user.id,
+    "regenerate_description",
+    "gpt-4o-mini",
+    usage?.prompt_tokens ?? 0,
+    usage?.completion_tokens ?? 0,
+  );
 
   const { error: updateError } = await insforge.database
     .from("jobs")

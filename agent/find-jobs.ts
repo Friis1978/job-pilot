@@ -9,6 +9,7 @@ import { searchJobsJooble } from "@/lib/jooble";
 import { searchJobsCareerjet } from "@/lib/careerjet";
 import { searchJobsGlassdoor } from "@/lib/glassdoor";
 import { MATCH_THRESHOLD, stripHtml, computeSkillYears, getLocationAliases, normalizeLocationToEnglish } from "@/lib/utils";
+import { summarizeDescription } from "@/lib/summarize-description";
 import type { Profile, AdzunaJob, NormalizedJob, ScoredJob, PersonalProject } from "@/types";
 
 type ScoringResult = ScoredJob & { job: NormalizedJob };
@@ -210,41 +211,6 @@ export function extractSalaryFromText(text: string): string | null {
     if (match?.[1]) return match[1].trim().replace(/\s+/g, " ");
   }
   return null;
-}
-
-/**
- * Generates a concise 8–10 bullet-point summary of a job description using
- * gpt-4o-mini. Returns `null` for short descriptions (< 500 chars) or on error.
- */
-export async function summarizeDescription(description: string, openai: OpenAI, acc?: TokenAccumulator): Promise<string | null> {
-  if (!description || description.length < 500) return null;
-  try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.3,
-      max_tokens: 700,
-      messages: [
-        {
-          role: "system",
-          content: `Summarize this job description as exactly 8–10 bullet points. Each bullet must be a full, informative sentence — not a fragment. Cover all of these areas (one or two bullets each):
-1. What the company does and its context
-2. What the role is and who it reports to
-3. Key day-to-day responsibilities (2–3 bullets)
-4. Must-have qualifications or experience
-5. Required technical skills or tools
-6. Nice-to-have or preferred skills
-7. What the company offers (culture, benefits, team)
-
-Return only the bullet points, each on its own line starting with "•". No intro, no headers, no trailing text.`,
-        },
-        { role: "user", content: description.slice(0, 5000) },
-      ],
-    });
-    acc?.add(response.usage);
-    return response.choices[0]?.message?.content?.trim() ?? null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -570,7 +536,11 @@ export async function findJobs(
     if (jobsWithUrl.length > 0) {
       // Generate short summaries in parallel — gpt-4o-mini, fast and cheap
       const summaries = await Promise.all(
-        jobsWithUrl.map((r) => summarizeDescription(r.job.description, openai, tokenAcc)),
+        jobsWithUrl.map(async (r) => {
+          const res = await summarizeDescription(r.job.description, openai, { minLength: 500 });
+          tokenAcc.add(res.usage);
+          return res.text;
+        }),
       );
 
       const jobRecords = jobsWithUrl.map((r, i) => ({

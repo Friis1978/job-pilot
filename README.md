@@ -49,6 +49,24 @@ Search Adzuna, JobTech, Jooble, CareerJet, and Glassdoor simultaneously. GPT-4o 
 
 You can also paste any job URL directly to import a posting that didn't appear in search results.
 
+#### Postings keep their own language
+
+Job descriptions are never translated. A Danish posting stays Danish end to end —
+the stored description, the bullet-point summary shown on the job detail page, and
+the generated cover letter.
+
+`lib/detect-language.ts` identifies the language from high-frequency marker words
+(Danish, Swedish, Norwegian, German, Dutch, French, Spanish, English), and every
+generator is told to write in that language. Technical terms, tool names and job
+titles are kept verbatim regardless of language.
+
+Summaries used to come out in English for non-English postings, because
+`summarizeDescription` existed as three near-identical copies whose prompts were
+all English-only. It now lives once in `lib/summarize-description.ts`.
+
+Jobs summarised before this fix still hold their English summary. **Regenerate
+summaries** re-runs them in the original language.
+
 ---
 
 ### Company research

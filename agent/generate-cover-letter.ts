@@ -3,21 +3,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { computeSkillYears } from "@/lib/utils";
-import { detectLanguage } from "@/lib/detect-language";
+import { detectLanguage, LANGUAGE_NAMES } from "@/lib/detect-language";
 import { humanizeText } from "@/agent/humanize-text";
 import type { WorkExperience, PersonalProject } from "@/types";
 import { trackTokens } from "@/lib/track-tokens";
-
-const LANGUAGE_NAMES: Record<string, string> = {
-  da: "Danish",
-  sv: "Swedish",
-  no: "Norwegian",
-  de: "German",
-  nl: "Dutch",
-  fr: "French",
-  es: "Spanish",
-  en: "English",
-};
 
 type SaplingFeedback = { score: number | null; action: string; flaggedSentences: number; sentenceScores: { sentence: string; score: number }[] };
 type Result = { success: boolean; text?: string; error?: string; saplingFeedback?: SaplingFeedback };

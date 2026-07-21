@@ -1,20 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
-import { detectLanguage, LANGUAGE_LABELS } from "@/lib/detect-language";
+import { detectLanguage, LANGUAGE_LABELS, LANGUAGE_NAMES } from "@/lib/detect-language";
 import type { WorkExperience, PersonalProject } from "@/types";
 import { trackTokens } from "@/lib/track-tokens";
-
-const LANGUAGE_NAMES: Record<string, string> = {
-  da: "Danish",
-  sv: "Swedish",
-  no: "Norwegian",
-  de: "German",
-  nl: "Dutch",
-  fr: "French",
-  es: "Spanish",
-  en: "English",
-};
 
 export async function POST(
   _req: NextRequest,

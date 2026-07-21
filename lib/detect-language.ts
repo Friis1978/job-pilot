@@ -33,6 +33,18 @@ export const LANGUAGE_LABELS: Record<string, { category: string; position: strin
   en: { category: "APPLICATION", position: "POSITION" },
 };
 
+/** English names for the supported ISO 639-1 codes, for use inside prompts. */
+export const LANGUAGE_NAMES: Record<string, string> = {
+  da: "Danish",
+  sv: "Swedish",
+  no: "Norwegian",
+  de: "German",
+  nl: "Dutch",
+  fr: "French",
+  es: "Spanish",
+  en: "English",
+};
+
 /**
  * Detects the most likely language of `text` by counting high-frequency
  * marker words for each supported language. Returns an ISO 639-1 code ("da",
@@ -54,4 +66,12 @@ export function detectLanguage(text: string): string {
 
   const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
   return best && best[1] > 0 ? best[0] : "en";
+}
+
+/**
+ * Convenience wrapper returning the English name of the detected language
+ * ("Danish", "German", …) rather than its code. Falls back to "English".
+ */
+export function detectLanguageName(text: string): string {
+  return LANGUAGE_NAMES[detectLanguage(text)] ?? "English";
 }
