@@ -417,27 +417,26 @@ The workflow requires two repository secrets:
 
 | Secret | Description |
 |---|---|
-| `INSFORGE_REFRESH_TOKEN` | InsForge CLI refresh token used to mint a CI access token |
+| `INSFORGE_USER_API_KEY` | `uak_` user API key — authenticates the CLI in CI |
 | `INSFORGE_PROJECT_API_KEY` | Project API key written into `.insforge/project.json` |
 
-### The refresh token expires
+### Why a user API key
 
-`INSFORGE_REFRESH_TOKEN` is not permanent — it lapsed once in July 2026 and every
-deploy failed silently for five days, because a failed workflow looks the same as
-no workflow at a glance. `deployments deploy` needs user-level OAuth, so the
-project API key alone cannot replace it.
+CI previously exchanged an OAuth **refresh token** for an access token. That token
+expired on a ~30-day clock, and in July 2026 every deploy failed silently for five
+days — a failed workflow looks the same as no workflow at a glance.
 
-When the run fails with **InsForge auth failed (HTTP 4xx)**, mint a new one:
+`deployments deploy` requires user-level OAuth, so the project API key alone
+cannot authenticate. A `uak_` user API key (dashboard → **Profile → API Keys**)
+is the credential intended for automation and does not rotate on that clock.
+
+If a run ever fails with **InsForge auth failed**, mint a replacement key in the
+dashboard and update the secret:
 
 ```bash
-npx @insforge/cli login
-python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.insforge/credentials.json')))['refresh_token'],end='')" \
-  | gh secret set INSFORGE_REFRESH_TOKEN
+gh secret set INSFORGE_USER_API_KEY   # paste the new uak_ key
 gh run rerun <failed-run-id>
 ```
-
-A `uak_` user API key (dashboard → Profile → API Keys) used with
-`insforge login --user-api-key` avoids the recurring rotation.
 
 To deploy manually:
 

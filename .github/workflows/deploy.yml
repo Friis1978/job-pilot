@@ -23,48 +23,25 @@ jobs:
 
       - name: Authenticate with InsForge
         env:
-          REFRESH_TOKEN: ${{ secrets.INSFORGE_REFRESH_TOKEN }}
+          USER_API_KEY: ${{ secrets.INSFORGE_USER_API_KEY }}
           PROJECT_API_KEY: ${{ secrets.INSFORGE_PROJECT_API_KEY }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
 
-          if [ -z "${REFRESH_TOKEN:-}" ]; then
-            echo "::error title=Missing secret::INSFORGE_REFRESH_TOKEN is not set on this repository."
+          # A uak_ user API key is the CI-intended credential. It replaces the
+          # OAuth refresh-token exchange that used to live here, which expired on
+          # a ~30-day clock and broke every deploy until someone noticed.
+          if [ -z "${USER_API_KEY:-}" ]; then
+            echo "::error title=Missing secret::INSFORGE_USER_API_KEY is not set on this repository."
             exit 1
           fi
 
-          # Capture the status separately: `curl -f` collapses every failure into
-          # exit 22, which is what made the previous breakage unreadable.
-          HTTP=$(curl -s -o /tmp/insforge-token.json -w '%{http_code}' \
-            -X POST https://api.insforge.dev/api/oauth/v1/token \
-            -H 'Content-Type: application/json' \
-            -d "{\"grant_type\":\"refresh_token\",\"refresh_token\":\"${REFRESH_TOKEN}\",\"client_id\":\"clf_NK8cMUs41gm8ZcfdtSguVw\"}" \
-            || echo "000")
-
-          if [ "$HTTP" != "200" ]; then
-            echo "::error title=InsForge auth failed (HTTP ${HTTP})::INSFORGE_REFRESH_TOKEN is invalid or expired. Fix it by running 'npx @insforge/cli login' locally, then: python3 -c \"import json,os;print(json.load(open(os.path.expanduser('~/.insforge/credentials.json')))['refresh_token'],end='')\" | gh secret set INSFORGE_REFRESH_TOKEN"
+          if ! npx @insforge/cli@latest login --user-api-key "$USER_API_KEY"; then
+            echo "::error title=InsForge auth failed::INSFORGE_USER_API_KEY was rejected. Create a replacement in the InsForge dashboard (Profile -> API Keys), then: gh secret set INSFORGE_USER_API_KEY"
             exit 1
           fi
 
-          ACCESS=$(jq -r '.access_token // empty' /tmp/insforge-token.json)
-          if [ -z "$ACCESS" ]; then
-            echo "::error title=InsForge auth failed::Token endpoint returned 200 but no access_token was present."
-            exit 1
-          fi
-          echo "::add-mask::$ACCESS"
-
-          mkdir -p ~/.insforge .insforge
-
-          jq -n --arg a "$ACCESS" --arg r "$REFRESH_TOKEN" '{
-            access_token: $a,
-            refresh_token: $r,
-            user: {
-              id: "02b1818c-96bb-4558-a914-0880c8ff955a",
-              email: "friis1978@gmail.com",
-              email_verified: true
-            }
-          }' > ~/.insforge/credentials.json
-
+          mkdir -p .insforge
           jq -n --arg k "$PROJECT_API_KEY" '{
             project_id: "cc5c166d-a938-43d9-b453-e5fc17a9fd7b",
             project_name: "Job-pilot",
@@ -74,8 +51,6 @@ jobs:
             oss_host: "https://8kj4iaqv.eu-central.insforge.app",
             api_key: $k
           }' > .insforge/project.json
-
-          rm -f /tmp/insforge-token.json
 
       - name: Deploy
         run: npx @insforge/cli@latest deployments deploy .
