@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 type Payment = {
@@ -14,6 +14,17 @@ export function PaymentClient({ creditBalance, payments }: { creditBalance: numb
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isLow = creditBalance < 2;
+
+  // The proxy gates every protected route on the jp_has_credit cookie, which
+  // expires after 7 days. Once it lapses the proxy bounces the user here even
+  // though they have credit, so re-stamp it from the route handler (the only
+  // place Next allows a cookie write) whenever this page loads with a balance.
+  useEffect(() => {
+    if (creditBalance <= 0) return;
+    fetch("/api/payment/activate", { method: "POST" }).catch(() => {
+      // Non-fatal: the balance still renders, the user just stays gated.
+    });
+  }, [creditBalance]);
 
   async function handlePay() {
     setLoading(true);

@@ -40,6 +40,17 @@ export async function proxy(request: NextRequest) {
     },
   });
 
+  // Any early return must carry the refreshed cookies, or the rotated refresh
+  // token is consumed and then thrown away — logging the user out on the next
+  // request. Route every redirect through this.
+  const withRefreshedCookies = (response: NextResponse) => {
+    tempResponse.cookies.getAll().forEach((c) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      response.cookies.set(c as any);
+    });
+    return response;
+  };
+
   const isProtected = PROTECTED_PATHS.some((path) =>
     pathname.startsWith(path),
   );
@@ -49,19 +60,19 @@ export async function proxy(request: NextRequest) {
 
   // Redirect unauthenticated users away from protected and admin routes
   if ((isProtected || isAdminPath) && !accessToken) {
-    return NextResponse.redirect(new URL("/", request.url));
+    return withRefreshedCookies(NextResponse.redirect(new URL("/", request.url)));
   }
 
   // Authenticated but not yet approved — redirect to waiting page
   if (isProtected && accessToken) {
     const isApproved = request.cookies.get("jp_approved")?.value === "1";
     if (!isApproved) {
-      return NextResponse.redirect(new URL("/pending", request.url));
+      return withRefreshedCookies(NextResponse.redirect(new URL("/pending", request.url)));
     }
     // Approved but no credit — redirect to payment page (allow /payment itself through)
     const hasCredit = request.cookies.get("jp_has_credit")?.value === "1";
     if (!hasCredit && !pathname.startsWith("/payment")) {
-      return NextResponse.redirect(new URL("/payment", request.url));
+      return withRefreshedCookies(NextResponse.redirect(new URL("/payment", request.url)));
     }
   }
 
@@ -69,17 +80,17 @@ export async function proxy(request: NextRequest) {
   if (isAdminPath && accessToken) {
     const isAdminUser = request.cookies.get("jp_admin")?.value === "1";
     if (!isAdminUser) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      return withRefreshedCookies(NextResponse.redirect(new URL("/dashboard", request.url)));
     }
   }
 
   if (pathname === "/auth/login" && accessToken) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return withRefreshedCookies(NextResponse.redirect(new URL("/dashboard", request.url)));
   }
 
   // Redirect logged-in users away from the marketing homepage
   if (pathname === "/" && accessToken) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return withRefreshedCookies(NextResponse.redirect(new URL("/dashboard", request.url)));
   }
 
   // Forward the valid access token to API route handlers via a custom header.
@@ -91,15 +102,10 @@ export async function proxy(request: NextRequest) {
     requestHeaders.set("x-insforge-access-token", accessToken);
   }
 
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
-
   // Copy any refreshed cookies onto the final response so the browser receives them.
-  tempResponse.cookies.getAll().forEach((c) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    response.cookies.set(c as any);
-  });
-
-  return response;
+  return withRefreshedCookies(
+    NextResponse.next({ request: { headers: requestHeaders } }),
+  );
 }
 
 export const config = {
@@ -108,6 +114,7 @@ export const config = {
     "/dashboard/:path*",
     "/profile/:path*",
     "/find-jobs/:path*",
+    "/payment/:path*",
     "/admin/:path*",
     "/auth/login",
     "/api/:path*",

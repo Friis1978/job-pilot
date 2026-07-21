@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { Navbar } from "@/components/layout/Navbar";
@@ -42,17 +41,10 @@ export default async function PaymentPage() {
 
   const creditBalance = profile?.credit_balance_usd != null ? Number(profile.credit_balance_usd) : 0;
 
-  // If the user already has credit, stamp the cookie so the proxy lets them navigate away.
-  if (creditBalance > 0) {
-    const jar = await cookies();
-    jar.set("jp_has_credit", "1", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    });
-  }
+  // The jp_has_credit cookie cannot be stamped here — Next only permits cookie
+  // writes in a Server Action or Route Handler, and doing it in this Server
+  // Component threw a runtime error that blanked the whole page. PaymentClient
+  // syncs it via POST /api/payment/activate instead.
 
   return (
     <>
