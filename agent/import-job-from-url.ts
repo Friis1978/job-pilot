@@ -307,7 +307,7 @@ If title or company cannot be determined, return them as empty strings.`,
     ...job,
     description: deduplicatedText.slice(0, 8000),
   };
-  const scored = await scoreJob(jobForScoring, profile, openai, "", tokenAcc);
+  const scored = await scoreJob(jobForScoring, profile, openai, tokenAcc);
   if (!scored) {
     await posthog.shutdown();
     return { success: false, error: "Scoring failed. Please try again." };

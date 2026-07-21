@@ -20,7 +20,7 @@ export async function POST(
   // Load job
   const { data: jobData, error: jobError } = await insforge.database
     .from("jobs")
-    .select("id, title, company, location, about_role")
+    .select("id, title, company, location, about_role, full_post_text")
     .eq("id", id)
     .eq("user_id", user.id)
     .single();
@@ -50,7 +50,13 @@ export async function POST(
       title: jobData.title,
       company: jobData.company,
       location: jobData.location ?? null,
-      description: jobData.about_role ?? "",
+      // full_post_text is the text the job was originally scored against.
+      // about_role is a GPT-extracted, shortened version, so scoring from it
+      // produced a different skill list than the first run — the rescore was
+      // reading different source material, not just resampling the model.
+      // `||` not `??`: 72 existing rows have a NULL full_post_text and an empty
+      // string must fall back too, or the job gets scored against no text at all.
+      description: (jobData.full_post_text as string | null) || jobData.about_role || "",
       url: "",
       salary: null,
       job_type: null,
@@ -58,7 +64,6 @@ export async function POST(
     },
     profile,
     openai,
-    "", // use profile's remote_preference + preferred_locations, not job's location
   );
 
   if (!scored) {

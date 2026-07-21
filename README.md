@@ -356,6 +356,25 @@ See [`context/app-map.md`](context/app-map.md) for a full reference of every rou
 3. Jobs appear in the table sorted by match score with matched and missing skills
 4. Click any row to open the full job detail page
 
+### Scoring and rescoring
+
+Scoring is deliberately reproducible: rescoring an unchanged job against an
+unchanged profile returns the same match breakdown.
+
+- The model runs at `temperature: 0` with a fixed seed. Skill matching is an
+  extraction task with one right answer, not a creative one.
+- Rescoring reads `full_post_text` — the text the job was originally scored
+  against. It previously read `about_role`, a GPT-extracted shortened version,
+  so a rescore silently graded a different document (~1,000 characters shorter
+  on average for URL-imported jobs) and returned a different skill list.
+- Location rules always come from your **profile** preferences, never from the
+  location typed into a search. Search once applied a stricter rule that zeroed
+  any off-location job, which made first-run and rescore results disagree. The
+  job-board APIs are already location-filtered, so this rule is a backstop.
+
+Jobs imported before these fields existed may have little or no stored posting
+text; rescoring those cannot recover a meaningful breakdown.
+
 ### Company research
 1. Open a job's detail page and click **Research Company**
 2. The agent fetches the company's public website over HTTP (homepage, About, Engineering/Blog pages), also searches DuckDuckGo for the job posting to find contact details, and synthesises a structured dossier

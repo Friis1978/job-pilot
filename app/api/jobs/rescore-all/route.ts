@@ -14,7 +14,7 @@ export async function POST() {
 
   const { data: jobs, error: jobsError } = await insforge.database
     .from("jobs")
-    .select("id, title, company, location, about_role")
+    .select("id, title, company, location, about_role, full_post_text")
     .eq("user_id", user.id)
     .not("about_role", "is", null);
 
@@ -51,7 +51,9 @@ export async function POST() {
           title: job.title,
           company: job.company,
           location: job.location ?? null,
-          description: job.about_role ?? "",
+          // Score against the same text the job was first scored on — see the
+          // note in app/api/jobs/[id]/rescore/route.ts.
+          description: (job.full_post_text as string | null) || job.about_role || "",
           url: "",
           salary: null,
           job_type: null,
@@ -59,7 +61,6 @@ export async function POST() {
         },
         profile,
         openai,
-        "",  // use profile's remote_preference + preferred_locations, not job's location
       );
 
       if (!scored) { failed++; continue; }

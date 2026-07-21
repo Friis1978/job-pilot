@@ -250,43 +250,43 @@ Return only the bullet points, each on its own line starting with "•". No intr
 /**
  * Scores a job against the candidate's profile using gpt-4o, returning a
  * 0–100 match score, a plain-English reason, matched skills, and missing skills.
- * Location rules are derived from `searchedLocation`; when empty the candidate's
- * profile preferences are used instead. Returns `null` on parse/API failure.
- * @param searchedLocation The explicit location the user searched for (pass empty string to fall back to profile preferences).
+ * Returns `null` on parse/API failure.
+ *
+ * Location rules come from the candidate's profile preferences, never from the
+ * location typed into a search. Searching used to apply a stricter rule that
+ * zeroed any off-location job, so the same job scored differently on first run
+ * than on rescore. The search APIs are already location-filtered, so this rule
+ * is a secondary signal and one consistent version of it is worth more than two.
  */
 export async function scoreJob(
   job: NormalizedJob,
   profile: Profile,
   openai: OpenAI,
-  searchedLocation: string,
   acc?: TokenAccumulator,
 ): Promise<ScoringResult | null> {
-  const isRemoteSearch = /^remote$/i.test(searchedLocation.trim());
   let locationRule: string;
-  if (searchedLocation) {
-    locationRule = isRemoteSearch
-      ? `- Location rule: The candidate is specifically looking for remote jobs. If the job does not explicitly offer remote work, set matchScore to 0.`
-      : `- Location rule: The candidate is searching for onsite jobs in "${searchedLocation}". If the job location does not match this location, set matchScore to 0 — this includes fully remote jobs, which do not satisfy an onsite location search.`;
+  const pref = profile.remote_preference?.toLowerCase();
+  const locs = profile.preferred_locations?.filter(Boolean) ?? [];
+  if (pref === "remote") {
+    locationRule = `- Location rule: The candidate strongly prefers fully remote work. If the job is onsite-only with no remote option, cap matchScore at 30. If the job is hybrid or remote-friendly, no penalty.`;
+  } else if (pref === "onsite" && locs.length > 0) {
+    locationRule = `- Location rule: The candidate strongly prefers onsite work in or near ${locs.map((l) => `"${l}"`).join(" or ")} (including suburbs and towns within commuting distance, e.g. towns in the greater ${locs[0]} metropolitan area). If the job is in a completely different region or country — clearly not within daily commuting distance of ${locs.join(", ")} — cap matchScore at 35. If the job is fully remote with no onsite option near the candidate's preferred location, cap matchScore at 40. Do NOT penalise jobs in nearby towns or suburbs.`;
+  } else if (pref === "hybrid" && locs.length > 0) {
+    locationRule = `- Location rule: The candidate prefers hybrid work in or near ${locs.map((l) => `"${l}"`).join(" or ")} (including suburbs and towns within commuting distance). If the job is onsite-only in a completely different region or country, cap matchScore at 40. Fully remote jobs are acceptable. Hybrid or remote jobs near ${locs.join(" or ")} are ideal.`;
   } else {
-    // No search location — fall back to profile preferences
-    const pref = profile.remote_preference?.toLowerCase();
-    const locs = profile.preferred_locations?.filter(Boolean) ?? [];
-    if (pref === "remote") {
-      locationRule = `- Location rule: The candidate strongly prefers fully remote work. If the job is onsite-only with no remote option, cap matchScore at 30. If the job is hybrid or remote-friendly, no penalty.`;
-    } else if (pref === "onsite" && locs.length > 0) {
-      locationRule = `- Location rule: The candidate strongly prefers onsite work in or near ${locs.map((l) => `"${l}"`).join(" or ")} (including suburbs and towns within commuting distance, e.g. towns in the greater ${locs[0]} metropolitan area). If the job is in a completely different region or country — clearly not within daily commuting distance of ${locs.join(", ")} — cap matchScore at 35. If the job is fully remote with no onsite option near the candidate's preferred location, cap matchScore at 40. Do NOT penalise jobs in nearby towns or suburbs.`;
-    } else if (pref === "hybrid" && locs.length > 0) {
-      locationRule = `- Location rule: The candidate prefers hybrid work in or near ${locs.map((l) => `"${l}"`).join(" or ")} (including suburbs and towns within commuting distance). If the job is onsite-only in a completely different region or country, cap matchScore at 40. Fully remote jobs are acceptable. Hybrid or remote jobs near ${locs.join(" or ")} are ideal.`;
-    } else {
-      locationRule = "";
-    }
+    locationRule = "";
   }
 
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       response_format: { type: "json_object" },
-      temperature: 0.3,
+      // Scoring must be reproducible: rescoring an unchanged job against an
+      // unchanged profile previously returned a different matchedSkills list
+      // each time, because temperature 0.3 resampled the answer. Skill matching
+      // is an extraction task with one right answer, not a creative one.
+      temperature: 0,
+      seed: 1,
       max_tokens: 500,
       messages: [
         {
@@ -535,7 +535,7 @@ export async function findJobs(
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const tokenAcc = new TokenAccumulator();
     const scoringResults = await Promise.all(
-      enrichedJobs.map((job) => scoreJob(job, profile, openai, location, tokenAcc)),
+      enrichedJobs.map((job) => scoreJob(job, profile, openai, tokenAcc)),
     );
 
     const allQualifying = scoringResults.filter(
