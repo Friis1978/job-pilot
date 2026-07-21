@@ -406,12 +406,38 @@ Admins see an **Admin** link in the navbar and can access `/admin` to approve or
 ## Deployment
 
 Deploys automatically to InsForge on every push to `main` via GitHub Actions.
+The workflow can also be run on demand from the Actions tab (**Run workflow**)
+without pushing an empty commit.
 
-The workflow requires one repository secret:
+After deploying, the workflow polls `https://devjob.info/` until it returns 200,
+so a deployment that builds but does not serve fails the run rather than passing
+quietly.
+
+The workflow requires two repository secrets:
 
 | Secret | Description |
 |---|---|
-| `INSFORGE_REFRESH_TOKEN` | InsForge CLI refresh token for CI authentication |
+| `INSFORGE_REFRESH_TOKEN` | InsForge CLI refresh token used to mint a CI access token |
+| `INSFORGE_PROJECT_API_KEY` | Project API key written into `.insforge/project.json` |
+
+### The refresh token expires
+
+`INSFORGE_REFRESH_TOKEN` is not permanent — it lapsed once in July 2026 and every
+deploy failed silently for five days, because a failed workflow looks the same as
+no workflow at a glance. `deployments deploy` needs user-level OAuth, so the
+project API key alone cannot replace it.
+
+When the run fails with **InsForge auth failed (HTTP 4xx)**, mint a new one:
+
+```bash
+npx @insforge/cli login
+python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.insforge/credentials.json')))['refresh_token'],end='')" \
+  | gh secret set INSFORGE_REFRESH_TOKEN
+gh run rerun <failed-run-id>
+```
+
+A `uak_` user API key (dashboard → Profile → API Keys) used with
+`insforge login --user-api-key` avoids the recurring rotation.
 
 To deploy manually:
 
