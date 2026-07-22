@@ -482,7 +482,7 @@ export function CoverLetterSection({ jobId, initialCoverLetter, initialHumanized
               <div>
                 <span className="font-medium text-text-secondary">AI detection: </span>
                 {saplingFeedback.score === null
-                  ? "Sapling unavailable — GPT-4o aggressive rewrite applied as fallback."
+                  ? "Sapling unavailable — aggressive rewrite applied as fallback."
                   : saplingFeedback.action === "skipped"
                     ? `Score ${Math.round(saplingFeedback.score * 100)}% — reads as human, no rewrite needed.`
                     : saplingFeedback.action === "aggressive"

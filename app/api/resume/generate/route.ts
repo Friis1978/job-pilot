@@ -1,7 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { NextResponse, type NextRequest } from "next/server";
 import { renderToBuffer } from "@react-pdf/renderer";
-import Anthropic from "@anthropic-ai/sdk";
+import { completeJson } from "@/lib/ai/claude";
 import { createElement, type ReactElement } from "react";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { computeSkillYears, computeTotalYearsExperience } from "@/lib/utils";
@@ -9,6 +9,7 @@ import { ResumePDF } from "../ResumePDF";
 import type { Profile, PersonalProject, LinkedInRecommendation } from "@/types";
 import type { DocumentProps } from "@react-pdf/renderer";
 import { trackTokens } from "@/lib/track-tokens";
+import { keyGuard } from "@/lib/ai/key-guard";
 
 const SYSTEM_PROMPT = `You are a professional resume writer. Given a candidate's profile data, return ONLY valid JSON with this exact shape:
 
@@ -80,6 +81,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
     const userId = authData.user.id;
 
+    const keyBlocked = await keyGuard(userId);
+    if (keyBlocked) return keyBlocked;
+
     const { data: profileData, error: profileError } = await insforge.database
       .from("profiles")
       .select("*")
@@ -118,8 +122,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
     const profileInput = {
       fullName: profile.full_name,
       currentTitle: profile.current_title,
@@ -142,34 +144,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ? `\n\nCANDIDATE WRITING STYLE (apply to the summary only — do NOT apply to bullets or skill groups):\n${customInstructions}`
       : "";
 
-    const MODEL = "claude-sonnet-4-6";
-    const response = await anthropic.messages.create({
-      model: MODEL,
+    const { data: generated, usage, model } = await completeJson<GeneratedContent>({
+      userId,
       system: `${SYSTEM_PROMPT}\n\n${RESUME_CRITICAL_REMINDER}${summaryStyleNote}`,
-      temperature: 0.6,
-      max_tokens: 1800,
-      messages: [
-        {
-          role: "user",
-          content: `Generate a professional resume for this candidate:\n\n${JSON.stringify(profileInput, null, 2)}`,
-        },
-      ],
+      maxTokens: 1800,
+      effort: "medium",
+      user: `Generate a professional resume for this candidate:\n\n${JSON.stringify(profileInput, null, 2)}`,
     });
 
-    const rawText = response.content[0]?.type === "text" ? response.content[0].text : null;
-    const raw = rawText?.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim() ?? null;
-    trackTokens(userId, "resume_generate", MODEL, response.usage.input_tokens, response.usage.output_tokens);
-    if (!raw) {
-      return NextResponse.json(
-        { error: "Generation failed. Please try again." },
-        { status: 500 },
-      );
-    }
-
-    let generated: GeneratedContent;
-    try {
-      generated = JSON.parse(raw) as GeneratedContent;
-    } catch {
+    trackTokens(userId, "resume_generate", model, usage.input_tokens, usage.output_tokens);
+    if (!generated) {
       return NextResponse.json(
         { error: "Generation failed. Please try again." },
         { status: 500 },

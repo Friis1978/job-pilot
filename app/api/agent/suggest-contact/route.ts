@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { suggestBestContact } from "@/agent/suggest-contact";
 import type { Connection } from "@/types";
+import { keyGuard } from "@/lib/ai/key-guard";
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,6 +19,9 @@ export async function POST(req: NextRequest) {
     const insforge = await createInsforgeServer();
     const { data: { user } } = await insforge.auth.getCurrentUser();
     if (!user) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+
+    const keyBlocked = await keyGuard(user.id);
+    if (keyBlocked) return keyBlocked;
 
     const { data: profileData } = await insforge.database
       .from("profiles")

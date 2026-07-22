@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
+import type Anthropic from "@anthropic-ai/sdk";
+import { completeJson } from "@/lib/ai/claude";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { detectLanguage, LANGUAGE_LABELS, LANGUAGE_NAMES } from "@/lib/detect-language";
 import type { WorkExperience, PersonalProject } from "@/types";
 import { trackTokens } from "@/lib/track-tokens";
+import { keyGuard } from "@/lib/ai/key-guard";
 
 export async function POST(
   _req: NextRequest,
@@ -17,6 +19,9 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const userId = authData.user.id;
+
+    const keyBlocked = await keyGuard(userId);
+    if (keyBlocked) return keyBlocked;
 
     const [jobRes, profileRes] = await Promise.all([
       insforge.database
@@ -66,8 +71,6 @@ export async function POST(
       ? `\nCOMPANY RESEARCH:\n${JSON.stringify(job.company_research, null, 2)}`
       : "";
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
     const FORBIDDEN = `"passion", "excited", "excites", "resonates", "inspires", "thrive", "seamlessly", "empowering", "leverage", "transformative", "aligns perfectly", "real value", "deliver value", "appreciate the intricacies", "unique combination", "In my professional journey", "perfect opportunity", "dream role", "thrilled"`;
 
     const greeting = language === "Danish" ? "Hej [Company name]," : "Hi [Company name],";
@@ -112,8 +115,7 @@ Skills: ${(profile.skills as string[] | null)?.join(", ") ?? "Not provided"}
 Work history:
 ${workHistory || "Not provided"}${personalProjects.length > 0 ? `\nPersonal projects: ${personalProjects.map((p: PersonalProject) => `${p.name}${p.description ? ` — ${p.description}` : ""}`).join("; ")}` : ""}`;
 
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: "system", content: systemPrompt },
+    const messages: Anthropic.MessageParam[] = [
       ...(coverLetterExamples.length > 0 ? [{
         role: "user" as const,
         content: `Voice reference — mirror the sentence rhythm and directness of these examples. Do not copy content:\n\n${coverLetterExamples.map((ex: string, i: number) => `--- Example ${i + 1} ---\n${ex.trim()}`).join("\n\n")}`,
@@ -121,24 +123,18 @@ ${workHistory || "Not provided"}${personalProjects.length > 0 ? `\nPersonal proj
       { role: "user", content: candidateData },
     ];
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      response_format: { type: "json_object" },
-      temperature: 0.4,
-      max_tokens: 600,
+    const { data: parsed, usage, model } = await completeJson<{
+      greeting?: string; intro?: string; achievement?: string; fit?: string; closing?: string;
+    }>({
+      userId,
+      maxTokens: 600,
+      effort: "medium",
+      system: systemPrompt,
       messages,
     });
 
-    const rawJson = response.choices[0]?.message?.content?.trim();
-    trackTokens(userId, "tailored_cover_letter", "gpt-4o", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
-    if (!rawJson) {
-      return NextResponse.json({ error: "Failed to generate cover letter. Please try again." }, { status: 500 });
-    }
-
-    let parsed: { greeting?: string; intro?: string; achievement?: string; fit?: string; closing?: string };
-    try {
-      parsed = JSON.parse(rawJson);
-    } catch {
+    trackTokens(userId, "tailored_cover_letter", model, usage.input_tokens, usage.output_tokens);
+    if (!parsed) {
       return NextResponse.json({ error: "Failed to generate cover letter. Please try again." }, { status: 500 });
     }
 

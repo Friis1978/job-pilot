@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { researchCompany } from "@/agent/research-company";
+import { keyGuard } from "@/lib/ai/key-guard";
 
 export const maxDuration = 300;
 
@@ -14,6 +15,9 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const keyBlocked = await keyGuard(user.id);
+    if (keyBlocked) return keyBlocked;
 
     const body = await req.json();
     const jobId =

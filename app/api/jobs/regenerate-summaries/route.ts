@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
+import { isClaudeConfigured } from "@/lib/ai/claude";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { TokenAccumulator } from "@/lib/track-tokens";
 import { summarizeDescription } from "@/lib/summarize-description";
+import { keyGuard } from "@/lib/ai/key-guard";
 
 export async function POST(): Promise<NextResponse> {
   try {
@@ -13,8 +14,11 @@ export async function POST(): Promise<NextResponse> {
     }
     const userId = authData.user.id;
 
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: "OpenAI not configured" }, { status: 503 });
+    const keyBlocked = await keyGuard(userId);
+    if (keyBlocked) return keyBlocked;
+
+    if (!isClaudeConfigured()) {
+      return NextResponse.json({ error: "AI is not configured" }, { status: 503 });
     }
 
     const { data: jobs, error } = await insforge.database
@@ -27,7 +31,6 @@ export async function POST(): Promise<NextResponse> {
       return NextResponse.json({ error: "Failed to fetch jobs" }, { status: 500 });
     }
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const accumulator = new TokenAccumulator();
 
     // Process in batches of 5 to avoid rate limits
@@ -37,13 +40,13 @@ export async function POST(): Promise<NextResponse> {
     for (let i = 0; i < jobs.length; i += BATCH_SIZE) {
       const batch = jobs.slice(i, i + BATCH_SIZE);
       const results = await Promise.all(
-        batch.map((job) => summarizeDescription(job.about_role as string, openai)),
+        batch.map((job) => summarizeDescription(job.about_role as string, userId)),
       );
 
       await Promise.all(
         batch.map((job, idx) => {
-          const { text, usage } = results[idx];
-          accumulator.add(usage ?? undefined);
+          const { text, usage, model } = results[idx];
+          accumulator.add(usage ?? undefined, model);
           if (!text) return Promise.resolve();
           return insforge.database
             .from("jobs")
@@ -56,7 +59,7 @@ export async function POST(): Promise<NextResponse> {
       updated += batch.filter((_, idx) => results[idx].text !== null).length;
     }
 
-    accumulator.flush(userId, "regenerate_summaries", "gpt-4o-mini");
+    accumulator.flush(userId, "regenerate_summaries");
 
     return NextResponse.json({ success: true, updated, total: jobs.length });
   } catch (err) {

@@ -246,7 +246,7 @@ const jobRecord = {
 - Never pass `where` if location is empty — omit the parameter entirely
 - `source` is always `'search'` for Adzuna jobs — never any other value
 - `salary_is_predicted: "1"` means Adzuna estimated the salary — this is normal
-- Adzuna description is a snippet — GPT-4o scores from it, not a full description
+- Adzuna description is a snippet — Claude scores from it, not a full description
 - Default country to `'us'` — support `gb`, `au`, `ca` as alternatives
 
 ---
@@ -486,54 +486,65 @@ const response = await openai.chat.completions.create({
 - If browser research returns empty — still run synthesis with job + profile only
 - yourEdge, gapsToAddress, and smartQuestions are the most valuable fields — never skip them
 
-## OpenAI GPT-4o
+## Claude (Anthropic)
 
-**Check first:** Check AGENTS.md for an installed OpenAI skill. The skill will have the latest API patterns and model capabilities.
+**Check first:** load the `claude-api` skill before writing or changing any
+Claude call — it carries the current API shape, which has drifted (see the
+rules below for two changes that bite immediately).
 
-### Structured JSON Response
+**Never construct an Anthropic client outside `lib/ai/claude.ts`.** Every AI
+call in the app goes through that module so a model change is one line.
+
+### Structured JSON response
 
 ```typescript
-import OpenAI from "openai";
+import { completeJson, MODEL_SMART } from "@/lib/ai/claude";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
-
-const response = await openai.chat.completions.create({
-  model: "gpt-4o",
-  response_format: { type: "json_object" },
-  temperature: 0.3,
-  messages: [
-    {
-      role: "system",
-      content: "You are a job matching assistant. Return only valid JSON.",
-    },
-    {
-      role: "user",
-      content: `Your prompt here`,
-    },
-  ],
+const { data, usage, model } = await completeJson<ScoredJob>({
+  model: MODEL_SMART,          // optional — MODEL_SMART is the default
+  maxTokens: 500,
+  effort: "low",               // "low" | "medium" | "high"
+  schema: SCORE_SCHEMA,        // constrains the response at the API level
+  system: "You are a job matching assistant.",
+  user: promptText,
 });
 
-const result = JSON.parse(response.choices[0].message.content!);
+if (!data) return null;        // null means the response would not parse
+acc.add(usage, model);         // usage is billed per model, per user
 ```
 
-**Temperature settings:**
+`complete()` is the same call for plain text, returning `{ text, usage, model }`.
 
-- `0.3` — matching, scoring, extraction, research synthesis — deterministic results
-- `0.7` — resume generation — natural variation
+### Model tiers
 
-**Max tokens:**
+| Constant | Model | Used for |
+| --- | --- | --- |
+| `MODEL_SMART` | `claude-sonnet-5` | Scoring, cover letters, resumes, research, extraction |
+| `MODEL_FAST` | `claude-haiku-4-5` | Summaries, translation, targeted sentence rewrites |
 
-- Job matching + scoring: `300`
-- Company research synthesis: `800`
-- Resume generation: `1000`
-- Profile extraction from resume: `800`
+**Max tokens** (Anthropic requires the field — there is no default):
+
+- Job scoring: `500`
+- Company research extraction: `100`–`1000` depending on the page
+- Resume / tailored resume generation: `1500`–`1800`
+- Description summary: `700`
 
 **Rules:**
 
-- Model string is always `'gpt-4o'` — never use other model names
-- Always use `response_format: { type: 'json_object' }` for structured data
-- Always parse `response.choices[0].message.content` as string — even with json_object it returns a string
-- Always validate parsed JSON before using — wrap in try/catch
+- Never pass `temperature`, `top_p`, `top_k` — Sonnet 5 rejects them with a 400
+  (`temperature is deprecated for this model`). Steer with the prompt and
+  `effort` instead.
+- Never rely on the model's default thinking mode — it differs by model, and
+  thinking tokens count against `max_tokens`. The helper always sends `thinking`
+  explicitly; pass `thinking: true` only when the task needs it.
+- `effort` is not universal — Haiku 4.5 returns 400 for it. The helper strips it
+  for models that do not accept it, so callers can always pass a hint.
+- Prefer a `schema` over asking for JSON in the prompt. Objects need
+  `additionalProperties: false` and a `required` array listing every key.
+- Never call `JSON.parse` on a model response directly — `completeJson` already
+  strips code fences and falls back to the outermost braces.
+- Always attribute usage with `trackTokens(...)` or `TokenAccumulator.add(usage,
+  model)` — spend is shown per user in the admin table.
 - Match threshold is always `MATCH_THRESHOLD` from `lib/utils.ts` — never hardcode 70
 - Company research synthesis must always return a complete dossier — never return empty even if browser research failed
 

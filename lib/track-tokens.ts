@@ -1,15 +1,21 @@
 import { getPostHogClient } from "@/lib/posthog-server";
-import type OpenAI from "openai";
+import type { ClaudeUsage } from "@/lib/ai/claude";
 
-type ModelType = "gpt-4o" | "gpt-4o-mini" | "claude-sonnet-4-6" | "claude-opus-4-8" | "claude-haiku-4-5" | string;
+type ModelType = "claude-sonnet-5" | "claude-opus-4-8" | "claude-haiku-4-5" | string;
 
-// Prices per 1 000 tokens (input / output)
+// Prices per 1 000 tokens (input / output).
+//
+// The gpt-4o and gpt-4o-mini rows are gone with the last OpenAI call site.
+// Historical token_usage rows keep the cost that was calculated at the time,
+// so removing the rates does not disturb past spend.
+// Sonnet 5 is listed at its standard rate, not the lower introductory rate that
+// runs to 2026-08-31. Billing the intro rate would silently start undercharging
+// the moment it lapses, and a small overcharge is the safer side of that.
 const PRICING: Record<string, { input: number; output: number }> = {
-  "gpt-4o":            { input: 0.005,    output: 0.015  },
-  "gpt-4o-mini":       { input: 0.00015,  output: 0.0006 },
+  "claude-sonnet-5":   { input: 0.003,    output: 0.015  },
+  "claude-opus-4-8":   { input: 0.005,    output: 0.025  },
   "claude-sonnet-4-6": { input: 0.003,    output: 0.015  },
-  "claude-opus-4-8":   { input: 0.015,    output: 0.075  },
-  "claude-haiku-4-5":  { input: 0.0008,   output: 0.004  },
+  "claude-haiku-4-5":  { input: 0.001,    output: 0.005  },
 };
 
 // Fire-and-forget — does not need to be awaited.
@@ -21,7 +27,9 @@ export function trackTokens(
   completionTokens: number,
 ) {
   if (!userId || (!promptTokens && !completionTokens)) return;
-  const pricing = PRICING[model] ?? PRICING["gpt-4o"];
+  // Unknown model: bill at the most expensive tier rather than silently at
+  // zero, so an untracked model shows up as cost instead of free usage.
+  const pricing = PRICING[model] ?? PRICING["claude-opus-4-8"];
   const costUsd =
     promptTokens * (pricing.input / 1000) +
     completionTokens * (pricing.output / 1000);
@@ -41,7 +49,7 @@ export function trackTokens(
   });
   void posthog.shutdown();
 
-  // Record usage — trigger on token_usage recomputes credit_balance_usd automatically
+  // Record usage — feeds the per-user token usage view and the admin table
   if (costUsd > 0) {
     const anonKey = process.env.NEXT_PUBLIC_INSFORGE_ANON_KEY!;
     void fetch(`${process.env.NEXT_PUBLIC_INSFORGE_URL}/api/database/rpc/insert_token_usage`, {
@@ -63,24 +71,27 @@ export function trackTokens(
   }
 }
 
-// Helper to sum usage across multiple completions.
+/**
+ * Sums usage across the many completions that make up one user-visible action.
+ *
+ * Totals are kept per model. A single action mixes tiers — a job search scores
+ * on the smart model and summarises on the fast one — and flushing the combined
+ * total under one model name billed every summary token at the scoring rate.
+ */
 export class TokenAccumulator {
-  promptTokens = 0;
-  completionTokens = 0;
+  private byModel = new Map<string, { prompt: number; completion: number }>();
 
-  // OpenAI usage (prompt_tokens / completion_tokens)
-  add(usage: OpenAI.CompletionUsage | null | undefined) {
-    this.promptTokens += usage?.prompt_tokens ?? 0;
-    this.completionTokens += usage?.completion_tokens ?? 0;
+  add(usage: ClaudeUsage | null | undefined, model: ModelType) {
+    if (!usage) return;
+    const entry = this.byModel.get(model) ?? { prompt: 0, completion: 0 };
+    entry.prompt += usage.input_tokens ?? 0;
+    entry.completion += usage.output_tokens ?? 0;
+    this.byModel.set(model, entry);
   }
 
-  // Anthropic usage (input_tokens / output_tokens)
-  addAnthropic(usage: { input_tokens: number; output_tokens: number } | null | undefined) {
-    this.promptTokens += usage?.input_tokens ?? 0;
-    this.completionTokens += usage?.output_tokens ?? 0;
-  }
-
-  flush(userId: string, feature: string, model: ModelType) {
-    trackTokens(userId, feature, model, this.promptTokens, this.completionTokens);
+  flush(userId: string, feature: string) {
+    for (const [model, { prompt, completion }] of this.byModel) {
+      trackTokens(userId, feature, model, prompt, completion);
+    }
   }
 }

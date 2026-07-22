@@ -10,7 +10,7 @@ export const MATCH_THRESHOLD = 70;
  * purely because the "newly graduated" requirement was truncated away.
  *
  * Descriptions shorter than this are treated as low-information, and their
- * match score is capped. The scoring prompt states the same rule, but GPT-4o
+ * match score is capped. The scoring prompt states the same rule, but the model
  * ignored it often enough (46 of 60 snippet jobs scored above the cap, one at
  * 91) that it has to be enforced in code.
  */

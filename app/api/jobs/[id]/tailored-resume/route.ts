@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { renderToBuffer } from "@react-pdf/renderer";
-import OpenAI from "openai";
+import { completeJson, isClaudeConfigured, MODEL_FAST } from "@/lib/ai/claude";
 import { createElement, type ReactElement } from "react";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
@@ -10,6 +10,7 @@ import { ResumePDF } from "@/app/api/resume/ResumePDF";
 import type { Profile, LinkedInRecommendation } from "@/types";
 import { trackTokens } from "@/lib/track-tokens";
 import type { DocumentProps } from "@react-pdf/renderer";
+import { keyGuard } from "@/lib/ai/key-guard";
 
 const SYSTEM_PROMPT = `You are a professional resume writer tailoring a candidate's resume for a specific company and role. Return ONLY valid JSON with this exact shape:
 
@@ -118,6 +119,9 @@ export async function POST(
     }
     const userId = authData.user.id;
 
+    const keyBlocked = await keyGuard(userId);
+    if (keyBlocked) return keyBlocked;
+
     const [jobRes, profileRes] = await Promise.all([
       insforge.database
         .from("jobs")
@@ -143,15 +147,13 @@ export async function POST(
     const profile = profileRes.data as Profile;
     const resumeMotivation = (job as unknown as { resume_motivation?: string | null }).resume_motivation ?? null;
 
-    if (!process.env.OPENAI_API_KEY) {
+    if (!isClaudeConfigured()) {
       return NextResponse.json({ error: "AI generation is not configured." }, { status: 503 });
     }
 
     const companyContext = job.company_research
       ? `COMPANY RESEARCH:\n${JSON.stringify(job.company_research, null, 2)}`
       : "";
-
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     const skillYears = computeSkillYears(profile.work_experience);
     const skillYearsStr = Object.entries(skillYears)
@@ -176,13 +178,12 @@ export async function POST(
 
     const coverLetterExamples = ((profile.cover_letter_examples as string[] | null) ?? []).filter(Boolean).slice(0, 3);
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      response_format: { type: "json_object" },
-      temperature: 0.7,
-      max_tokens: 1500,
+    const { data: generated, usage, model } = await completeJson<GeneratedContent>({
+      userId,
+      maxTokens: 1500,
+      effort: "medium",
+      system: SYSTEM_PROMPT + langInstruction,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT + langInstruction },
         ...(coverLetterExamples.length > 0 ? [{
           role: "user" as const,
           content: `Here are ${coverLetterExamples.length} example cover letter${coverLetterExamples.length > 1 ? "s" : ""} written by this candidate. Study their voice, sentence structure, tone, and writing style. Apply this same voice to the resume summary and bullet points — do not copy content, only mirror the style.\n\n${coverLetterExamples.map((ex, i) => `--- Example ${i + 1} ---\n${ex.trim()}`).join("\n\n")}`,
@@ -203,16 +204,8 @@ WHAT DRIVES THIS CANDIDATE:${(profile.motivation as string | null) ? `\nMotivati
       ],
     });
 
-    const raw = response.choices[0]?.message?.content;
-    trackTokens(userId, "tailored_resume", "gpt-4o", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
-    if (!raw) {
-      return NextResponse.json({ error: "Generation failed. Please try again." }, { status: 500 });
-    }
-
-    let generated: GeneratedContent;
-    try {
-      generated = JSON.parse(raw) as GeneratedContent;
-    } catch {
+    trackTokens(userId, "tailored_resume", model, usage.input_tokens, usage.output_tokens);
+    if (!generated) {
       return NextResponse.json({ error: "Generation failed. Please try again." }, { status: 500 });
     }
 
@@ -375,31 +368,28 @@ export async function GET(
 
     // Translate recommendations into the resume's language if needed
     let localizedRecs = recommendations;
-    if (recommendations.length > 0 && process.env.OPENAI_API_KEY) {
+    if (recommendations.length > 0 && isClaudeConfigured()) {
       try {
-        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
         const resumeLanguageSample = generated.summary ?? "";
         const texts = recommendations.map((r) => r.recommendation_text);
-        const resp = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          max_tokens: 1200,
-          response_format: { type: "json_object" },
-          messages: [
-            {
-              role: "system",
-              content: `You translate recommendation texts into the same language as a given resume excerpt. Return JSON: {"translated": ["<text1>", "<text2>", ...]}. Preserve meaning exactly. If a text is already in the target language, return it unchanged.`,
-            },
-            {
-              role: "user",
-              content: `Resume language sample:\n"${resumeLanguageSample}"\n\nTexts to translate (return in the same order):\n${JSON.stringify(texts)}`,
-            },
-          ],
+        const resp = await completeJson<{ translated: string[] }>({
+          userId,
+          model: MODEL_FAST,
+          maxTokens: 1200,
+          effort: "low",
+          schema: {
+            type: "object",
+            properties: { translated: { type: "array", items: { type: "string" } } },
+            required: ["translated"],
+            additionalProperties: false,
+          },
+          system: `You translate recommendation texts into the same language as a given resume excerpt. Return JSON: {"translated": ["<text1>", "<text2>", ...]}. Preserve meaning exactly. If a text is already in the target language, return it unchanged.`,
+          user: `Resume language sample:\n"${resumeLanguageSample}"\n\nTexts to translate (return in the same order):\n${JSON.stringify(texts)}`,
         });
-        trackTokens(userId, "tailored_resume_translate", "gpt-4o-mini", resp.usage?.prompt_tokens ?? 0, resp.usage?.completion_tokens ?? 0);
-        const raw = resp.choices[0]?.message?.content ?? "";
-        const parsed = JSON.parse(raw) as { translated?: string[] };
-        if (Array.isArray(parsed.translated) && parsed.translated.length === recommendations.length) {
-          localizedRecs = recommendations.map((r, i) => ({ ...r, recommendation_text: parsed.translated![i] }));
+        trackTokens(userId, "tailored_resume_translate", resp.model, resp.usage.input_tokens, resp.usage.output_tokens);
+        const translated = resp.data?.translated;
+        if (Array.isArray(translated) && translated.length === recommendations.length) {
+          localizedRecs = recommendations.map((r, i) => ({ ...r, recommendation_text: translated[i] }));
         }
       } catch {
         // fallback: use original texts

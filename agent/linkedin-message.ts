@@ -1,9 +1,17 @@
 import { z } from "zod";
-import OpenAI from "openai";
+import { completeJson } from "@/lib/ai/claude";
 import type { Connection, Profile } from "@/types";
 import { trackTokens } from "@/lib/track-tokens";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+const MESSAGE_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    message: { type: "string" },
+    subject: { type: "string" },
+  },
+  required: ["message", "subject"],
+  additionalProperties: false,
+} as const;
 
 const MessageSchema = z.object({
   message: z.string(),
@@ -22,21 +30,16 @@ type GenerateMessageInput = {
 
 export async function generateLinkedInMessage(
   input: GenerateMessageInput,
-  userId?: string,
+  userId: string,
 ): Promise<{ success: boolean; result?: LinkedInMessage; error?: string }> {
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0.6,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: `You write personalised, concise LinkedIn outreach messages for job seekers. Keep messages under 300 characters — LinkedIn connection requests have strict limits. Tone: ${input.tone || "professional"}. Return JSON with: message (string), subject (optional string for InMail).`,
-        },
-        {
-          role: "user",
-          content: `From: ${input.profile.full_name} (${input.profile.current_title}, ${input.profile.years_experience ?? "several"} years experience)
+    const { data, usage, model } = await completeJson<unknown>({
+      userId,
+      maxTokens: 500,
+      effort: "low",
+      schema: MESSAGE_JSON_SCHEMA,
+      system: `You write personalised, concise LinkedIn outreach messages for job seekers. Keep messages under 300 characters — LinkedIn connection requests have strict limits. Tone: ${input.tone || "professional"}. Return JSON with: message (string), subject (string for InMail).`,
+      user: `From: ${input.profile.full_name} (${input.profile.current_title}, ${input.profile.years_experience ?? "several"} years experience)
 Skills: ${(input.profile.skills ?? []).slice(0, 8).join(", ")}
 
 To: ${input.contact.first_name} ${input.contact.last_name}, ${input.contact.position} at ${input.contact.company}
@@ -44,14 +47,11 @@ To: ${input.contact.first_name} ${input.contact.last_name}, ${input.contact.posi
 Goal: Express interest in the ${input.jobTitle} role at ${input.company} and ask for a referral or informal chat.
 
 Write a personalised LinkedIn connection request message. Keep it under 300 characters, specific, and human. Return JSON.`,
-        },
-      ],
     });
 
-    const raw = completion.choices[0]?.message?.content ?? "{}";
-    const parsed = MessageSchema.parse(JSON.parse(raw));
+    const parsed = MessageSchema.parse(data ?? {});
 
-    if (userId) trackTokens(userId, "linkedin_message", "gpt-4o", completion.usage?.prompt_tokens ?? 0, completion.usage?.completion_tokens ?? 0);
+    trackTokens(userId, "linkedin_message", model, usage.input_tokens, usage.output_tokens);
 
     return { success: true, result: parsed };
   } catch (error) {

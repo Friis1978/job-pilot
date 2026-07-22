@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { findJobs } from "@/agent/find-jobs";
+import { keyGuard } from "@/lib/ai/key-guard";
 
 export const maxDuration = 300;
 
@@ -15,6 +16,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
     const userId = authData.user.id;
+
+    const keyBlocked = await keyGuard(userId);
+    if (keyBlocked) return keyBlocked;
 
     const body = await req.json();
     const { jobTitle, location, minScore } = body as {

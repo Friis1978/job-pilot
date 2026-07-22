@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import { complete, completeJson, MODEL_FAST, MODEL_SMART } from "@/lib/ai/claude";
 import { trackTokens } from "@/lib/track-tokens";
 
 const SAPLING_URL = "https://api.sapling.ai/api/v1/aidetect";
@@ -67,7 +67,7 @@ export interface HumanizeResult {
   sentenceScores: { sentence: string; score: number }[];
 }
 
-export async function humanizeText(text: string, openai: OpenAI, userId?: string): Promise<HumanizeResult> {
+export async function humanizeText(text: string, userId: string): Promise<HumanizeResult> {
   const sapling = await getSaplingResult(text);
   const overallScore = sapling?.score ?? null;
 
@@ -80,22 +80,20 @@ export async function humanizeText(text: string, openai: OpenAI, userId?: string
     // Fall through to targeted rewrite below for the flagged sentences
   }
 
-  // Very high AI signal → aggressive full rewrite with GPT-4o
+  // Very high AI signal → aggressive full rewrite
   if (overallScore === null || overallScore > 0.85) {
     try {
-      const model = "gpt-4o";
-      const response = await openai.chat.completions.create({
-        model,
-        temperature: 0.75,
-        max_tokens: 1500,
-        messages: [
-          { role: "system", content: AGGRESSIVE_REWRITE_SYSTEM },
-          { role: "user", content: text },
-        ],
+      const { text: rewritten, usage, model } = await complete({
+        userId,
+        model: MODEL_SMART,
+        maxTokens: 1500,
+        effort: "medium",
+        system: AGGRESSIVE_REWRITE_SYSTEM,
+        user: text,
       });
-      if (userId) trackTokens(userId, "humanize_cover_letter", model, response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
+      trackTokens(userId, "humanize_cover_letter", model, usage.input_tokens, usage.output_tokens);
       return {
-        text: response.choices[0]?.message?.content?.trim() || text,
+        text: rewritten || text,
         saplingScore: overallScore,
         action: overallScore === null ? "unavailable" : "aggressive",
         flaggedSentences: sapling?.sentence_scores.filter((s) => s.score >= 0.5).length ?? 0,
@@ -114,26 +112,26 @@ export async function humanizeText(text: string, openai: OpenAI, userId?: string
 
   try {
     const sentences = flagged.map((s) => s.sentence);
-    const model = "gpt-4o-mini";
-    const response = await openai.chat.completions.create({
-      model,
-      temperature: 0.75,
-      max_tokens: Math.min(sentences.join(" ").length * 3, 1200),
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: TARGETED_REWRITE_SYSTEM },
-        {
-          role: "user",
-          content: `Cover letter (context only — do NOT rewrite it):\n${text}\n\nRewrite only these ${sentences.length} sentence${sentences.length > 1 ? "s" : ""} to sound less AI-generated. Return as JSON: {"rewrites": ["...", ...]}\n\n${sentences.map((s, i) => `${i + 1}. ${s}`).join("\n")}`,
-        },
-      ],
+    const { data, usage, model } = await completeJson<{ rewrites: string[] }>({
+      userId,
+      model: MODEL_FAST,
+      // Rewrites are roughly the length of the originals; 3x leaves room for
+      // a longer phrasing without letting a runaway response burn tokens.
+      maxTokens: Math.min(sentences.join(" ").length * 3, 1200),
+      effort: "low",
+      schema: {
+        type: "object",
+        properties: { rewrites: { type: "array", items: { type: "string" } } },
+        required: ["rewrites"],
+        additionalProperties: false,
+      },
+      system: TARGETED_REWRITE_SYSTEM,
+      user: `Cover letter (context only — do NOT rewrite it):\n${text}\n\nRewrite only these ${sentences.length} sentence${sentences.length > 1 ? "s" : ""} to sound less AI-generated. Return as JSON: {"rewrites": ["...", ...]}\n\n${sentences.map((s, i) => `${i + 1}. ${s}`).join("\n")}`,
     });
-    if (userId) trackTokens(userId, "humanize_cover_letter", model, response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
+    trackTokens(userId, "humanize_cover_letter", model, usage.input_tokens, usage.output_tokens);
 
-    const raw = response.choices[0]?.message?.content?.trim();
-    if (raw) {
-      const parsed = JSON.parse(raw) as { rewrites?: string[] };
-      const rewrites = parsed.rewrites;
+    {
+      const rewrites = data?.rewrites;
       if (Array.isArray(rewrites) && rewrites.length === sentences.length) {
         let result = text;
         for (let i = 0; i < sentences.length; i++) {

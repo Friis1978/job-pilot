@@ -1,9 +1,9 @@
 import * as Sentry from "@sentry/nextjs";
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { scoreJob } from "@/agent/find-jobs";
 import type { Profile } from "@/types";
+import { keyGuard } from "@/lib/ai/key-guard";
 
 export async function POST(
   _req: NextRequest,
@@ -16,6 +16,11 @@ export async function POST(
   } = await insforge.auth.getCurrentUser();
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+
+  const keyBlocked = await keyGuard(user.id);
+
+  if (keyBlocked) return keyBlocked;
 
   // Load job
   const { data: jobData, error: jobError } = await insforge.database
@@ -42,8 +47,6 @@ export async function POST(
 
   const profile = profileData as Profile;
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
-
   const scored = await scoreJob(
     {
       id: jobData.id,
@@ -51,7 +54,7 @@ export async function POST(
       company: jobData.company,
       location: jobData.location ?? null,
       // full_post_text is the text the job was originally scored against.
-      // about_role is a GPT-extracted, shortened version, so scoring from it
+      // about_role is an AI-extracted, shortened version, so scoring from it
       // produced a different skill list than the first run — the rescore was
       // reading different source material, not just resampling the model.
       // `||` not `??`: 72 existing rows have a NULL full_post_text and an empty
@@ -63,7 +66,7 @@ export async function POST(
       source: "url" as const,
     },
     profile,
-    openai,
+    user.id,
   );
 
   if (!scored) {

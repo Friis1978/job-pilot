@@ -27,7 +27,7 @@ export default async function AdminPage() {
   const [usersResult, spendResult] = await Promise.all([
     insforge.database
       .from("profiles")
-      .select("id, email, full_name, approval_status, created_at, credit_balance_usd")
+      .select("id, email, full_name, approval_status, created_at")
       .order("created_at", { ascending: false }),
     insforge.database
       .from("user_ai_spend")
@@ -45,7 +45,6 @@ export default async function AdminPage() {
     full_name: string | null;
     approval_status: AdminUser["approval_status"];
     created_at: string;
-    credit_balance_usd: number | string | null;
   };
 
   const users: AdminUser[] = ((usersResult.data ?? []) as ProfileRow[]).map((u) => {
@@ -58,7 +57,6 @@ export default async function AdminPage() {
       created_at: u.created_at,
       ai_spend_usd: Number(spend?.total_cost_usd ?? 0),
       ai_generations: Number(spend?.generations ?? 0),
-      credit_balance_usd: Number(u.credit_balance_usd ?? 0),
     };
   });
 

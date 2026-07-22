@@ -135,11 +135,11 @@ After building any component — update this file with the component name, file 
 
 ### ContactSuggestion
 **File:** `components/network/ContactSuggestion.tsx`
-**Pattern:** Client component, lazy trigger ("Suggest" button). Shows avatar initials, name, position, LinkedIn link, AI reasoning. GPT-4o via `/api/agent/suggest-contact`.
+**Pattern:** Client component, lazy trigger ("Suggest" button). Shows avatar initials, name, position, LinkedIn link, AI reasoning. Claude via `/api/agent/suggest-contact`.
 
 ### LinkedInMessage
 **File:** `components/network/LinkedInMessage.tsx`
-**Pattern:** Client component, lazy trigger ("Generate" button). Shows message in `bg-surface-secondary border border-border-light rounded-lg p-4`. Copy to clipboard. Character count. GPT-4o via `/api/agent/linkedin-message`.
+**Pattern:** Client component, lazy trigger ("Generate" button). Shows message in `bg-surface-secondary border border-border-light rounded-lg p-4`. Copy to clipboard. Character count. Claude via `/api/agent/linkedin-message`.
 
 ### ImportPreview (modal)
 **File:** `components/network/ImportPreview.tsx`

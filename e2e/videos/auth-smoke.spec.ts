@@ -13,7 +13,7 @@ test("demo session reaches the gated pages", async ({ context, page, baseURL }) 
   for (const path of ["/dashboard", "/profile", "/find-jobs"]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");
-    // A gate failure shows up as a redirect to /, /pending or /payment.
+    // A gate failure shows up as a redirect to / or /pending.
     expect(new URL(page.url()).pathname, `${path} was redirected`).toBe(path);
   }
 

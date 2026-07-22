@@ -1,17 +1,21 @@
-import type OpenAI from "openai";
-import type OpenAILib from "openai";
+import { complete, MODEL_FAST, type ClaudeUsage } from "@/lib/ai/claude";
 import { detectLanguageName } from "@/lib/detect-language";
+import { isUserKeyError } from "@/lib/ai/key-guard";
 
 export type SummaryResult = {
   text: string | null;
-  usage: OpenAILib.CompletionUsage | null;
+  usage: ClaudeUsage | null;
+  model: string;
 };
 
-const EMPTY: SummaryResult = { text: null, usage: null };
+const EMPTY: SummaryResult = { text: null, usage: null, model: MODEL_FAST };
 
 /**
- * Generates a concise 8–10 bullet-point summary of a job description using
- * gpt-4o-mini, written in the same language as the posting.
+ * Generates a concise 8–10 bullet-point summary of a job description, written
+ * in the same language as the posting.
+ *
+ * Runs on the fast tier: the summary is a condensation of text already in
+ * front of the model, not a judgement call.
  *
  * Single source of truth: this previously existed as three near-identical
  * copies (agent/find-jobs.ts and two API routes) whose prompts were all
@@ -22,7 +26,7 @@ const EMPTY: SummaryResult = { text: null, usage: null };
  */
 export async function summarizeDescription(
   description: string,
-  openai: OpenAI,
+  userId: string,
   options: { minLength?: number } = {},
 ): Promise<SummaryResult> {
   const { minLength = 150 } = options;
@@ -34,14 +38,13 @@ export async function summarizeDescription(
   const language = detectLanguageName(input);
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.3,
-      max_tokens: 700,
-      messages: [
-        {
-          role: "system",
-          content: `Summarize this job description as exactly 8–10 bullet points. Each bullet must be a full, informative sentence — not a fragment. Cover all of these areas (one or two bullets each):
+    const { text, usage, model } = await complete({
+      userId,
+      model: MODEL_FAST,
+      maxTokens: 700,
+      effort: "low",
+      user: input,
+      system: `Summarize this job description as exactly 8–10 bullet points. Each bullet must be a full, informative sentence — not a fragment. Cover all of these areas (one or two bullets each):
 1. What the company does and its context
 2. What the role is and who it reports to
 3. Key day-to-day responsibilities (2–3 bullets)
@@ -53,16 +56,13 @@ export async function summarizeDescription(
 Language: the posting is written in ${language}. Write every bullet in ${language} — do NOT translate the summary into English or any other language. Keep technical terms, tool names, product names and job titles exactly as they appear in the posting.
 
 Return only the bullet points, each on its own line starting with "•". No intro, no headers, no trailing text.`,
-        },
-        { role: "user", content: input },
-      ],
     });
 
-    return {
-      text: response.choices[0]?.message?.content?.trim() ?? null,
-      usage: response.usage ?? null,
-    };
-  } catch {
+    return { text: text || null, usage, model };
+  } catch (err) {
+    // A missing summary is never worth failing the caller for — except when the
+    // cause is the user's key, which every later call will hit too.
+    if (isUserKeyError(err)) throw err;
     return EMPTY;
   }
 }

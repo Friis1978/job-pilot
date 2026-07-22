@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
+import { complete } from "@/lib/ai/claude";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { detectLanguage, LANGUAGE_LABELS, LANGUAGE_NAMES } from "@/lib/detect-language";
 import type { WorkExperience, PersonalProject } from "@/types";
 import { trackTokens } from "@/lib/track-tokens";
+import { keyGuard } from "@/lib/ai/key-guard";
 
 export async function POST(
   _req: NextRequest,
@@ -17,6 +18,9 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const userId = authData.user.id;
+
+    const keyBlocked = await keyGuard(userId);
+    if (keyBlocked) return keyBlocked;
 
     const [jobRes, profileRes] = await Promise.all([
       insforge.database
@@ -59,16 +63,11 @@ export async function POST(
       ? `\nCOMPANY RESEARCH:\n${JSON.stringify(job.company_research, null, 2)}`
       : "";
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0.4,
-      max_tokens: 600,
-      messages: [
-        {
-          role: "system",
-          content: `You are a cover letter coach. Your job is NOT to write the cover letter — it is to give the candidate a concise, specific writing brief so they can write it themselves.
+    const response = await complete({
+      userId,
+      maxTokens: 600,
+      effort: "medium",
+      system: `You are a cover letter coach. Your job is NOT to write the cover letter — it is to give the candidate a concise, specific writing brief so they can write it themselves.
 
 Analyse the job and candidate, then return a short brief with exactly these four sections, written in ${language}:
 
@@ -85,10 +84,7 @@ One or two sentences only. If there are gap skills, give one honest, specific wa
 One short paragraph. Based on the company research (if available), recommend the right tone (formal/direct/enthusiastic) and one specific cultural or strategic angle the candidate can use to show genuine understanding of what this company cares about.
 
 Keep each section tight. No fluff. Write in ${language}.`,
-        },
-        {
-          role: "user",
-          content: `JOB:
+      user: `JOB:
 Title: ${job.title}
 Company: ${job.company}
 Description: ${job.about_role ?? "Not provided"}${(job.requirements as string[] | null)?.length ? `\nRequirements:\n${(job.requirements as string[]).map((r) => `- ${r}`).join("\n")}` : ""}
@@ -101,12 +97,10 @@ Current title: ${profile.current_title ?? "Not provided"}
 Experience: ${profile.years_experience ?? 0} years
 Skills: ${(profile.skills as string[] | null)?.join(", ") ?? "Not provided"}
 Work history: ${workExp.map((w) => `${w.title} at ${w.company}`).join("; ") || "Not provided"}${personalProjects.length > 0 ? `\nPersonal projects: ${personalProjects.map((p) => p.name).join(", ")}` : ""}${(profile.motivation as string | null) ? `\nMotivation: ${profile.motivation}` : ""}${(profile.proud_achievement as string | null) ? `\nKey achievement: ${profile.proud_achievement}` : ""}${(profile.career_vision as string | null) ? `\nCareer vision: ${profile.career_vision}` : ""}`,
-        },
-      ],
     });
 
-    const advice = response.choices[0]?.message?.content?.trim();
-    trackTokens(userId, "cover_letter_advice", "gpt-4o", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
+    const advice = response.text;
+    trackTokens(userId, "cover_letter_advice", response.model, response.usage.input_tokens, response.usage.output_tokens);
     if (!advice) {
       return NextResponse.json({ error: "Failed to generate advice. Please try again." }, { status: 500 });
     }

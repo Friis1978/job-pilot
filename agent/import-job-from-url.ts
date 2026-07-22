@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import { completeJson, isClaudeConfigured } from "@/lib/ai/claude";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { stripHtml, normalizeLocationToEnglish } from "@/lib/utils";
@@ -55,7 +55,7 @@ function extractEmbeddedState(html: string): string | null {
     /<script[^>]*id="__NUXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i, // Nuxt
     /<script[^>]*id="initial-state"[^>]*>([\s\S]*?)<\/script>/i, // generic
     // No catch-all: generic application/json scripts are too likely to match
-    // cookie-consent or analytics blobs, causing GPT-4o to extract the wrong data.
+    // cookie-consent or analytics blobs, causing the model to extract the wrong data.
   ];
   for (const pattern of patterns) {
     const m = html.match(pattern);
@@ -96,7 +96,7 @@ async function fetchLinkedInJob(jobId: string): Promise<string | null> {
 /**
  * Imports a job posting from a URL into the user's saved jobs list.
  * Fetch strategy (in order): pasted text → LinkedIn guest API → plain HTTP fetch →
- * SSR embedded state extraction → browser render via Browserbase. GPT-4o then
+ * SSR embedded state extraction → browser render via Browserbase. The model then
  * extracts structured fields and scores the job against the user's profile.
  * Always saves the job regardless of match score (user explicitly chose to import it).
  * @param pastedText Raw job text the user pasted manually (bypasses fetch when long enough).
@@ -209,15 +209,14 @@ export async function importJobFromUrl(userId: string, url: string, pastedText?:
     return { success: false, error: "Could not reach this page. Please check the URL and try again." };
   }
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!isClaudeConfigured()) {
     await posthog.shutdown();
     return { success: false, error: "AI extraction is not configured." };
   }
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const tokenAcc = new TokenAccumulator();
 
-  // Deduplicate the raw text before sending to GPT-4o.
+  // Deduplicate the raw text before sending to the model.
   // SPAs (like Emply) often render content twice — once in SSR HTML and once after
   // hydration — producing large duplicate blocks that waste context window.
   const deduplicatedText = (() => {
@@ -233,18 +232,13 @@ export async function importJobFromUrl(userId: string, url: string, pastedText?:
     return out.join("\n");
   })();
 
-  // GPT-4o extraction
   let extracted: ExtractedJob;
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      response_format: { type: "json_object" },
-      temperature: 0.1,
-      max_tokens: 2500,
-      messages: [
-        {
-          role: "system",
-          content: `You are a job posting parser. Extract structured data from a job posting.
+    const response = await completeJson<ExtractedJob>({
+      userId,
+      maxTokens: 2500,
+      effort: "low",
+      system: `You are a job posting parser. Extract structured data from a job posting.
 The input may be plain text, HTML, or a JSON blob from a framework's server-side state (Angular ng-state, Next.js __NEXT_DATA__, etc.) — parse whichever it is.
 The posting may be in any language (Danish, Swedish, Norwegian, German, etc.). Extract the description in the ORIGINAL language — do not translate it.
 Ignore navigation text (e.g. "Log ind", "Min profil", "Sign in", breadcrumbs, cookie banners) — only extract actual job posting content.
@@ -262,18 +256,12 @@ Location rules:
 - If only a street address is given, extract the city from it
 - If no location can be determined at all, return null
 If title or company cannot be determined, return them as empty strings.`,
-        },
-        {
-          role: "user",
-          content: `Extract the job details from this content:\n\n${deduplicatedText.slice(0, 10000)}`,
-        },
-      ],
+      user: `Extract the job details from this content:\n\n${deduplicatedText.slice(0, 10000)}`,
     });
 
-    const raw = response.choices[0]?.message?.content;
-    tokenAcc.add(response.usage);
-    if (!raw) throw new Error("Empty response");
-    extracted = JSON.parse(raw) as ExtractedJob;
+    tokenAcc.add(response.usage, response.model);
+    if (!response.data) throw new Error("Empty response");
+    extracted = response.data;
   } catch {
     await posthog.shutdown();
     return { success: false, error: "Could not extract job details from this page. Try a different URL." };
@@ -285,7 +273,7 @@ If title or company cannot be determined, return them as empty strings.`,
   }
 
   // Build NormalizedJob — use extracted description for display/storage.
-  // Fall back to deduplicated raw text if GPT-4o returned an empty description
+  // Fall back to deduplicated raw text if the model returned an empty description
   // (common when the page is in a non-English language and the model skips it).
   const extractedDescription = extracted.description?.trim() || "";
   const fallbackDescription = extractedDescription || deduplicatedText.slice(0, 3000);
@@ -308,15 +296,15 @@ If title or company cannot be determined, return them as empty strings.`,
     ...job,
     description: deduplicatedText.slice(0, 8000),
   };
-  const scored = await scoreJob(jobForScoring, profile, openai, tokenAcc);
+  const scored = await scoreJob(jobForScoring, profile, userId, tokenAcc);
   if (!scored) {
     await posthog.shutdown();
     return { success: false, error: "Scoring failed. Please try again." };
   }
 
   // Generate a short summary for display (full text is kept in about_role for research)
-  const summaryResult = await summarizeDescription(job.description, openai, { minLength: 500 });
-  tokenAcc.add(summaryResult.usage);
+  const summaryResult = await summarizeDescription(job.description, userId, { minLength: 500 });
+  tokenAcc.add(summaryResult.usage, summaryResult.model);
   const descriptionSummary = summaryResult.text;
 
   // Save to DB
@@ -361,7 +349,7 @@ If title or company cannot be determined, return them as empty strings.`,
     event: "job_found",
     properties: { userId, source: "url_import", matchScore: scored.matchScore },
   });
-  tokenAcc.flush(userId, "import_job", "gpt-4o");
+  tokenAcc.flush(userId, "import_job");
   await posthog.shutdown();
 
   return { success: true };

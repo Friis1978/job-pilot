@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { complete } from "@/lib/ai/claude";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { detectLanguage } from "@/lib/detect-language";
 import type { Profile } from "@/types";
 import { trackTokens } from "@/lib/track-tokens";
+import { keyGuard } from "@/lib/ai/key-guard";
 
 export async function POST(
   _req: NextRequest,
@@ -19,6 +20,9 @@ export async function POST(
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
     const userId = authData.user.id;
+
+    const keyBlocked = await keyGuard(userId);
+    if (keyBlocked) return keyBlocked;
 
     const [jobRes, profileRes] = await Promise.all([
       insforge.database
@@ -67,9 +71,6 @@ export async function POST(
       return NextResponse.json({ error: "AI generation is not configured (missing ANTHROPIC_API_KEY)." }, { status: 503 });
     }
 
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const MODEL = "claude-sonnet-4-6";
-
     const systemPrompt = `You write a resume motivation paragraph in first person ("I"). 3-5 sentences explaining what the candidate brings to this specific role and why they are motivated for it. Match the candidate's concrete skills and experience to the role's needs.${langInstruction}
 
 Rules:
@@ -83,16 +84,15 @@ Rules:
 
     const userMessage = `CANDIDATE:\n${profileContext}\n\nROLE:\n${jobContext}\n\nWrite a 3-5 sentence first-person motivation paragraph. What does the candidate bring to this role? No greeting. No closing. No names.`;
 
-    const completion = await anthropic.messages.create({
-      model: MODEL,
+    const { text, usage, model } = await complete({
+      userId,
       system: systemPrompt,
-      max_tokens: 400,
-      temperature: 0.3,
-      messages: [{ role: "user", content: userMessage }],
+      maxTokens: 400,
+      effort: "low",
+      user: userMessage,
     });
 
-    const text = completion.content[0]?.type === "text" ? completion.content[0].text.trim() : "";
-    trackTokens(userId, "resume_motivation", MODEL, completion.usage.input_tokens, completion.usage.output_tokens);
+    trackTokens(userId, "resume_motivation", model, usage.input_tokens, usage.output_tokens);
 
     await insforge.database
       .from("jobs")

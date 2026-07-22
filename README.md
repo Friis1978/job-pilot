@@ -62,7 +62,7 @@ Each card shows the percentage change and the raw prior-period number.
 
 ### Job discovery and AI scoring
 
-Search Adzuna, JobTech, Jooble, CareerJet, and Glassdoor simultaneously. GPT-4o reads every posting against your profile and assigns a match score 0–100, with a breakdown of exactly which skills match and which are missing — so you spend time only on roles worth applying to.
+Search Adzuna, JobTech, Jooble, CareerJet, and Glassdoor simultaneously. Claude reads every posting against your profile and assigns a match score 0–100, with a breakdown of exactly which skills match and which are missing — so you spend time only on roles worth applying to.
 
 ![Jobs list with match scores](public/images/jobs-pipeline-2026-07-10.jpeg)
 
@@ -97,7 +97,7 @@ Click **Research Company** and the agent fetches the company's public website ov
 - Why this role exists
 - Smart interview prep talking points
 
-Also searches DuckDuckGo for the original job posting to extract contact names, emails, and phone numbers. Falls back to GPT-4o synthesis from the job description if the site can't be reached.
+Also searches DuckDuckGo for the original job posting to extract contact names, emails, and phone numbers. Falls back to Claude synthesising from the job description if the site can't be reached.
 
 ![Company research dossier](public/images/research-2026-06-30.jpeg)
 
@@ -177,33 +177,54 @@ The agent log records every AI action — job scoring runs, research sessions, c
 
 ---
 
-### Credit system and payments
+### Bring your own Claude key
 
-Access to the app requires purchasing credits via Stripe. After sign-up approval, users are redirected to a payment page where they can buy a credit package. The app is fully gated behind the credit check — unapproved or unpaid users cannot access any protected route.
+The app has no billing of its own. Every AI feature runs on the user's own
+Anthropic account, so a key is required before any AI feature will run — there is
+no platform credit and no Stripe. This replaced the earlier credit-and-payments
+model entirely.
 
-- Payments are handled via **Stripe Checkout** (test and live modes supported)
-- A Stripe webhook updates the user's credit balance in the database on successful payment
-- Credit balance and payment history are visible in the user's account settings
+- The key is entered on the **API key** page (`/settings/api-key`), reached from
+  the user menu where **Credits** used to be.
+- It is verified against Anthropic on save — an invalid key, or one without
+  access to the models this app calls, is rejected at that point rather than
+  surfacing later as a failed job search.
+- Usage is billed directly to the user by Anthropic. The app still records token
+  usage so the user can see their own consumption, but it never charges anyone.
+
+#### How the key is stored
+
+The key is a billing credential for someone else's account, so it is handled as
+a secret, not a profile field:
+
+- Kept in its own table, `user_ai_keys`, never on `profiles` (which is selected
+  with `*` and rendered into pages).
+- Encrypted with **AES-256-GCM** in the app before it reaches the database —
+  `BYOK_ENCRYPTION_KEY` lives only in the server environment, so a database dump
+  without it yields nothing usable.
+- Owner-only RLS with **no admin exception** and `FORCE ROW LEVEL SECURITY`, so
+  not even an administrator can read another user's key. This is a deliberate
+  difference from `token_usage`, which admins *can* read.
+- Never returned to the browser after it is stored — only the last four
+  characters are shown, and only to the owner.
+
+Anthropic keys are also scrubbed from anything leaving the process (Sentry
+`beforeSend`, on client, server and edge), because the user types the key into a
+browser form where a captured error could otherwise carry it.
 
 #### How the gate works
 
-`proxy.ts` checks two cookies on every protected route: `jp_approved` and
-`jp_has_credit`. Missing credit redirects to `/payment`, which is itself exempt
-so the redirect cannot loop.
+`proxy.ts` checks `jp_approved` on every protected route. The key requirement
+itself is enforced at the point of use, not by the proxy: every AI route calls
+`keyGuard()` before doing any work and returns **HTTP 403** with a machine
+-readable `code` (`missing_api_key` / `invalid_api_key`) and a `settingsUrl`
+when the user has no usable key.
 
-Two rules that are easy to break:
-
-1. **`PROTECTED_PATHS` and `config.matcher` must list the same routes.** A path in
-   `PROTECTED_PATHS` but missing from `matcher` is not protected at all — the proxy
-   never runs on it, so no session refresh happens and no auth header is forwarded.
-   `/payment` was in one and not the other, and the page broke as a result.
-2. **Cookies cannot be set from a Server Component.** Next allows cookie writes only
-   in a Server Action or Route Handler. `/payment` used to stamp `jp_has_credit`
-   during render, which threw at runtime and blanked the page for anyone with a
-   balance. `PaymentClient` now calls `POST /api/payment/activate` instead.
-
-`jp_has_credit` expires after 7 days and only the payment page re-stamps it, so a
-returning user is briefly redirected through `/payment` before continuing.
+The guard is up front rather than relying on the error surfacing from inside,
+because agent code catches its own failures and degrades — `scoreJob` returns
+`null`, a summary returns empty — so a missing key would otherwise reach the user
+as "0 jobs found" instead of "add your key". The functions that swallow errors
+re-throw a `UserKeyError` so a key revoked *mid-search* fails loudly too.
 
 Every early `return` in `proxy.ts` must carry the refreshed cookies via
 `withRefreshedCookies()`. InsForge rotates refresh tokens, so a redirect that drops
@@ -227,7 +248,7 @@ New users are walked through profile setup, job search, and company research ste
 | Job discovery | Adzuna, JobTech, Jooble, CareerJet, Glassdoor searched in parallel |
 | Job import | Paste any URL — AI extracts the posting |
 | AI scoring | Scores 0–100 with matched + missing skills per job |
-| Company research | HTTP fetch + DuckDuckGo + GPT-4o → structured dossier with interview prep |
+| Company research | HTTP fetch + DuckDuckGo + Claude → structured dossier with interview prep |
 | Cover letter | Claude, language-detected, humanise workflow, PDF + plain text |
 | Resume motivation | Claude generates a first-person motivation paragraph tailored to the role |
 | Tailored resume | Claude generates a job-specific PDF per role |
@@ -238,7 +259,7 @@ New users are walked through profile setup, job search, and company research ste
 | Network intelligence | LinkedIn connection import, AI contact selection, message generation |
 | Application tracking | Saved → Applied → Interviewing → Offer pipeline with more statuses |
 | Dashboard analytics | Activity, scores, research, and AI token usage charts via PostHog |
-| Credit system | $10 welcome credit granted on approval; Stripe top-ups after that |
+| Bring your own key | Users add their own Anthropic key; usage is billed to them, not the app |
 | Admin AI spend | Per-user AI cost and generation count in the admin table |
 | User approval gate | Admin-controlled sign-up approval with Resend email notifications |
 
@@ -250,8 +271,7 @@ New users are walked through profile setup, job search, and company research ste
 |---|---|
 | Framework | Next.js 16 (App Router) |
 | Backend (DB, Auth, Storage) | InsForge |
-| AI models | Claude (Anthropic) for cover letters, resumes, motivation; OpenAI GPT-4o for scoring and extraction |
-| Payments | Stripe (Checkout + webhooks) |
+| AI models | Claude only — Sonnet 5 and Haiku 4.5 (see [AI models](#ai-models)) |
 | Error tracking | Sentry |
 | Job sources | Adzuna, JobTech, Jooble, CareerJet, RapidAPI (Glassdoor) |
 | Analytics | PostHog |
@@ -259,6 +279,47 @@ New users are walked through profile setup, job search, and company research ste
 | PDF generation | @react-pdf/renderer |
 | Styling | Tailwind CSS 4 |
 | Language | TypeScript (strict) |
+
+---
+
+## AI models
+
+Every AI call in the app goes through `lib/ai/claude.ts`. Nothing else constructs
+an API client, so switching models is a one-line change rather than a sweep
+through twenty-odd call sites.
+
+Two tiers:
+
+| Constant | Model | Used for |
+|---|---|---|
+| `MODEL_SMART` | `claude-sonnet-5` | Judgement and writing: job scoring, cover letters, tailored resumes, company research, profile extraction, cover-letter advice |
+| `MODEL_FAST` | `claude-haiku-4-5` | Mechanical work where the answer is already in the input: job description summaries, recommendation translation, targeted sentence rewrites |
+
+The helper exposes `complete()` for text and `completeJson()` for structured
+output. Passing a `schema` constrains the response at the API level, which is
+what replaced OpenAI's `response_format: { type: "json_object" }` — the scorer,
+for example, can no longer return a match score as a string or omit a key.
+
+Three things to know when adding a call:
+
+- **There is no `temperature`.** Sonnet 5 rejects sampling parameters outright
+  (`temperature is deprecated for this model`). Steer output through the prompt
+  and the `effort` option instead.
+- **`effort` is only sent to models that accept it.** Haiku 4.5 rejects it, so
+  the helper strips it for the fast tier. Callers can always pass an effort hint
+  without knowing which tier they landed on.
+- **`thinking` is always sent explicitly.** The default differs by model — Sonnet
+  5 thinks when the field is omitted, Opus 4.8 does not — and thinking tokens
+  count against `max_tokens`. On the tighter budgets here (100 for a company URL
+  lookup, 500 for a score) an unrequested thinking pass could truncate the
+  answer, so the helper always states which mode it wants.
+- **Calls run on the user's own key.** `complete()` / `completeJson()` take a
+  `userId` and use that user's stored Anthropic key — there is no fall back to a
+  platform key, so a call by a user with no key throws `UserKeyError` rather than
+  billing the app. See [Bring your own Claude key](#bring-your-own-claude-key).
+
+Per-model usage is recorded against the user who spent it — see
+[Token usage and spend](#token-usage-and-spend).
 
 ---
 
@@ -282,9 +343,8 @@ New users are walked through profile setup, job search, and company research ste
 
 - Node.js 20+
 - An [InsForge](https://insforge.dev) project with Google and/or GitHub OAuth configured
-- An [Anthropic](https://console.anthropic.com) account for cover letter, resume, and motivation generation (Claude)
-- An [OpenAI](https://platform.openai.com) account with GPT-4o access for job scoring and profile extraction
-- A [Stripe](https://stripe.com) account for the credit payment system
+- An [Anthropic](https://console.anthropic.com) account — every AI feature runs on the user's own Claude key
+- A 32-byte base64 `BYOK_ENCRYPTION_KEY` for encrypting user keys at rest (`openssl rand -base64 32`)
 - Job source API keys (Adzuna required; Jooble, CareerJet, RapidAPI optional but recommended)
 - A [PostHog](https://posthog.com) project for analytics (optional)
 - A [Resend](https://resend.com) account with a verified sender domain for approval emails
@@ -308,8 +368,14 @@ Create `.env.local` in the project root:
 NEXT_PUBLIC_INSFORGE_URL=https://your-project.region.insforge.app
 NEXT_PUBLIC_INSFORGE_ANON_KEY=your-anon-key
 
-# OpenAI — job matching, cover letters, resume generation, research synthesis
-OPENAI_API_KEY=sk-...
+# Anthropic — fallback/dev key for calls with no user attached. Product AI
+# features run on each user's OWN key (see "Bring your own Claude key"), not this.
+ANTHROPIC_API_KEY=sk-ant-...
+
+# BYOK — encrypts each user's stored Anthropic key at rest (AES-256-GCM).
+# Generate with: openssl rand -base64 32
+# Must be identical in every environment, or stored keys become undecryptable.
+BYOK_ENCRYPTION_KEY=your-32-byte-base64-key
 
 # Job sources
 ADZUNA_APP_ID=your-adzuna-app-id        # developer.adzuna.com
@@ -356,17 +422,14 @@ Set `PORT` to target a different port.
 |---|---|---|
 | `NEXT_PUBLIC_INSFORGE_URL` | Yes | InsForge backend base URL |
 | `NEXT_PUBLIC_INSFORGE_ANON_KEY` | Yes | InsForge public anon key |
-| `ANTHROPIC_API_KEY` | Yes | Anthropic API key — used for cover letters, resumes, and motivation |
-| `OPENAI_API_KEY` | Yes | OpenAI API key — needs GPT-4o access for scoring and extraction |
+| `ANTHROPIC_API_KEY` | Yes | Anthropic API key — powers every AI feature (see [AI models](#ai-models)) |
 | `ADZUNA_APP_ID` | Yes | Adzuna app ID |
 | `ADZUNA_APP_KEY` | Yes | Adzuna app key |
 | `RESEND_API_KEY` | Yes | Resend API key for approval emails |
 | `RESEND_FROM_EMAIL` | Yes | Verified sender address (e.g. `noreply@yourdomain.com`) |
 | `ADMIN_EMAIL` | Yes | Admin email — receives new sign-up notifications |
 | `NEXT_PUBLIC_APP_URL` | Yes | Public app URL — used in email login links |
-| `STRIPE_SK` | Yes | Stripe secret key |
-| `STRIPE_PK` | Yes | Stripe publishable key |
-| `STRIPE_WEBHOOK_SECRET` | Yes | Stripe webhook signing secret — required for payment verification |
+| `BYOK_ENCRYPTION_KEY` | Yes | 32-byte base64 key that encrypts each user's Anthropic key at rest (AES-256-GCM). Must match across every environment, or stored keys become undecryptable |
 | `JOOBLE_API_KEY` | No | Jooble API key |
 | `CAREERJET_API_KEY` | No | CareerJet API key |
 | `RAPIDAPI_KEY` | No | RapidAPI key — used for Glassdoor integration |
@@ -386,10 +449,10 @@ Set `PORT` to target a different port.
 ```
 /
 ├── agent/                      # AI agent logic — no React, no UI
-│   ├── find-jobs.ts            # Multi-source job discovery + GPT-4o scoring
-│   ├── research-company.ts     # HTTP fetch + GPT-4o company dossier
+│   ├── find-jobs.ts            # Multi-source job discovery + Claude scoring
+│   ├── research-company.ts     # HTTP fetch + Claude company dossier
 │   ├── generate-cover-letter.ts
-│   ├── humanize-text.ts        # GPT-4o-mini second pass for natural tone
+│   ├── humanize-text.ts        # Claude second pass for natural tone
 │   └── import-job-from-url.ts
 ├── app/
 │   ├── page.tsx                # Landing page
@@ -425,7 +488,7 @@ See [`context/app-map.md`](context/app-map.md) for a full reference of every rou
 
 ### Finding jobs
 1. Fill in job title and location on the Find Jobs page
-2. The agent searches all sources in parallel and GPT-4o scores each result against your profile
+2. The agent searches all sources in parallel and Claude scores each result against your profile
 3. Jobs appear in the table sorted by match score with matched and missing skills
 4. Click any row to open the full job detail page
 
@@ -464,7 +527,7 @@ because that sentence had been truncated away.
 - `jobs.description_word_count` is a generated column measuring the scored text
 - Under `LOW_INFO_WORD_COUNT` (100 words), `scoreJob` caps `matchScore` at
   `LOW_INFO_SCORE_CAP` (50) **in code**. The prompt states the same rule, but
-  GPT-4o ignored it for 46 of 60 such jobs, so it is enforced after parsing
+  the model ignored it for 46 of 60 such jobs, so it is enforced after parsing
 - `<LimitedInfoBadge />` marks those jobs in the list and on the detail page,
   with a tooltip explaining why the score is capped
 - The scoring prompt also treats overqualification as a mismatch: a posting
@@ -503,17 +566,17 @@ attributed to a week.
 ### Company research
 1. Open a job's detail page and click **Research Company**
 2. The agent fetches the company's public website over HTTP (homepage, About, Engineering/Blog pages), also searches DuckDuckGo for the job posting to find contact details, and synthesises a structured dossier
-3. Fallback: if the site can't be reached, GPT-4o generates a best-effort dossier from the company name and job description alone
+3. Fallback: if the site can't be reached, Claude generates a best-effort dossier from the company name and job description alone
 
 ### Cover letter
 1. Click **Generate Cover Letter** on any job detail page
-2. GPT-4o writes a letter using your profile, job description, company research dossier, and any cover letter style examples you have saved
+2. Claude writes a letter using your profile, job description, company research dossier, and any cover letter style examples you have saved
 3. The letter is written in the detected language of the job posting
 4. Optionally paste writing advice from Gemini and click **Recreate with advice** to rewrite the letter using that feedback
 5. Download as PDF or copy as plain text; when you mark the job Applied the letter is automatically archived as a style example
 
 ### Resume
-1. Upload an existing PDF on the Profile page — GPT-4o extracts your details and pre-fills the form
+1. Upload an existing PDF on the Profile page — Claude extracts your details and pre-fills the form
 2. Edit any field manually, then generate a clean PDF resume from your current profile
 3. From any job detail page, generate a job-tailored version optimised for that role
 
@@ -547,27 +610,25 @@ Admins see an **Admin** link in the navbar and can access `/admin` to approve or
 
 ---
 
-## Credit and spend
+## Token usage and spend
 
-New users are granted **$10 of credit when an admin approves them**, so they can
-use the app before paying anything. Stripe top-ups work as before after that.
+There is no app-side balance to track — each user pays Anthropic directly. What
+the app records is **usage**, so a user can see what they have consumed and check
+it against their own Anthropic bill.
 
-The grant is a `payments` row, not a write to `profiles.credit_balance_usd`.
-That column is derived — the `token_usage` trigger recomputes it as
-`SUM(payments) - SUM(token_usage)` on the next AI call — so setting it directly
-would vanish the first time the user generated anything. As a payment row it
-also shows up in their payment history.
+Every AI call writes a `token_usage` row (feature, model, tokens, estimated
+cost). The dashboard shows a per-user token-usage chart, and the admin table
+shows each user's AI spend and generation count, aggregated by the
+`user_ai_spend` view. The view is `security_invoker`, so admins see every row and
+a normal user sees only their own.
 
-It is applied by the `profiles_grant_welcome_credit` trigger rather than by the
-admin route, because approval is also written from raw SQL and anything added
-later would have to remember. Granted once per user: approving, revoking and
-re-approving does not hand out a second $10. The marker lives in
-`payments.stripe_session_id` as `welcome_credit:<user id>` — per-user, because
-that column is UNIQUE and a shared constant would fail for the second user.
+The estimated cost is exactly that — an estimate from the per-model rates in
+`lib/track-tokens.ts`. The authoritative number is on the user's Anthropic
+invoice.
 
-The admin table shows each user's AI spend and remaining credit, aggregated by
-the `user_ai_spend` view. It is `security_invoker`, so admins see every row and
-a normal user would see only their own.
+> **Legacy tables.** `payments` and `profiles.credit_balance_usd` still exist but
+> are no longer read or written. They held only Stripe **test-mode** data and are
+> kept for one release so the removal is reversible; a later migration drops them.
 
 ---
 

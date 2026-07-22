@@ -1,5 +1,5 @@
-import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+import { complete, MODEL_SMART } from "@/lib/ai/claude";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { computeSkillYears } from "@/lib/utils";
@@ -13,7 +13,7 @@ type Result = { success: boolean; text?: string; error?: string; saplingFeedback
 
 
 /**
- * Generates a personalised cover letter for a saved job using gpt-4o.
+ * Generates a personalised cover letter for a saved job.
  * Detects the job's language from the posting text and writes the letter in that
  * language. Picks a random opening strategy unless the candidate has provided
  * custom cover letter instructions (which override the default style guide).
@@ -117,8 +117,6 @@ export async function generateCoverLetter(
   }
 
   try {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); // used only for humanizeText
 
     // Build system prompt from user's own cover letter instructions (primary source of truth).
     // Fall back to minimal defaults only when no profile instructions exist.
@@ -172,19 +170,21 @@ ${recentWork || "Not provided"}${projectsText ? `\n\nPersonal projects:\n${proje
       }] : []),
     ];
 
-    const MODEL = "claude-sonnet-4-6";
-    const response = await anthropic.messages.create({
-      model: MODEL,
+    // No temperature: the model rejects sampling parameters. Variation between
+    // letters comes from the candidate data and the voice examples, which is
+    // where it should come from anyway.
+    const response = await complete({
+      userId,
+      model: MODEL_SMART,
       system: systemPrompt,
-      temperature: 0.7,
-      max_tokens: style === "detailed" ? 900 : 500,
+      maxTokens: style === "detailed" ? 900 : 500,
+      effort: "medium",
       messages: userMessages,
     });
 
-    const rawText = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
     // Strip markdown code fences Claude sometimes wraps around JSON
-    const rawJson = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-    trackTokens(userId, "cover_letter", MODEL, response.usage.input_tokens, response.usage.output_tokens);
+    const rawJson = response.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    trackTokens(userId, "cover_letter", response.model, response.usage.input_tokens, response.usage.output_tokens);
     if (!rawJson) {
       await posthog.shutdown();
       return { success: false, error: "Generation failed. Please try again." };
@@ -205,20 +205,20 @@ ${recentWork || "Not provided"}${projectsText ? `\n\nPersonal projects:\n${proje
     const violations = [...new Set((firstDraft.match(BANNED_REGEX) ?? []).map(w => w.toLowerCase()))];
     if (violations.length > 0) {
       console.log(`[cover-letter] Banned words detected (${violations.join(", ")}), retrying...`);
-      const retryResponse = await anthropic.messages.create({
-        model: MODEL,
+      const retryResponse = await complete({
+        userId,
+        model: MODEL_SMART,
         system: systemPrompt,
-        temperature: 0.5,
-        max_tokens: style === "detailed" ? 900 : 500,
+        maxTokens: style === "detailed" ? 900 : 500,
+        effort: "medium",
         messages: [
           ...userMessages,
           { role: "assistant", content: rawJson },
           { role: "user", content: `BANNED WORDS FOUND: ${violations.join(", ")}. These are absolutely forbidden. Rewrite the JSON replacing every instance with direct, factual phrasing. Do not use them in any form or tense.` },
         ],
       });
-      const retryRaw = retryResponse.content[0]?.type === "text" ? retryResponse.content[0].text.trim() : "";
-      const retryJson = retryRaw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-      trackTokens(userId, "cover_letter", MODEL, retryResponse.usage.input_tokens, retryResponse.usage.output_tokens);
+      const retryJson = retryResponse.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+      trackTokens(userId, "cover_letter", retryResponse.model, retryResponse.usage.input_tokens, retryResponse.usage.output_tokens);
       if (retryJson) {
         try { parsed = JSON.parse(retryJson); } catch { /* keep original parsed */ }
       }
@@ -237,7 +237,7 @@ ${recentWork || "Not provided"}${projectsText ? `\n\nPersonal projects:\n${proje
     ].filter(Boolean);
 
     const raw = sections.join("\n\n");
-    const humanizeResult = await humanizeText(raw, openai, userId);
+    const humanizeResult = await humanizeText(raw, userId);
     const coverLetter = humanizeResult.text;
     const saplingFeedback = {
       score: humanizeResult.saplingScore,

@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import { completeJson } from "@/lib/ai/claude";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { stripHtml } from "@/lib/utils";
@@ -192,7 +192,7 @@ async function resolveCompanyUrl(
     const resolvedDomain = parts.slice(-2).join(".");
 
     // Sanity check: if the resolved domain shares no words with the company name,
-    // it's likely an ATS/redirect we don't recognise — ask GPT-4o for the real URL.
+    // it's likely an ATS/redirect we don't recognise — ask the model for the real URL.
     const companyWords = companyName
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, " ")
@@ -271,7 +271,6 @@ export async function researchCompany(
       | "work_experience"
     >;
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
     const tokenAcc = new TokenAccumulator();
 
     // Resolve company homepage URL
@@ -281,46 +280,37 @@ export async function researchCompany(
 
     let homepageUrl = resolvedUrl;
 
-    // When the redirect didn't land on the company's own site, ask GPT-4o for
+    // When the redirect didn't land on the company's own site, ask the model for
     // the official URL — it knows most companies including non-English ones.
     if (needsGptLookup) {
       let gptFoundUrl = false;
       try {
-        const urlResponse = await openai.chat.completions.create({
-          model: "gpt-4o",
-          response_format: { type: "json_object" },
-          temperature: 0,
-          max_tokens: 100,
-          messages: [
-            {
-              role: "system",
-              content: `Return the official website URL for the given company.
+        const urlResponse = await completeJson<unknown>({
+          userId,
+          maxTokens: 100,
+          effort: "low",
+          system: `Return the official website URL for the given company.
 IMPORTANT: If the job is in Denmark, Sweden, Norway, Finland, Germany, Netherlands, or another non-US country, return the LOCAL or REGIONAL entity's website (e.g. a .dk, .se, .no, .fi, .de, .nl, or .eu domain), NOT the US/global parent company's website. For example, if the company is a Danish subsidiary or European entity, return the Danish/European URL — not the American headquarters.
 Only return a URL you are confident about — do not guess. Return JSON: { "url": "<full url or null>" }`,
-            },
-            {
-              role: "user",
-              content: `Company: ${job.company}\nJob title: ${job.title}\nJob location: ${job.location ?? "unknown"}\nJob description excerpt: ${(job.about_role ?? "").slice(0, 600)}`,
-            },
-          ],
+          user: `Company: ${job.company}\nJob title: ${job.title}\nJob location: ${job.location ?? "unknown"}\nJob description excerpt: ${(job.about_role ?? "").slice(0, 600)}`,
         });
-        tokenAcc.add(urlResponse.usage);
-        const parsed = JSON.parse(urlResponse.choices[0]?.message?.content ?? "{}") as { url?: string | null };
+        tokenAcc.add(urlResponse.usage, urlResponse.model);
+        const parsed = (urlResponse.data ?? {}) as { url?: string | null };
         if (parsed.url) {
           homepageUrl = parsed.url;
           gptFoundUrl = true;
         }
       } catch (urlErr) {
-        console.error("[agent/research-company] GPT-4o URL lookup failed", urlErr);
+        console.error("[agent/research-company] URL lookup failed", urlErr);
       }
 
       // NOTE: We intentionally do NOT override homepageUrl with a local TLD guess here.
-      // GPT-4o's URL is the most reliable signal — overriding it with a probed .dk/.se URL
+      // The model's URL is the most reliable signal — overriding it with a probed .dk/.se URL
       // risks accepting parked domains (which return 200 and mention the company name in their text).
       // Instead, country TLD variants are added to `homepagesToTry` below so the browser
       // tries both the GPT URL and any local TLD versions.
 
-      // GPT-4o doesn't know this company — probe common URL patterns before falling
+      // The model doesn't know this company — probe common URL patterns before falling
       // back to the generic .com guess. Especially important for smaller companies
       // in non-English markets that use country TLDs (.dk, .se, .no, etc.).
       if (!gptFoundUrl) {
@@ -368,15 +358,11 @@ Only return a URL you are confident about — do not guess. Return JSON: { "url"
     // reliable source — no browser needed for contacts/address on aggregator jobs.
     if (job.about_role) {
       try {
-        const jdExtractResponse = await openai.chat.completions.create({
-          model: "gpt-4o",
-          response_format: { type: "json_object" },
-          temperature: 0,
-          max_tokens: 1000,
-          messages: [
-            {
-              role: "system",
-              content: `Extract from this job description. The text may be in any language (Danish, Swedish, English, etc.). Read the ENTIRE text including the end where contact/application instructions often appear.
+        const jdExtractResponse = await completeJson<unknown>({
+          userId,
+          maxTokens: 1000,
+          effort: "low",
+          system: `Extract from this job description. The text may be in any language (Danish, Swedish, English, etc.). Read the ENTIRE text including the end where contact/application instructions often appear.
 Return ONLY valid JSON:
 {
   "contactName": "<full name of an internal hiring contact at the employer company — or null>",
@@ -392,15 +378,13 @@ Return ONLY valid JSON:
   "culturePoints": ["<sentences from sections like 'Hvem er vi?', 'Om os', 'About us', 'Vi er', 'Our culture' that describe the company identity, team size, values, or working environment>"]
 }
 Only extract contacts explicitly named in the text. Distinguish carefully: internal contacts work for the hiring company; recruiters work for an agency hired to fill the role.`,
-            },
-            { role: "user", content: job.about_role.slice(0, 8000) },
-          ],
+          user: job.about_role.slice(0, 8000),
         });
 
-        tokenAcc.add(jdExtractResponse.usage);
-        const jdRaw = jdExtractResponse.choices[0]?.message?.content;
+        tokenAcc.add(jdExtractResponse.usage, jdExtractResponse.model);
+        const jdRaw = jdExtractResponse.data;
         if (jdRaw) {
-          const jdParsed = JSON.parse(jdRaw) as {
+          const jdParsed = jdRaw as {
             contactName?: string | null;
             contactTitle?: string | null;
             contactEmail?: string | null;
@@ -473,15 +457,11 @@ Only extract contacts explicitly named in the text. Distinguish carefully: inter
           const rawText = stripHtml(cleanedHtml).replace(/\s+/g, " ").trim();
           if (rawText.length > 500) {
             console.log(`[research-company] HTTP fetch source_url: ${rawText.length} chars, tail: ${rawText.slice(-500)}`);
-            const httpExtractResponse = await openai.chat.completions.create({
-              model: "gpt-4o",
-              response_format: { type: "json_object" },
-              temperature: 0,
-              max_tokens: 900,
-              messages: [
-                {
-                  role: "system",
-                  content: `Extract from this job posting page. The text may be in any language (Danish, Swedish, English, etc.). Read the entire text — contact info often appears at the end.
+            const httpExtractResponse = await completeJson<unknown>({
+              userId,
+              maxTokens: 900,
+              effort: "low",
+              system: `Extract from this job posting page. The text may be in any language (Danish, Swedish, English, etc.). Read the entire text — contact info often appears at the end.
 Return ONLY valid JSON:
 {
   "contactName": "<full name of an internal hiring contact at the employer company — or null>",
@@ -496,15 +476,13 @@ Return ONLY valid JSON:
   "culturePoints": ["<up to 3 sentences from company identity sections>"]
 }
 Only include contacts explicitly named in the text. Distinguish internal contacts (work at hiring company) from external recruiters (work at a recruiting agency).`,
-                },
-                { role: "user", content: rawText.slice(0, 10000) },
-              ],
+              user: rawText.slice(0, 10000),
             });
-            tokenAcc.add(httpExtractResponse.usage);
-            const httpRaw = httpExtractResponse.choices[0]?.message?.content;
-            console.log(`[research-company] HTTP extract GPT-4o: ${httpRaw?.slice(0, 300)}`);
+            tokenAcc.add(httpExtractResponse.usage, httpExtractResponse.model);
+            const httpRaw = httpExtractResponse.data;
+            console.log(`[research-company] HTTP extract: ${httpExtractResponse.text.slice(0, 300)}`);
             if (httpRaw) {
-              const httpParsed = JSON.parse(httpRaw) as {
+              const httpParsed = httpRaw as {
                 contactName?: string | null; contactTitle?: string | null;
                 contactEmail?: string | null; contactPhone?: string | null;
                 recruiterName?: string | null; recruiterTitle?: string | null;
@@ -641,15 +619,11 @@ Only include contacts explicitly named in the text. Distinguish internal contact
       const extractPageForJobPosting = async (pageText: string): Promise<boolean> => {
         if (!pageText || pageText.length < 300) return false;
         try {
-          const res = await openai.chat.completions.create({
-            model: "gpt-4o",
-            response_format: { type: "json_object" },
-            temperature: 0,
-            max_tokens: 1000,
-            messages: [
-              {
-                role: "system",
-                content: `Extract from this job posting page. May be in any language (Danish, English, etc.).
+          const res = await completeJson<unknown>({
+            userId,
+            maxTokens: 1000,
+            effort: "low",
+            system: `Extract from this job posting page. May be in any language (Danish, English, etc.).
 Return ONLY valid JSON:
 {
   "contactName": "<hiring manager or HR contact full name — or null>",
@@ -664,14 +638,12 @@ Return ONLY valid JSON:
   "culturePoints": ["<sentences from About us / Om os / company description sections>"]
 }
 Only extract contacts explicitly named in the text.`,
-              },
-              { role: "user", content: pageText.slice(0, 12000) },
-            ],
+            user: pageText.slice(0, 12000),
           });
-          tokenAcc.add(res.usage);
-          const raw = res.choices[0]?.message?.content;
+          tokenAcc.add(res.usage, res.model);
+          const raw = res.data;
           if (!raw) return false;
-          const parsed = JSON.parse(raw) as {
+          const parsed = raw as {
             contactName?: string | null; contactTitle?: string | null;
             contactEmail?: string | null; contactPhone?: string | null;
             recruiterName?: string | null; recruiterTitle?: string | null;
@@ -795,15 +767,11 @@ Only extract contacts explicitly named in the text.`,
           if (homeText.length < 200) continue;
           const htmlLinks = extractInternalLinks(homeHtml, finalUrl);
 
-          const homeExtract = await openai.chat.completions.create({
-            model: "gpt-4o",
-            response_format: { type: "json_object" },
-            temperature: 0,
-            max_tokens: 600,
-            messages: [
-              {
-                role: "system",
-                content: `This is a company homepage. Extract what the company does and identify internal pages worth visiting.
+          const homeExtract = await completeJson<unknown>({
+            userId,
+            maxTokens: 600,
+            effort: "low",
+            system: `This is a company homepage. Extract what the company does and identify internal pages worth visiting.
 Return ONLY valid JSON:
 {
   "oneLiner": "<what the company does in one sentence>",
@@ -812,18 +780,13 @@ Return ONLY valid JSON:
   "pageLinks": [{ "url": "<absolute URL>", "kind": "<about|contact|blog|engineering|product|team|other>" }]
 }
 For pageLinks, select the most useful internal pages to research the company as an employer. Use only URLs from the provided links list.`,
-              },
-              {
-                role: "user",
-                content: `Page text:\n${homeText}\n\nInternal links found:\n${htmlLinks.map((l) => `${l.url} (${l.kind})`).join("\n")}`,
-              },
-            ],
+            user: `Page text:\n${homeText}\n\nInternal links found:\n${htmlLinks.map((l) => `${l.url} (${l.kind})`).join("\n")}`,
           });
 
-          tokenAcc.add(homeExtract.usage);
-          const homeRaw = homeExtract.choices[0]?.message?.content;
+          tokenAcc.add(homeExtract.usage, homeExtract.model);
+          const homeRaw = homeExtract.data;
           if (!homeRaw) continue;
-          const homeParsed = JSON.parse(homeRaw) as {
+          const homeParsed = homeRaw as {
             oneLiner?: string; productSummary?: string; signals?: string[];
             pageLinks?: Array<{ url: string; kind: string }>;
           };
@@ -868,15 +831,11 @@ For pageLinks, select the most useful internal pages to research the company as 
             ? aboutText.slice(0, 1000) + " … " + aboutText.slice(-8000)
             : aboutText;
 
-          const aboutExtract = await openai.chat.completions.create({
-            model: "gpt-4o",
-            response_format: { type: "json_object" },
-            temperature: 0,
-            max_tokens: 600,
-            messages: [
-              {
-                role: "system",
-                content: `Extract from this company about/contact page. May be in any language.
+          const aboutExtract = await completeJson<unknown>({
+            userId,
+            maxTokens: 600,
+            effort: "low",
+            system: `Extract from this company about/contact page. May be in any language.
 Return ONLY valid JSON:
 {
   "keyPoints": ["<key facts about the company>"],
@@ -890,15 +849,13 @@ Return ONLY valid JSON:
   "contactPhone": "<phone number — or null>"
 }
 If multiple office addresses are listed, prefer the one in the same country as the job location: ${job.location ?? "unknown"}.`,
-              },
-              { role: "user", content: slice },
-            ],
+            user: slice,
           });
 
-          tokenAcc.add(aboutExtract.usage);
-          const aboutRaw = aboutExtract.choices[0]?.message?.content;
+          tokenAcc.add(aboutExtract.usage, aboutExtract.model);
+          const aboutRaw = aboutExtract.data;
           if (!aboutRaw) continue;
-          const aboutData = JSON.parse(aboutRaw) as {
+          const aboutData = aboutRaw as {
             keyPoints?: string[]; technologies?: string[]; valuesOrCulture?: string[];
             notable?: string[]; address?: string | null;
             contactName?: string | null; contactTitle?: string | null;
@@ -953,15 +910,11 @@ If multiple office addresses are listed, prefer the one in the same country as t
                 ? `Extract the full postal address (street number, city, zip, country), any email addresses, phone numbers, and contact person names/titles. Also extract what the company does, their values, and team culture. If multiple office addresses are listed, prefer the one in the same country as the job location: ${job.location ?? "unknown"}.`
                 : "Extract substance that helps a candidate understand this company before applying: what they do, their values and how they work, the specific technologies and tools they use, notable projects or customers, and how the team operates. Ignore nav, footers, cookie banners, and generic marketing copy.";
 
-            const subExtract = await openai.chat.completions.create({
-              model: "gpt-4o",
-              response_format: { type: "json_object" },
-              temperature: 0,
-              max_tokens: 500,
-              messages: [
-                {
-                  role: "system",
-                  content: `${extractInstruction}
+            const subExtract = await completeJson<unknown>({
+              userId,
+              maxTokens: 500,
+              effort: "low",
+              system: `${extractInstruction}
 Return ONLY valid JSON:
 {
   "keyPoints": ["<key facts>"],
@@ -973,15 +926,13 @@ Return ONLY valid JSON:
   "contactEmail": "<contact email — or null>",
   "contactPhone": "<contact phone — or null>"
 }`,
-                },
-                { role: "user", content: slice },
-              ],
+              user: slice,
             });
 
-            tokenAcc.add(subExtract.usage);
-            const subRaw = subExtract.choices[0]?.message?.content;
+            tokenAcc.add(subExtract.usage, subExtract.model);
+            const subRaw = subExtract.data;
             if (!subRaw) continue;
-            const subData = JSON.parse(subRaw) as {
+            const subData = subRaw as {
               keyPoints?: string[]; technologies?: string[]; valuesOrCulture?: string[];
               notable?: string[]; address?: string | null;
               contactName?: string | null; contactEmail?: string | null; contactPhone?: string | null;
@@ -1030,15 +981,11 @@ Return ONLY valid JSON:
               const { text: resultText } = await fetchText(resultUrl, 12000);
               if (resultText.length < 200) continue;
 
-              const ddgExtract = await openai.chat.completions.create({
-                model: "gpt-4o",
-                response_format: { type: "json_object" },
-                temperature: 0,
-                max_tokens: 500,
-                messages: [
-                  {
-                    role: "system",
-                    content: `Extract company information from this page.
+              const ddgExtract = await completeJson<unknown>({
+                userId,
+                maxTokens: 500,
+                effort: "low",
+                system: `Extract company information from this page.
 Return ONLY valid JSON:
 {
   "keyPoints": ["<key facts>"],
@@ -1051,15 +998,13 @@ Return ONLY valid JSON:
   "address": "<full postal address — or null>"
 }
 Skip nav, footers, cookie banners, and marketing boilerplate.`,
-                  },
-                  { role: "user", content: resultText.slice(0, 6000) },
-                ],
+                user: resultText.slice(0, 6000),
               });
 
-              tokenAcc.add(ddgExtract.usage);
-              const ddgRaw = ddgExtract.choices[0]?.message?.content;
+              tokenAcc.add(ddgExtract.usage, ddgExtract.model);
+              const ddgRaw = ddgExtract.data;
               if (!ddgRaw) continue;
-              const ddg = JSON.parse(ddgRaw) as {
+              const ddg = ddgRaw as {
                 keyPoints?: string[]; technologies?: string[]; valuesOrCulture?: string[];
                 notable?: string[]; contactName?: string | null; contactEmail?: string | null;
                 contactPhone?: string | null; address?: string | null;
@@ -1174,15 +1119,11 @@ Skip nav, footers, cookie banners, and marketing boilerplate.`,
             ? fullText.slice(0, 1000) + " … " + fullText.slice(-8000)
             : fullText;
 
-          const response = await openai.chat.completions.create({
-            model: "gpt-4o",
-            response_format: { type: "json_object" },
-            temperature: 0,
-            max_tokens: 250,
-            messages: [
-              {
-                role: "system",
-                content: `Extract from this company page. The page may be in any language.
+          const response = await completeJson<unknown>({
+            userId,
+            maxTokens: 250,
+            effort: "low",
+            system: `Extract from this company page. The page may be in any language.
 Return ONLY valid JSON:
 {
   "address": "<full postal address including street, city, zip, country — or null if not found>",
@@ -1192,15 +1133,13 @@ Return ONLY valid JSON:
   "contactPhone": "<their phone number or a general contact phone — or null>"
 }
 If multiple office addresses appear on the page, return the one in the same country as the job location: ${job.location ?? "unknown"}. Only fall back to a different country's address if no local address exists.`,
-              },
-              { role: "user", content: text },
-            ],
+            user: text,
           });
 
-          tokenAcc.add(response.usage);
-          const raw = response.choices[0]?.message?.content;
+          tokenAcc.add(response.usage, response.model);
+          const raw = response.data;
           if (raw) {
-            const parsed = JSON.parse(raw) as {
+            const parsed = raw as {
               address?: string | null;
               contactName?: string | null;
               contactTitle?: string | null;
@@ -1233,10 +1172,10 @@ If multiple office addresses appear on the page, return the one in the same coun
       }
     }
 
-    // If browser research found nothing, try all available sources in one combined GPT-4o call:
+    // If browser research found nothing, try all available sources in one combined call:
     // 1. Plain HTTP fetch of the company website
     // 2. The job posting itself (which usually contains an "About the company" section)
-    // 3. GPT-4o's own training knowledge as implicit fallback
+    // 3. The model's own training knowledge as implicit fallback
     const browserResearchEmpty =
       !companyResearchRaw.oneLiner && !companyResearchRaw.productSummary;
 
@@ -1282,15 +1221,11 @@ If multiple office addresses appear on the page, return the one in the same coun
       const combinedContext = parts.join("\n\n---\n\n");
 
       try {
-        const fallbackResponse = await openai.chat.completions.create({
-          model: "gpt-4o",
-          response_format: { type: "json_object" },
-          temperature: 0.2,
-          max_tokens: 500,
-          messages: [
-            {
-              role: "system",
-              content: `You are extracting company information. You have access to the company website text and/or the job posting. Job postings almost always include a company description section (often labelled "About us", "Om virksomheden", "About the company" or similar).
+        const fallbackResponse = await completeJson<unknown>({
+          userId,
+          maxTokens: 500,
+          effort: "low",
+          system: `You are extracting company information. You have access to the company website text and/or the job posting. Job postings almost always include a company description section (often labelled "About us", "Om virksomheden", "About the company" or similar).
 
 Extract from the provided text first. If the provided text is insufficient or just a Cloudflare/bot-check page, use your own training knowledge about the company.
 
@@ -1303,18 +1238,13 @@ Return ONLY valid JSON:
   "contactInfo": { "name": null, "title": null, "email": null, "phone": null }
 }
 Never return empty strings — if you have partial knowledge, share it. Only return null for fields you have no information about at all.`,
-            },
-            {
-              role: "user",
-              content: `Company: ${job.company}\nJob title: ${job.title}\nLocation: ${job.location ?? "unknown"}\n\n${combinedContext}`,
-            },
-          ],
+          user: `Company: ${job.company}\nJob title: ${job.title}\nLocation: ${job.location ?? "unknown"}\n\n${combinedContext}`,
         });
 
-        tokenAcc.add(fallbackResponse.usage);
-        const raw = fallbackResponse.choices[0]?.message?.content;
+        tokenAcc.add(fallbackResponse.usage, fallbackResponse.model);
+        const raw = fallbackResponse.data;
         if (raw) {
-          const result = JSON.parse(raw) as {
+          const result = raw as {
             oneLiner?: string;
             productSummary?: string;
             signals?: string[];
@@ -1347,7 +1277,7 @@ Never return empty strings — if you have partial knowledge, share it. Only ret
       };
     }
 
-    // GPT-4o synthesis — always runs, even if browser research was empty
+    // Synthesis — always runs, even if browser research was empty
 
     const researchSourceLabel = stillEmpty
       ? " (from AI training knowledge — treat as approximate)"
@@ -1418,20 +1348,17 @@ Work history: ${JSON.stringify((profile.work_experience ?? []).slice(0, 3))}`;
     let dossier: Record<string, unknown>;
 
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        response_format: { type: "json_object" },
-        temperature: 0.4,
-        max_tokens: 1500,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
+      const response = await completeJson<unknown>({
+        userId,
+        maxTokens: 1500,
+        effort: "low",
+        system: systemPrompt,
+        user: userPrompt,
       });
 
-      tokenAcc.add(response.usage);
-      dossier = JSON.parse(response.choices[0].message.content!);
-      // Override sources with actual scraped URLs — GPT-4o tends to hallucinate these
+      tokenAcc.add(response.usage, response.model);
+      dossier = (response.data ?? {}) as Record<string, unknown>;
+      // Override sources with actual scraped URLs — the model tends to hallucinate these
       dossier.sources = [...new Set(companyResearchRaw.sourceUrls.filter(Boolean))];
 
       // Preserve existing contact info and address if this run found nothing new.
@@ -1495,7 +1422,7 @@ Work history: ${JSON.stringify((profile.work_experience ?? []).slice(0, 3))}`;
         .eq("user_id", userId);
     }
 
-    tokenAcc.flush(userId, "research_company", "gpt-4o");
+    tokenAcc.flush(userId, "research_company");
     posthog.capture({
       distinctId: userId,
       event: "company_researched",

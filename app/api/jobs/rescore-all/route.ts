@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { scoreJob } from "@/agent/find-jobs";
 import type { Profile } from "@/types";
+import { keyGuard } from "@/lib/ai/key-guard";
 
 export async function POST() {
   const insforge = await createInsforgeServer();
@@ -11,6 +11,11 @@ export async function POST() {
   } = await insforge.auth.getCurrentUser();
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+
+  const keyBlocked = await keyGuard(user.id);
+
+  if (keyBlocked) return keyBlocked;
 
   const { data: jobs, error: jobsError } = await insforge.database
     .from("jobs")
@@ -37,12 +42,11 @@ export async function POST() {
   }
 
   const profile = profileData as Profile;
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
   let updated = 0;
   let failed = 0;
 
-  // Score sequentially to avoid hammering the OpenAI rate limit
+  // Score sequentially to avoid hammering the API rate limit
   for (const job of jobs) {
     try {
       const scored = await scoreJob(
@@ -60,7 +64,7 @@ export async function POST() {
           source: "url" as const,
         },
         profile,
-        openai,
+        user.id,
       );
 
       if (!scored) { failed++; continue; }

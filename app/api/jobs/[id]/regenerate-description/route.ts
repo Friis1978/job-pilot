@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
 import { createInsforgeServer } from "@/lib/insforge-server";
+import { isClaudeConfigured } from "@/lib/ai/claude";
 import { trackTokens } from "@/lib/track-tokens";
 import { summarizeDescription } from "@/lib/summarize-description";
+import { keyGuard } from "@/lib/ai/key-guard";
 
 export async function POST(
   _req: NextRequest,
@@ -13,6 +14,11 @@ export async function POST(
   const { data: { user } } = await insforge.auth.getCurrentUser();
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+
+  const keyBlocked = await keyGuard(user.id);
+
+  if (keyBlocked) return keyBlocked;
 
   const { data: jobData, error: jobError } = await insforge.database
     .from("jobs")
@@ -30,14 +36,13 @@ export async function POST(
     return NextResponse.json({ error: "No job description available to summarize." }, { status: 400 });
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json({ error: "OpenAI not configured." }, { status: 503 });
+  if (!isClaudeConfigured()) {
+    return NextResponse.json({ error: "AI is not configured." }, { status: 503 });
   }
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   // minLength 50: the user asked for this one explicitly, so summarise even a
   // short posting rather than silently returning nothing.
-  const { text: summary, usage } = await summarizeDescription(aboutRole, openai, { minLength: 50 });
+  const { text: summary, usage, model } = await summarizeDescription(aboutRole, user.id, { minLength: 50 });
 
   if (!summary) {
     return NextResponse.json({ error: "Summarization failed. Please try again." }, { status: 500 });
@@ -46,9 +51,9 @@ export async function POST(
   trackTokens(
     user.id,
     "regenerate_description",
-    "gpt-4o-mini",
-    usage?.prompt_tokens ?? 0,
-    usage?.completion_tokens ?? 0,
+    model,
+    usage?.input_tokens ?? 0,
+    usage?.output_tokens ?? 0,
   );
 
   const { error: updateError } = await insforge.database

@@ -203,8 +203,8 @@ export const waitForImages = async (page: Page) => {
  * to drive; and a recording that opens on a Google consent screen is worse than
  * one that opens on the product.
  *
- * `jp_approved` / `jp_has_credit` are the app's own gate flags, normally set
- * after approval and payment. The proxy redirects to /pending or /payment
+ * `jp_approved` is the app's own gate flag, normally set after approval.
+ * The proxy redirects to /pending
  * without them, so they are planted too.
  *
  * Credentials come from the environment — never from a committed file.
@@ -237,7 +237,6 @@ export const establishSession = async (context: BrowserContext, baseURL: string)
     ...(csrfToken ? [{ name: "insforge_csrf_token", value: csrfToken, ...base }] : []),
     // App gate flags — see proxy.ts
     { name: "jp_approved", value: "1", ...base },
-    { name: "jp_has_credit", value: "1", ...base },
     { name: "jp_has_account", value: "1", ...base },
   ]);
 };

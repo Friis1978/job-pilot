@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { importJobFromUrl } from "@/agent/import-job-from-url";
+import { keyGuard } from "@/lib/ai/key-guard";
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,6 +13,11 @@ export async function POST(req: NextRequest) {
     } = await insforge.auth.getCurrentUser();
 
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+
+    const keyBlocked = await keyGuard(user.id);
+
+    if (keyBlocked) return keyBlocked;
 
     const body = await req.json();
     const url = typeof body?.url === "string" ? body.url.trim() : "";

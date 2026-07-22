@@ -1,7 +1,7 @@
 import { updateSession } from "@insforge/sdk/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED_PATHS = ["/dashboard", "/profile", "/find-jobs", "/payment"];
+const PROTECTED_PATHS = ["/dashboard", "/profile", "/find-jobs", "/settings"];
 const ADMIN_PATHS = ["/admin"];
 
 // Routes where we skip updateSession — the route handler manages its own refresh
@@ -69,11 +69,6 @@ export async function proxy(request: NextRequest) {
     if (!isApproved) {
       return withRefreshedCookies(NextResponse.redirect(new URL("/pending", request.url)));
     }
-    // Approved but no credit — redirect to payment page (allow /payment itself through)
-    const hasCredit = request.cookies.get("jp_has_credit")?.value === "1";
-    if (!hasCredit && !pathname.startsWith("/payment")) {
-      return withRefreshedCookies(NextResponse.redirect(new URL("/payment", request.url)));
-    }
   }
 
   // Admin routes require the jp_admin cookie
@@ -114,7 +109,7 @@ export const config = {
     "/dashboard/:path*",
     "/profile/:path*",
     "/find-jobs/:path*",
-    "/payment/:path*",
+    "/settings/:path*",
     "/admin/:path*",
     "/auth/login",
     "/api/:path*",

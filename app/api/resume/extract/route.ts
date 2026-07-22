@@ -1,10 +1,11 @@
 import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import { PDFParse } from "pdf-parse";
-import OpenAI from "openai";
+import { completeJson, isClaudeConfigured } from "@/lib/ai/claude";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import type { ProfileFormInput } from "@/types";
 import { trackTokens } from "@/lib/track-tokens";
+import { keyGuard } from "@/lib/ai/key-guard";
 
 const SYSTEM_PROMPT = `You are a resume parser. Extract structured profile information from the resume text provided.
 
@@ -75,6 +76,9 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
     const userId = authData.user.id;
 
+    const keyBlocked = await keyGuard(userId);
+    if (keyBlocked) return keyBlocked;
+
     const formData = await req.formData();
     const file = formData.get("file");
 
@@ -118,7 +122,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
-    if (!process.env.OPENAI_API_KEY) {
+    if (!isClaudeConfigured()) {
       return NextResponse.json(
         { error: "AI extraction is not configured yet." },
         { status: 503 },
@@ -127,38 +131,17 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     const trimmedText = extractedText.slice(0, 12000);
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      response_format: { type: "json_object" },
-      temperature: 0.3,
-      max_tokens: 4000,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `Extract profile information from this resume:\n\n${trimmedText}`,
-        },
-      ],
+    const { data: parsed, usage, model } = await completeJson<Partial<ProfileFormInput>>({
+      userId,
+      maxTokens: 4000,
+      effort: "low",
+      system: SYSTEM_PROMPT,
+      user: `Extract profile information from this resume:\n\n${trimmedText}`,
     });
 
-    trackTokens(userId, "resume_extract", "gpt-4o", response.usage?.prompt_tokens ?? 0, response.usage?.completion_tokens ?? 0);
-    const choice = response.choices[0];
-    if (choice.finish_reason === "length") {
-      console.warn("[api/resume/extract] response truncated — increase max_tokens");
-    }
-    const raw = choice.message.content;
-    if (!raw) {
-      return NextResponse.json(
-        { error: "Extraction failed. Please try again." },
-        { status: 500 },
-      );
-    }
+    trackTokens(userId, "resume_extract", model, usage.input_tokens, usage.output_tokens);
 
-    let parsed: Partial<ProfileFormInput>;
-    try {
-      parsed = JSON.parse(raw) as Partial<ProfileFormInput>;
-    } catch {
+    if (!parsed) {
       return NextResponse.json(
         { error: "Extraction failed. Please try again." },
         { status: 500 },

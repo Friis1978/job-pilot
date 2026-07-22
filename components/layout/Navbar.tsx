@@ -20,7 +20,7 @@ export type NavUser = {
   avatarUrl?: string | null;
 };
 
-type Props = { user?: NavUser; hasAccount?: boolean; isAdmin?: boolean; creditBalance?: number };
+type Props = { user?: NavUser; hasAccount?: boolean; isAdmin?: boolean };
 
 function getInitials(name?: string | null, email?: string | null): string {
   if (name?.trim()) {
@@ -33,7 +33,7 @@ function getInitials(name?: string | null, email?: string | null): string {
   return "?";
 }
 
-export function Navbar({ user, hasAccount, isAdmin, creditBalance }: Props) {
+export function Navbar({ user, hasAccount, isAdmin }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -128,11 +128,11 @@ export function Navbar({ user, hasAccount, isAdmin, creditBalance }: Props) {
                   Profile
                 </Link>
                 <Link
-                  href="/payment"
+                  href="/settings/api-key"
                   onClick={() => setOpen(false)}
                   className="block px-3 py-2 text-sm text-text-primary hover:bg-surface-secondary transition-colors"
                 >
-                  Credits
+                  API key
                 </Link>
                 <button
                   onClick={handleSignOut}

@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
-import OpenAI from "openai";
+import { completeJson, MODEL_SMART } from "@/lib/ai/claude";
 import { createInsforgeServer } from "@/lib/insforge-server";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { TokenAccumulator } from "@/lib/track-tokens";
@@ -11,6 +11,7 @@ import { searchJobsGlassdoor } from "@/lib/glassdoor";
 import { MATCH_THRESHOLD, LOW_INFO_SCORE_CAP, isLowInformation, stripHtml, computeSkillYears, getLocationAliases, normalizeLocationToEnglish } from "@/lib/utils";
 import { summarizeDescription } from "@/lib/summarize-description";
 import type { Profile, AdzunaJob, NormalizedJob, ScoredJob, PersonalProject } from "@/types";
+import { isUserKeyError } from "@/lib/ai/key-guard";
 
 type ScoringResult = ScoredJob & { job: NormalizedJob };
 
@@ -214,8 +215,34 @@ export function extractSalaryFromText(text: string): string | null {
 }
 
 /**
- * Scores a job against the candidate's profile using gpt-4o, returning a
- * 0–100 match score, a plain-English reason, matched skills, and missing skills.
+ * The shape the scorer must return. Supplying it to the API removes the class
+ * of failure where a score came back as a string, a list came back as a
+ * comma-joined sentence, or a key was simply missing.
+ */
+const SCORE_SCHEMA = {
+  type: "object",
+  properties: {
+    matchScore: { type: "integer" },
+    experienceScore: { type: "integer" },
+    seniorityScore: { type: "integer" },
+    matchReason: { type: "string" },
+    matchedSkills: { type: "array", items: { type: "string" } },
+    missingSkills: { type: "array", items: { type: "string" } },
+  },
+  required: [
+    "matchScore",
+    "experienceScore",
+    "seniorityScore",
+    "matchReason",
+    "matchedSkills",
+    "missingSkills",
+  ],
+  additionalProperties: false,
+} as const;
+
+/**
+ * Scores a job against the candidate's profile, returning a 0–100 match score,
+ * a plain-English reason, matched skills, and missing skills.
  * Returns `null` on parse/API failure.
  *
  * Location rules come from the candidate's profile preferences, never from the
@@ -227,7 +254,7 @@ export function extractSalaryFromText(text: string): string | null {
 export async function scoreJob(
   job: NormalizedJob,
   profile: Profile,
-  openai: OpenAI,
+  userId: string,
   acc?: TokenAccumulator,
 ): Promise<ScoringResult | null> {
   let locationRule: string;
@@ -244,20 +271,20 @@ export async function scoreJob(
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      response_format: { type: "json_object" },
+    const { data: scored, usage, model } = await completeJson<ScoredJob>({
+      userId,
+      model: MODEL_SMART,
+      maxTokens: 500,
       // Scoring must be reproducible: rescoring an unchanged job against an
       // unchanged profile previously returned a different matchedSkills list
-      // each time, because temperature 0.3 resampled the answer. Skill matching
-      // is an extraction task with one right answer, not a creative one.
-      temperature: 0,
-      seed: 1,
-      max_tokens: 500,
-      messages: [
-        {
-          role: "system",
-          content: `You are a job matching assistant. Score how well a job posting matches a candidate's profile.
+      // each time, because the sampling temperature resampled the answer. Skill
+      // matching is an extraction task with one right answer, not a creative
+      // one. temperature and seed no longer exist on this model — the schema
+      // pins the shape and low effort keeps the model from re-deliberating a
+      // question the description already answers.
+      effort: "low",
+      schema: SCORE_SCHEMA,
+      system: `You are a job matching assistant. Score how well a job posting matches a candidate's profile.
 Return ONLY valid JSON with this exact shape:
 {
   "matchScore": <integer 0-100>,
@@ -295,10 +322,7 @@ Scoring rules:
 - Never infer requirements that are not stated. Missing information is a signal to score lower, not higher.
 - A mismatch in seniority, domain, or core technology stack should significantly reduce the score.
 - Overqualification is a mismatch, not a bonus. If the posting targets recent graduates or entry-level candidates — "newly graduated", "nyuddannet", "nyuddannede", "just finished your bachelor or master", "recent graduate", "entry level", "graduate programme", "trainee" — and the candidate has substantially more experience than that, cap matchScore at 40 and set experienceScore and seniorityScore below 40. Employers hiring graduates will not hire a candidate with ten years of experience, however strong the skill overlap.${locationRule ? `\n${locationRule}` : ""}`,
-        },
-        {
-          role: "user",
-          content: `JOB:
+      user: `JOB:
 Title: ${job.title}
 Company: ${job.company}
 Location: ${job.location}
@@ -324,15 +348,10 @@ Recent work: ${JSON.stringify(
               if (!projects.length) return "";
               return `\nPersonal projects: ${projects.map((p) => `${p.name}${p.skills.length ? ` (${p.skills.join(", ")})` : ""}`).join("; ")}`;
             })()}`,
-        },
-      ],
     });
 
-    const raw = response.choices[0]?.message?.content;
-    acc?.add(response.usage);
-    if (!raw) return null;
-
-    const scored = JSON.parse(raw) as ScoredJob;
+    acc?.add(usage, model);
+    if (!scored) return null;
 
     // Enforce the low-information cap here rather than trusting the prompt to
     // honour it. A truncated aggregator snippet omits the very requirements that
@@ -344,6 +363,10 @@ Recent work: ${JSON.stringify(
 
     return { ...scored, job };
   } catch (err) {
+    // A key revoked mid-search must not degrade into "no jobs matched" — every
+    // remaining job would fail the same way, and the user would be told their
+    // search found nothing rather than that their key stopped working.
+    if (isUserKeyError(err)) throw err;
     Sentry.captureException(err, { extra: { jobId: job.id, jobTitle: job.title, company: job.company } });
     console.error(`[agent/find-jobs] scoring failed for job ${job.id}`);
     return null;
@@ -508,10 +531,9 @@ export async function findJobs(
       }
     }
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const tokenAcc = new TokenAccumulator();
     const scoringResults = await Promise.all(
-      enrichedJobs.map((job) => scoreJob(job, profile, openai, tokenAcc)),
+      enrichedJobs.map((job) => scoreJob(job, profile, userId, tokenAcc)),
     );
 
     const allQualifying = scoringResults.filter(
@@ -544,11 +566,12 @@ export async function findJobs(
     }
 
     if (jobsWithUrl.length > 0) {
-      // Generate short summaries in parallel — gpt-4o-mini, fast and cheap
+      // Generate short summaries in parallel — the fast tier, cheap enough to
+      // run on every saved job.
       const summaries = await Promise.all(
         jobsWithUrl.map(async (r) => {
-          const res = await summarizeDescription(r.job.description, openai, { minLength: 500 });
-          tokenAcc.add(res.usage);
+          const res = await summarizeDescription(r.job.description, userId, { minLength: 500 });
+          tokenAcc.add(res.usage, res.model);
           return res.text;
         }),
       );
@@ -614,7 +637,7 @@ export async function findJobs(
       .eq("id", runId)
       .eq("user_id", userId);
 
-    tokenAcc.flush(userId, "find_jobs", "gpt-4o");
+    tokenAcc.flush(userId, "find_jobs");
     await posthog.shutdown();
 
     return {
