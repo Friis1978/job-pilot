@@ -8,7 +8,7 @@ An AI-powered job hunting assistant. Set up your profile once, then let the agen
 
 ## Walkthrough
 
-<a href="docs/walkthrough.mp4"><img src="docs/walkthrough-thumb.jpg" alt="DevJobInfo walkthrough" width="640" /></a>
+<a href="https://friis1978.github.io/job-pilot/walkthrough.mp4"><img src="docs/walkthrough-thumb.jpg" alt="DevJobInfo walkthrough" width="640" /></a>
 
 Click the thumbnail to watch the three-minute tour — dashboard, profile, job
 search and match breakdown, then a cover letter and tailored resume generated

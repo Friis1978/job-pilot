@@ -22,6 +22,21 @@ ffmpeg -y -i test-results/*/video.webm \
 ffmpeg -y -ss 21 -i docs/walkthrough.mp4 -frames:v 1 -q:v 3 docs/walkthrough-thumb.jpg
 ```
 
+## Where the video is served from
+
+A relative link to an `.mp4` in the repo does **not** play — GitHub only opens
+its file page. The video is served by GitHub Pages instead, built from `/docs`
+on `main`:
+
+    https://friis1978.github.io/job-pilot/walkthrough.mp4
+
+so the README links a thumbnail to that URL. Pushing a new `docs/walkthrough.mp4`
+republishes it automatically; no separate step. Check the build with:
+
+```bash
+gh api repos/Friis1978/job-pilot/pages --jq '.status'
+```
+
 Run `auth-smoke` first. A session failure three minutes into a take is expensive;
 the smoke test catches it in eight seconds.
 
