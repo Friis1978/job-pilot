@@ -73,3 +73,6 @@ memory
 # Playwright recording artefacts (the exported mp4 in docs/ is committed)
 test-results/
 playwright-report/
+
+# Your own voiceover recordings (raw takes, not published)
+docs/vo-human/
