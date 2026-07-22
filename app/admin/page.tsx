@@ -1,15 +1,8 @@
 import { redirect } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { AdminUsersTable } from "@/components/admin/AdminUsersTable";
+import type { AdminUser } from "@/components/admin/AdminUsersTable";
 import { createInsforgeServer } from "@/lib/insforge-server";
-
-type AdminUser = {
-  id: string;
-  email: string | null;
-  full_name: string | null;
-  approval_status: "pending" | "approved" | "rejected";
-  created_at: string;
-};
 
 export default async function AdminPage() {
   const insforge = await createInsforgeServer();
@@ -26,10 +19,48 @@ export default async function AdminPage() {
 
   if (!callerProfile?.is_admin) redirect("/dashboard");
 
-  const { data: users } = await insforge.database
-    .from("profiles")
-    .select("id, email, full_name, approval_status, created_at")
-    .order("created_at", { ascending: false });
+  // Spend comes from the user_ai_spend view, which aggregates token_usage in the
+  // database. Fetching the raw rows and summing here would degrade as the table
+  // grows by one row per AI call. The view is security_invoker, so an admin sees
+  // every user and a non-admin would see only their own — the same policy that
+  // guards token_usage itself.
+  const [usersResult, spendResult] = await Promise.all([
+    insforge.database
+      .from("profiles")
+      .select("id, email, full_name, approval_status, created_at, credit_balance_usd")
+      .order("created_at", { ascending: false }),
+    insforge.database
+      .from("user_ai_spend")
+      .select("user_id, total_cost_usd, generations"),
+  ]);
+
+  type SpendRow = { user_id: string; total_cost_usd: number | null; generations: number | null };
+  const spendByUser = new Map(
+    ((spendResult.data ?? []) as SpendRow[]).map((r) => [r.user_id, r]),
+  );
+
+  type ProfileRow = {
+    id: string;
+    email: string | null;
+    full_name: string | null;
+    approval_status: AdminUser["approval_status"];
+    created_at: string;
+    credit_balance_usd: number | string | null;
+  };
+
+  const users: AdminUser[] = ((usersResult.data ?? []) as ProfileRow[]).map((u) => {
+    const spend = spendByUser.get(u.id);
+    return {
+      id: u.id,
+      email: u.email,
+      full_name: u.full_name,
+      approval_status: u.approval_status,
+      created_at: u.created_at,
+      ai_spend_usd: Number(spend?.total_cost_usd ?? 0),
+      ai_generations: Number(spend?.generations ?? 0),
+      credit_balance_usd: Number(u.credit_balance_usd ?? 0),
+    };
+  });
 
   const pending = (users ?? []).filter((u) => u.approval_status === "pending").length;
 
@@ -62,7 +93,7 @@ export default async function AdminPage() {
             </div>
           </div>
 
-          <AdminUsersTable users={(users ?? []) as AdminUser[]} />
+          <AdminUsersTable users={users} />
         </div>
       </main>
     </>

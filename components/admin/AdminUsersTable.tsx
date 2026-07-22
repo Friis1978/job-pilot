@@ -4,12 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/lib/toast";
 
-type AdminUser = {
+export type AdminUser = {
   id: string;
   email: string | null;
   full_name: string | null;
   approval_status: "pending" | "approved" | "rejected";
   created_at: string;
+  /** Aggregated from token_usage via the user_ai_spend view. */
+  ai_spend_usd: number;
+  ai_generations: number;
+  credit_balance_usd: number;
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -17,6 +21,10 @@ const STATUS_STYLES: Record<string, string> = {
   approved: "bg-success-lightest text-success-foreground border border-success-light",
   rejected: "bg-surface-secondary text-text-muted border border-border",
 };
+
+function formatMoney(n: number) {
+  return `$${n.toFixed(2)}`;
+}
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-GB", {
@@ -101,6 +109,8 @@ export function AdminUsersTable({ users }: { users: AdminUser[] }) {
             <th className="text-left px-5 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Name</th>
             <th className="text-left px-5 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Email</th>
             <th className="text-left px-5 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Signed up</th>
+            <th className="text-right px-5 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">AI spend</th>
+            <th className="text-right px-5 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Credit left</th>
             <th className="text-left px-5 py-3 text-xs font-medium uppercase tracking-wide text-text-secondary">Status</th>
             <th className="px-5 py-3" />
           </tr>
@@ -113,6 +123,19 @@ export function AdminUsersTable({ users }: { users: AdminUser[] }) {
               </td>
               <td className="px-5 py-3.5 text-text-secondary">{u.email ?? "—"}</td>
               <td className="px-5 py-3.5 text-text-secondary">{formatDate(u.created_at)}</td>
+              <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                <span className="text-text-primary font-medium">{formatMoney(u.ai_spend_usd)}</span>
+                {u.ai_generations > 0 && (
+                  <span className="block text-xs text-text-muted">
+                    {u.ai_generations} generation{u.ai_generations === 1 ? "" : "s"}
+                  </span>
+                )}
+              </td>
+              <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                <span className={u.credit_balance_usd <= 0 ? "text-error font-medium" : "text-text-primary"}>
+                  {formatMoney(u.credit_balance_usd)}
+                </span>
+              </td>
               <td className="px-5 py-3.5">
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_STYLES[u.approval_status] ?? STATUS_STYLES.rejected}`}>
                   {u.approval_status}

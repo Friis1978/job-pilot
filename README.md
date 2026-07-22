@@ -238,7 +238,8 @@ New users are walked through profile setup, job search, and company research ste
 | Network intelligence | LinkedIn connection import, AI contact selection, message generation |
 | Application tracking | Saved → Applied → Interviewing → Offer pipeline with more statuses |
 | Dashboard analytics | Activity, scores, research, and AI token usage charts via PostHog |
-| Credit system | Stripe-powered one-time credit purchase; access gated until credits purchased |
+| Credit system | $10 welcome credit granted on approval; Stripe top-ups after that |
+| Admin AI spend | Per-user AI cost and generation count in the admin table |
 | User approval gate | Admin-controlled sign-up approval with Resend email notifications |
 
 ---
@@ -543,6 +544,30 @@ WHERE id = (SELECT id FROM auth.users WHERE email = 'your@email.com' LIMIT 1);
 ```
 
 Admins see an **Admin** link in the navbar and can access `/admin` to approve or reject pending users.
+
+---
+
+## Credit and spend
+
+New users are granted **$10 of credit when an admin approves them**, so they can
+use the app before paying anything. Stripe top-ups work as before after that.
+
+The grant is a `payments` row, not a write to `profiles.credit_balance_usd`.
+That column is derived — the `token_usage` trigger recomputes it as
+`SUM(payments) - SUM(token_usage)` on the next AI call — so setting it directly
+would vanish the first time the user generated anything. As a payment row it
+also shows up in their payment history.
+
+It is applied by the `profiles_grant_welcome_credit` trigger rather than by the
+admin route, because approval is also written from raw SQL and anything added
+later would have to remember. Granted once per user: approving, revoking and
+re-approving does not hand out a second $10. The marker lives in
+`payments.stripe_session_id` as `welcome_credit:<user id>` — per-user, because
+that column is UNIQUE and a shared constant would fail for the second user.
+
+The admin table shows each user's AI spend and remaining credit, aggregated by
+the `user_ai_spend` view. It is `security_invoker`, so admins see every row and
+a normal user would see only their own.
 
 ---
 
