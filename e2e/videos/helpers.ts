@@ -103,7 +103,8 @@ const glideTo = async (page: Page, x: number, y: number, steps = 22) => {
 
 /** Scrolls the target into view, glides the cursor to it, then clicks. */
 export const moveAndClick = async (page: Page, locator: Locator, settleMs = 500) => {
-  await locator.scrollIntoViewIfNeeded();
+  // Not scrollIntoViewIfNeeded — that jumps instantly and is visible on video.
+  await smoothScrollTo(page, locator);
   await page.waitForTimeout(250);
   const box = await locator.boundingBox();
   if (!box) throw new Error("moveAndClick: target has no bounding box (not visible?)");
@@ -117,7 +118,7 @@ export const moveAndClick = async (page: Page, locator: Locator, settleMs = 500)
 
 /** Types into a field at human speed, with the cursor parked on it. */
 export const typeInto = async (page: Page, locator: Locator, text: string, delay = 55) => {
-  await locator.scrollIntoViewIfNeeded();
+  await smoothScrollTo(page, locator);
   const box = await locator.boundingBox();
   if (box) await glideTo(page, box.x + box.width / 2, box.y + box.height / 2);
   await locator.click();
@@ -126,22 +127,54 @@ export const typeInto = async (page: Page, locator: Locator, text: string, delay
   await page.waitForTimeout(400);
 };
 
-/** Smooth page scroll — instant jumps read as a cut on video. */
-export const slowScroll = async (page: Page, distance = 900, steps = 30) => {
-  const per = distance / steps;
-  for (let i = 0; i < steps; i++) {
-    await page.mouse.wheel(0, per);
-    await page.waitForTimeout(28);
-  }
-  await page.waitForTimeout(500);
+/**
+ * Smooth page scroll.
+ *
+ * Driving this from Node with repeated `mouse.wheel` calls steps the page in
+ * visible jumps — each round trip is tens of milliseconds, so at 30fps the
+ * viewer sees the page lurch. Running the animation inside the page with
+ * requestAnimationFrame moves it once per rendered frame instead, which is what
+ * the recording actually captures.
+ *
+ * @param distance pixels to travel (negative scrolls up)
+ * @param durationMs how long the travel should take
+ */
+export const smoothScroll = async (page: Page, distance = 900, durationMs = 2200) => {
+  await page.evaluate(
+    ([dist, dur]) =>
+      new Promise<void>((resolve) => {
+        const start = window.scrollY;
+        const t0 = performance.now();
+        const step = (now: number) => {
+          const t = Math.min(1, (now - t0) / dur);
+          // ease-in-out: starts and stops gently instead of snapping
+          const e = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+          window.scrollTo(0, start + dist * e);
+          if (t < 1) requestAnimationFrame(step);
+          else resolve();
+        };
+        requestAnimationFrame(step);
+      }),
+    [distance, durationMs] as const,
+  );
+  await page.waitForTimeout(450);
 };
 
-export const slowScrollToTop = async (page: Page, steps = 24) => {
-  for (let i = 0; i < steps; i++) {
-    await page.mouse.wheel(0, -140);
-    await page.waitForTimeout(24);
-  }
-  await page.waitForTimeout(400);
+/** Smoothly returns to the top of the page. */
+export const smoothScrollToTop = async (page: Page, durationMs = 1400) => {
+  const y = await page.evaluate(() => window.scrollY);
+  if (y > 0) await smoothScroll(page, -y, durationMs);
+};
+
+/** Smoothly brings an element into the middle of the viewport. */
+export const smoothScrollTo = async (page: Page, locator: Locator, durationMs = 1400) => {
+  const box = await locator.boundingBox();
+  if (!box) return;
+  const delta = await page.evaluate(
+    ([top, height]) => top - (window.innerHeight / 2 - height / 2),
+    [box.y, box.height] as const,
+  );
+  if (Math.abs(delta) > 8) await smoothScroll(page, delta, durationMs);
 };
 
 /** Waits for every <img> to finish decoding so nothing pops in mid-shot. */
