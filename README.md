@@ -17,6 +17,10 @@ live against a real posting.
 Recorded with Playwright against the demo account, never a real one: see
 [`e2e/videos/`](e2e/videos/).
 
+A voiceover script with timecodes is in
+[`docs/walkthrough-script.md`](docs/walkthrough-script.md), and the same lines as
+subtitles in [`docs/walkthrough.srt`](docs/walkthrough.srt).
+
 ---
 
 ![Dashboard overview](public/images/dashboard-demo-full.jpeg)

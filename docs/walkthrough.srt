@@ -1,0 +1,118 @@
+1
+00:00:01,000 --> 00:00:06,500
+Job hunting means the same work over and over.
+Finding the postings. Reading them properly.
+
+2
+00:00:06,500 --> 00:00:11,500
+Working out whether you're actually a fit.
+DevJobInfo does that part for you.
+
+3
+00:00:13,000 --> 00:00:16,500
+Everything lands on one dashboard.
+
+4
+00:00:17,000 --> 00:00:24,000
+How many jobs came in, how well they match you,
+and how many applications you've sent this week.
+
+5
+00:00:25,000 --> 00:00:30,500
+Underneath, your pipeline by stage — saved, applied,
+interviewing, and the ones that have gone quiet.
+
+6
+00:00:31,000 --> 00:00:38,500
+Plus how your match scores are spread, so you can see
+whether you're aiming at the right roles.
+
+7
+00:00:39,000 --> 00:00:44,000
+It all rests on your profile.
+This is what every job gets scored against.
+
+8
+00:00:45,000 --> 00:00:51,000
+Drop in your CV and it fills itself in —
+skills, experience, education, the lot.
+
+9
+00:00:52,000 --> 00:00:58,500
+From there you can adjust anything. The more accurate
+this is, the more honest the scoring gets.
+
+10
+00:01:03,000 --> 00:01:09,000
+Search five job boards at once —
+one query instead of five tabs.
+
+11
+00:01:11,000 --> 00:01:16,000
+Or paste a URL straight in, and it'll pull
+the posting apart for you.
+
+12
+00:01:17,000 --> 00:01:25,000
+Postings in any language work as they are. A Danish job
+stays in Danish — nothing gets translated behind your back.
+
+13
+00:01:27,000 --> 00:01:32,000
+Every job comes back scored from nought to a hundred
+against your profile.
+
+14
+00:01:33,000 --> 00:01:39,800
+When a posting is too thin to judge fairly, it caps
+the score instead of pretending otherwise.
+
+15
+00:01:40,000 --> 00:01:43,500
+Open any job for the full reasoning.
+
+16
+00:01:44,000 --> 00:01:48,800
+Which skills matched, which are missing,
+and why it landed there.
+
+17
+00:01:49,200 --> 00:01:54,500
+Experience and seniority score separately, so a skills
+match can't mask a role that's too junior.
+
+18
+00:01:55,000 --> 00:02:00,000
+From here, a cover letter —
+written from your actual history.
+
+19
+00:02:01,000 --> 00:02:07,000
+In the language of the posting,
+so a Danish job gets a Danish letter.
+
+20
+00:02:12,000 --> 00:02:19,500
+And nothing invented. No companies you didn't work for,
+no projects you didn't build. Only what's in your profile.
+
+21
+00:02:24,000 --> 00:02:29,000
+Then a resume tailored to this specific role.
+
+22
+00:02:30,000 --> 00:02:38,000
+Same career, reordered around what this employer actually
+asked for — the relevant work first, the rest still there.
+
+23
+00:02:42,000 --> 00:02:46,000
+Both download as PDFs, ready to send.
+
+24
+00:02:55,000 --> 00:02:58,000
+Find the jobs. Research the companies. Land the role.
+
+25
+00:02:58,500 --> 00:03:00,100
+DevJobInfo — devjob.info
