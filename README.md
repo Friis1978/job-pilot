@@ -6,6 +6,19 @@ An AI-powered job hunting assistant. Set up your profile once, then let the agen
 
 ---
 
+## Walkthrough
+
+<a href="docs/walkthrough.mp4"><img src="docs/walkthrough-thumb.jpg" alt="DevJobInfo walkthrough" width="640" /></a>
+
+Click the thumbnail to watch the three-minute tour — dashboard, profile, job
+search and match breakdown, then a cover letter and tailored resume generated
+live against a real posting.
+
+Recorded with Playwright against the demo account, never a real one: see
+[`e2e/videos/`](e2e/videos/).
+
+---
+
 ![Dashboard overview](public/images/dashboard-demo-full.jpeg)
 
 ---
