@@ -2,13 +2,18 @@
 
 For `docs/walkthrough.mp4` (90s, 1280×720). A narrated version already exists as
 `docs/walkthrough-voiced.mp4`, generated with OpenAI `gpt-4o-mini-tts` (voice
-`coral`, lively and upbeat). This is what it speaks.
+`onyx`, deep male, lively and upbeat). This is what it speaks.
 
 **Delivery:** bright and energetic, like showing a friend something you are
 pleased with. 12 lines, 148 words over 90 seconds — roughly a quarter of the
 runtime is silence, which is deliberate.
 
 Timecodes were read off the recording, not estimated from the spec.
+
+The whole script is generated as a **single** TTS request and then split by
+transcribing it for word timestamps. Generating a request per line made each
+line a fresh performance — the same voice name, but a different delivery every
+time, which sounded like several different narrators.
 
 ---
 
