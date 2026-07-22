@@ -8,18 +8,20 @@ An AI-powered job hunting assistant. Set up your profile once, then let the agen
 
 ## Walkthrough
 
-<a href="https://friis1978.github.io/job-pilot/walkthrough.mp4"><img src="docs/walkthrough-thumb.jpg" alt="DevJobInfo walkthrough" width="640" /></a>
+<a href="https://friis1978.github.io/job-pilot/walkthrough-voiced.mp4"><img src="docs/walkthrough-thumb.jpg" alt="DevJobInfo walkthrough" width="640" /></a>
 
-Click the thumbnail to watch the three-minute tour — dashboard, profile, job
-search and match breakdown, then a cover letter and tailored resume generated
-live against a real posting.
+Click the thumbnail to watch the three-minute narrated tour — dashboard,
+profile, job search and match breakdown, then a cover letter and tailored resume
+generated live against a real posting.
 
 Recorded with Playwright against the demo account, never a real one: see
 [`e2e/videos/`](e2e/videos/).
 
-A voiceover script with timecodes is in
-[`docs/walkthrough-script.md`](docs/walkthrough-script.md), and the same lines as
-subtitles in [`docs/walkthrough.srt`](docs/walkthrough.srt).
+- **Narrated:** [`walkthrough-voiced.mp4`](https://friis1978.github.io/job-pilot/walkthrough-voiced.mp4)
+- **Silent**, if you would rather record your own voice over it:
+  [`walkthrough.mp4`](https://friis1978.github.io/job-pilot/walkthrough.mp4)
+- **Script** with timecodes: [`docs/walkthrough-script.md`](docs/walkthrough-script.md)
+- **Subtitles:** [`docs/walkthrough.srt`](docs/walkthrough.srt), timed to the narration
 
 ---
 

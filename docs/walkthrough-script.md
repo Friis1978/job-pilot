@@ -3,6 +3,16 @@
 For `docs/walkthrough.mp4` (3:00, 1280×720). Timecodes were read off the
 recording itself, not estimated from the spec.
 
+**A narrated version already exists:** `docs/walkthrough-voiced.mp4`, generated
+with OpenAI `gpt-4o-mini-tts` (voice `nova`, warm and upbeat). This script is
+what it speaks. Re-record it with a human voice and the timings below still hold.
+
+The timings were then corrected against the *actual* generated audio: five cues
+ran longer than a words-per-minute estimate predicted and would have overlapped
+the next line. Each was pushed only as far as needed, so the largest drift from
+its on-screen moment is 3.3s — on the closing line, where it does not matter.
+`walkthrough.srt` reflects the corrected timings.
+
 **Delivery:** conversational, unhurried, roughly 150 words per minute. Every cue
 below fits its slot at that pace with room to breathe — if a line feels rushed,
 the gap after it is deliberate and can absorb the overrun.
