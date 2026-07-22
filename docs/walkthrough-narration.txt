@@ -1,0 +1,114 @@
+DEVJOBINFO — WALKTHROUGH NARRATION
+
+Video: docs/walkthrough.mp4   30 fps   1280x720   90:02 (00:01:30:02)
+Timecode is HH:MM:SS:FF at 30 fps, starting at 00:00:00:00.
+
+Read each line so it STARTS on its timecode. Lengths below are what the
+cut allows before the next line is due — comfortably over a natural read.
+
+==============================================================================
+
+[01]  IN 00:00:01:00      room:  7.0s
+
+      Job hunting is the same work, over and over. DevJobInfo takes that part off your hands.
+
+------------------------------------------------------------------------------
+
+[02]  IN 00:00:08:00      room:  8.0s
+
+      Everything lands on one dashboard — jobs found, your match rate, and where every application stands.
+
+------------------------------------------------------------------------------
+
+[03]  IN 00:00:16:00      room:  6.0s
+
+      Plus how your match scores are spread, so you know you're aiming at the right roles.
+
+------------------------------------------------------------------------------
+
+[04]  IN 00:00:22:00      room: 11.0s
+
+      It all rests on your profile. Drop in your CV, and it fills itself in.
+
+------------------------------------------------------------------------------
+
+[05]  IN 00:00:33:00      room:  7.0s
+
+      Search five job boards at once — or paste a job URL straight in.
+
+------------------------------------------------------------------------------
+
+[06]  IN 00:00:40:00      room:  8.0s
+
+      Every job is scored against your profile. And a thin posting gets capped, never oversold.
+
+------------------------------------------------------------------------------
+
+[07]  IN 00:00:48:00      room:  9.0s
+
+      Then a cover letter, written from your real history, in the language of the posting.
+
+------------------------------------------------------------------------------
+
+[08]  IN 00:00:57:00      room:  6.0s
+
+      Nothing invented — only what's actually in your profile.
+
+------------------------------------------------------------------------------
+
+[09]  IN 00:01:03:00      room:  5.0s
+
+      Add your motivation for the role.
+
+------------------------------------------------------------------------------
+
+[10]  IN 00:01:08:00      room: 11.0s
+
+      And a resume tailored to this job, reordered around what this employer asked for.
+
+------------------------------------------------------------------------------
+
+[11]  IN 00:01:19:00      room:  6.0s
+
+      Both download as PDFs, ready to send.
+
+------------------------------------------------------------------------------
+
+[12]  IN 00:01:25:00      room:  5.1s
+
+      DevJobInfo — devjob dot info.
+
+------------------------------------------------------------------------------
+
+==============================================================================
+USING THESE IN DAVINCI RESOLVE
+==============================================================================
+
+The video is 30 fps starting at 00:00:00:00. Set the project to 30 fps or the
+timecodes below will not line up.
+
+SUBTITLES
+  Import docs/walkthrough.srt — File > Import > Subtitle, or drag it onto the
+  timeline. Reliable, and it doubles as an on-screen caption track.
+
+MARKERS
+  Import docs/walkthrough-markers.edl — right-click the timeline in the Media
+  Pool > Timelines > Import > Timeline Markers from EDL. Resolve's EDL marker
+  import is fussy about project frame rate; if the markers land in the wrong
+  place, the SRT route above is the dependable one.
+
+RECORDING IN FAIRLIGHT
+  Read from this file, watching the timeline for each IN point. The "room"
+  figure is how long until the next line is due, and every one is comfortably
+  longer than a natural read — so do not rush to fit.
+
+  Punch-in per line beats one continuous pass: a fluff costs one line.
+
+IF A LINE RUNS LONG
+  Nothing breaks. The cut has roughly 40 seconds of silence spread through it.
+  Push the next line later rather than speeding up — or tell Claude and the
+  placement can be adjusted around your actual takes.
+
+SPREADSHEET
+  docs/walkthrough-cues.csv has the same data if you would rather work from a
+  spreadsheet, or drive another tool from it.

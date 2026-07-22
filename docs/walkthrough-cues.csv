@@ -1,0 +1,13 @@
+line,timecode_in,timecode_out,start_seconds,room_seconds,text
+1,00:00:01:00,00:00:07:01,1.000,7.0,"Job hunting is the same work, over and over. DevJobInfo takes that part off your hands."
+2,00:00:08:00,00:00:14:00,8.000,8.0,"Everything lands on one dashboard — jobs found, your match rate, and where every application stands."
+3,00:00:16:00,00:00:20:07,16.000,6.0,"Plus how your match scores are spread, so you know you're aiming at the right roles."
+4,00:00:22:00,00:00:26:10,22.000,11.0,"It all rests on your profile. Drop in your CV, and it fills itself in."
+5,00:00:33:00,00:00:36:17,33.000,7.0,"Search five job boards at once — or paste a job URL straight in."
+6,00:00:40:00,00:00:45:24,40.000,8.0,"Every job is scored against your profile. And a thin posting gets capped, never oversold."
+7,00:00:48:00,00:00:51:23,48.000,9.0,"Then a cover letter, written from your real history, in the language of the posting."
+8,00:00:57:00,00:00:59:25,57.000,6.0,"Nothing invented — only what's actually in your profile."
+9,00:01:03:00,00:01:04:14,63.000,5.0,"Add your motivation for the role."
+10,00:01:08:00,00:01:11:29,68.000,11.0,"And a resume tailored to this job, reordered around what this employer asked for."
+11,00:01:19:00,00:01:21:13,79.000,6.0,"Both download as PDFs, ready to send."
+12,00:01:25:00,00:01:28:06,85.000,5.1,"DevJobInfo — devjob dot info."
