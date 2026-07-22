@@ -453,6 +453,33 @@ because that sentence had been truncated away.
 A capped score means "not enough information to judge", not "bad match" — open
 the original posting to decide.
 
+### Application pipeline dates
+
+`jobs.applied_at` records when a job first entered an applied state. It is set by
+the `jobs_stamp_applied_at` trigger rather than by route code, because status is
+written from the status route, from bulk operations, and from raw SQL — every one
+of those would otherwise have to remember to stamp it.
+
+Two rules the trigger enforces:
+
+- **Set once, never moved.** Re-saving or editing an applied job does not change
+  the date.
+- **Never cleared.** A job that goes applied → rejected was still applied for, and
+  still counts in "Applied this week".
+
+Statuses that imply an application exists: `applied`, `interviewing`, `offer`,
+`rejected`, `rejected_after_interview`, `no_answer`. `saved` and `no_fit` do not —
+they describe a decision made before applying.
+
+Anything measuring applications — "Applied this week", the "No answer" filter
+(`NO_ANSWER_DAYS`) — reads `applied_at`, never `updated_at`. `updated_at` moves on
+any edit, so rescoring a job or regenerating its summary used to drag old
+applications back into the current week and reset the no-answer clock.
+
+`applied_at` is NULL for 18 historical jobs whose apply date could not be
+recovered. They still appear in the pipeline by status; they simply cannot be
+attributed to a week.
+
 ### Company research
 1. Open a job's detail page and click **Research Company**
 2. The agent fetches the company's public website over HTTP (homepage, About, Engineering/Blog pages), also searches DuckDuckGo for the job posting to find contact details, and synthesises a structured dossier

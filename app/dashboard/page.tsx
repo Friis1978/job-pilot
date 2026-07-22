@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createInsforgeServer } from "@/lib/insforge-server";
-import { formatDateAgo } from "@/lib/utils";
+import { formatDateAgo, NO_ANSWER_DAYS } from "@/lib/utils";
 import { Navbar } from "@/components/layout/Navbar";
 import { StatsBar } from "@/components/dashboard/StatsBar";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
@@ -12,6 +12,9 @@ import { PipelineCard } from "@/components/dashboard/PipelineCard";
 import { getDashboardStats, getJobsOverTime, getMatchScoreDistribution, getTokenUsageByFeature } from "@/lib/posthog-query";
 import { TokenUsageChart } from "@/components/dashboard/TokenUsageChart";
 import type { CompanyResearchPoint } from "@/components/dashboard/CompanyResearchChart";
+
+/** Row shape for the pipeline query — status plus the application timestamp. */
+type PipelineRow = { status: string; updated_at: string; applied_at: string | null };
 
 type AgentRunRow = {
   job_title_searched: string | null;
@@ -79,7 +82,7 @@ export default async function DashboardPage() {
       .gte("researched_at", new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()),
     insforge.database
       .from("jobs")
-      .select("status, updated_at")
+      .select("status, updated_at, applied_at")
       .eq("user_id", user.id),
     insforge.database
       .from("profiles")
@@ -131,11 +134,13 @@ export default async function DashboardPage() {
   const pipelineData = (() => {
     const counts = { saved: 0, applied: 0, interviewing: 0, offer: 0, rejected: 0, rejected_after_interview: 0, no_fit: 0, no_answer: 0 };
     if (pipelineResult.status === "fulfilled" && pipelineResult.value.data) {
-      const oneMonthAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
-      for (const row of pipelineResult.value.data as { status: string; updated_at: string }[]) {
+      const cutoff = Date.now() - NO_ANSWER_DAYS * 24 * 60 * 60 * 1000;
+      for (const row of pipelineResult.value.data as PipelineRow[]) {
         const s = row.status as keyof typeof counts;
         if (s in counts) counts[s]++;
-        if (row.status === "applied" && new Date(row.updated_at).getTime() < oneMonthAgo) {
+        // "No answer" means the application is old, not that the row is stale —
+        // measure from applied_at so an unrelated edit does not reset the clock.
+        if (row.status === "applied" && row.applied_at && new Date(row.applied_at).getTime() < cutoff) {
           counts.no_answer++;
         }
       }
@@ -152,9 +157,13 @@ export default async function DashboardPage() {
     let thisWeek = 0;
     let lastWeek = 0;
     if (pipelineResult.status === "fulfilled" && pipelineResult.value.data) {
-      for (const row of pipelineResult.value.data as { status: string; updated_at: string }[]) {
-        if (row.status !== "applied") continue;
-        const t = new Date(row.updated_at).getTime();
+      // Count by applied_at, not status + updated_at. updated_at moves on any
+      // edit, which pulled untouched applications back into the current week,
+      // and filtering on status === "applied" dropped jobs that had since been
+      // rejected — those were still applied for.
+      for (const row of pipelineResult.value.data as PipelineRow[]) {
+        if (!row.applied_at) continue;
+        const t = new Date(row.applied_at).getTime();
         if (t >= startOfThisWeek) thisWeek++;
         else if (t >= startOfLastWeek) lastWeek++;
       }

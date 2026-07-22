@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { MATCH_THRESHOLD, formatDateAgo, shortenLocation } from "@/lib/utils";
+import { MATCH_THRESHOLD, NO_ANSWER_DAYS, formatDateAgo, shortenLocation } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import type { JobRow } from "@/types";
 import { StatusBadge } from "@/components/find-jobs/StatusBadge";
@@ -65,6 +65,9 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("saved");
+  // Computed once via a lazy initialiser rather than on every render: the value
+  // must not drift between the filter predicate and the tab counts.
+  const [noAnswerCutoff] = useState(() => Date.now() - NO_ANSWER_DAYS * 24 * 60 * 60 * 1000);
   const [showNoFit, setShowNoFit] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterDropdownStyle, setFilterDropdownStyle] = useState<React.CSSProperties>({});
@@ -176,12 +179,9 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
 
   // Status filter
   if (statusFilter === "no_answer") {
-    const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
-    filtered = filtered.filter((job) =>
-      job.status === "applied" &&
-      job.updated_at != null &&
-      new Date(job.updated_at).getTime() < fourteenDaysAgo
-    );
+    // Measured from applied_at: editing a job is not a reply from the employer,
+    // but updated_at used to reset this clock on every rescore or summary.
+    filtered = filtered.filter((job) => isAwaitingAnswer(job, noAnswerCutoff));
   } else if (statusFilter !== "all") {
     filtered = filtered.filter((job) => (job.status ?? "saved") === statusFilter);
   }
@@ -340,11 +340,10 @@ export function JobsTable({ jobs, connectionMap = {} }: { jobs: JobRow[]; connec
       <div className="flex items-center gap-2 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none" }}>
         {STATUS_FILTERS.map(({ key, label, dot }) => {
           const active = statusFilter === key;
-          const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
           const count = key === "all"
             ? jobs.length
             : key === "no_answer"
-            ? jobs.filter((j) => j.status === "applied" && j.updated_at != null && new Date(j.updated_at).getTime() < fourteenDaysAgo).length
+            ? jobs.filter((j) => isAwaitingAnswer(j, noAnswerCutoff)).length
             : jobs.filter((j) => (j.status ?? "saved") === key).length;
           if (key !== "all" && count === 0) return null;
           return (
@@ -612,6 +611,11 @@ const SOURCE_LABELS: Record<string, string> = {
   glassdoor: "Glassdoor",
   url: "Imported",
 };
+
+/** An application with no reply after NO_ANSWER_DAYS, measured from applied_at. */
+function isAwaitingAnswer(job: JobRow, cutoff: number): boolean {
+  return job.status === "applied" && job.applied_at != null && new Date(job.applied_at).getTime() < cutoff;
+}
 
 function SourceBadge({ source }: { source: string }) {
   const label = SOURCE_LABELS[source] ?? source;

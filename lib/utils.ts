@@ -17,6 +17,13 @@ export const MATCH_THRESHOLD = 70;
 export const LOW_INFO_WORD_COUNT = 100;
 export const LOW_INFO_SCORE_CAP = 50;
 
+/**
+ * Days after applying before an application counts as unanswered. Measured from
+ * `jobs.applied_at`, never from `updated_at` — editing a job is not a reply from
+ * the employer, but it used to reset this clock.
+ */
+export const NO_ANSWER_DAYS = 14;
+
 /** Counts whitespace-separated words. Mirrors jobs.description_word_count. */
 export function countWords(text: string | null | undefined): number {
   const trimmed = text?.trim();

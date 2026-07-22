@@ -95,6 +95,8 @@ export type JobRow = {
   updated_at: string | null;
   /** Generated column. Under LOW_INFO_WORD_COUNT means the score is capped. */
   description_word_count: number | null;
+  /** When the job first entered an applied state. Never cleared. */
+  applied_at: string | null;
 };
 
 export type AdzunaJob = {
