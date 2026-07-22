@@ -13,9 +13,15 @@ import type { BrowserContext, Locator, Page } from "@playwright/test";
 export const injectCursor = async (page: Page) => {
   await page.addStyleTag({
     content: `
-      /* The dev-server badge sits in the corner of every frame — hide it. */
+      /* The dev-server badge sits in the corner of every frame. The selectors
+         below missed it in the last recording — Next renders it inside a shadow
+         host whose tag name has changed between versions — so the fixed-position
+         bottom-left catch-all is the one that actually works. Verify a frame
+         after recording rather than trusting this list. */
       nextjs-portal, [data-nextjs-toast], #__next-build-watcher,
-      [data-nextjs-dev-tools-button], [data-nextjs-dev-indicator] { display: none !important; }
+      [data-nextjs-dev-tools-button], [data-nextjs-dev-indicator],
+      [data-next-badge], [data-next-badge-root], [data-nextjs-dev-tools-root],
+      body > nextjs-portal, body > [id^="__next-dev"] { display: none !important; }
       #pw-cursor {
         position: fixed; top: 50%; left: 50%; width: 22px; height: 22px;
         margin: -11px 0 0 -11px; border-radius: 50%;
