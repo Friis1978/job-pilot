@@ -6,17 +6,15 @@ For `docs/walkthrough.mp4` (90s, 1280×720). A narrated version already exists a
 
 ## How the audio is produced
 
-1. The whole script goes to `gpt-4o-mini-tts` as a **single** request (voice
-   `onyx`, speed 1.08) so it is one continuous performance. A request per line
-   made every line a fresh take — same voice, different delivery — which sounded
-   like several narrators.
-2. The take is transcribed for word timestamps and each line located in it.
-   Splitting on silence does not work: the model pauses at commas as well as
-   between lines.
-3. Each piece is mastered — compression for density, a presence lift around
-   3.2 kHz for consonants, a little chest at 110 Hz, a cut at 300 Hz to clear
-   mud, then loudness-normalised. Raw TTS sits at one flat level, which is what
-   reads as dull; this lands about 7 dB more present.
+The narration is a recorded human read, supplied as one continuous take.
+
+It is transcribed for word timestamps and each line located in it, then placed
+at its cue. Splitting on silence does not work — a reader pauses at commas as
+well as between lines, so pause length alone cannot tell them apart.
+
+Processing is deliberately light, since the take was already well recorded:
+edges trimmed, rumble rolled off below 70 Hz, gentle 2:1 compression, and
+loudness normalisation so every line sits at the same level.
 
 **Delivery:** bright and energetic, like showing a friend something you are
 pleased with. 12 lines, 148 words over 90 seconds — roughly a quarter of the
