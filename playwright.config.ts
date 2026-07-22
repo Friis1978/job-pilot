@@ -30,9 +30,13 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev",
+    // RECORDING=1 switches off the Next dev indicator (see next.config.ts),
+    // which otherwise sits bottom-left of every recorded frame.
+    command: "RECORDING=1 npm run dev",
     url: "http://localhost:3000",
-    reuseExistingServer: true,
+    // Must not reuse: an already-running server was started without RECORDING=1
+    // and would still show the badge. predev frees the port first.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });
