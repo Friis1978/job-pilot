@@ -1,47 +1,47 @@
 1
-00:00:01,000 --> 00:00:06,272
+00:00:01,000 --> 00:00:07,800
 Job hunting is the same work, over and over. DevJobInfo takes that part off your hands.
 
 2
-00:00:08,000 --> 00:00:13,693
+00:00:08,050 --> 00:00:14,130
 Everything lands on one dashboard — jobs found, your match rate, and where every application stands.
 
 3
-00:00:16,000 --> 00:00:19,878
+00:00:16,000 --> 00:00:20,520
 Plus how your match scores are spread, so you know you're aiming at the right roles.
 
 4
-00:00:22,000 --> 00:00:26,319
+00:00:22,000 --> 00:00:27,000
 It all rests on your profile. Drop in your CV, and it fills itself in.
 
 5
-00:00:33,000 --> 00:00:36,742
+00:00:33,000 --> 00:00:37,420
 Search five job boards at once — or paste a job URL straight in.
 
 6
-00:00:40,000 --> 00:00:45,044
+00:00:40,000 --> 00:00:46,520
 Every job is scored against your profile. And a thin posting gets capped, never oversold.
 
 7
-00:00:48,000 --> 00:00:52,174
+00:00:48,000 --> 00:00:52,700
 Then a cover letter, written from your real history, in the language of the posting.
 
 8
-00:00:57,000 --> 00:00:59,730
+00:00:57,000 --> 00:00:59,960
 Nothing invented — only what's actually in your profile.
 
 9
-00:01:03,000 --> 00:01:04,567
+00:01:03,000 --> 00:01:04,860
 Add your motivation for the role.
 
 10
-00:01:08,000 --> 00:01:12,417
+00:01:08,000 --> 00:01:13,000
 And a resume tailored to this job, reordered around what this employer asked for.
 
 11
-00:01:19,000 --> 00:01:21,380
+00:01:19,000 --> 00:01:21,760
 Both download as PDFs, ready to send.
 
 12
-00:01:25,000 --> 00:01:26,855
+00:01:25,000 --> 00:01:27,772
 DevJobInfo — devjob dot info.
