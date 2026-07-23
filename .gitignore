@@ -79,3 +79,10 @@ docs/vo-human/
 
 # Local MCP / editor tooling — hold machine-specific API keys, never commit
 .mcp.json
+
+# graphify knowledge-graph output (generated, regenerable with: graphify update .)
+graphify-out/
+
+# wiki ingest inbox — transient input, do not scan (prompt-cache hygiene)
+.raw/*
+!.raw/README.md
