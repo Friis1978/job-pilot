@@ -484,6 +484,49 @@ See [`context/app-map.md`](context/app-map.md) for a full reference of every rou
 
 ---
 
+## Working on this repo with AI (token-efficient)
+
+AI coding assistants burn tokens re-reading files to answer "how does X work". This
+repo ships a two-layer local setup that cuts that dramatically — **measured ~5.8×
+fewer tokens per architecture query** on this codebase (66k tokens to read the whole
+corpus → ~12k via the graph). It's optional tooling; the app doesn't depend on it.
+
+**Layer 1 — [graphify](https://github.com/Graphify-Labs/graphify): a code graph.**
+A deterministic AST graph of the repo the assistant queries instead of grepping and
+reading many files.
+
+```bash
+pipx install graphifyy               # CLI: `graphify` + `graphify-mcp`
+graphify extract . --code-only       # build the graph — local AST, no API key, free
+graphify claude install --project    # adds query-first rules to CLAUDE.md + PreToolUse hooks + a skill
+graphify update .                    # re-run after code changes to keep it current (free)
+```
+
+Then the assistant runs `graphify query "how does X work"` for a scoped subgraph.
+`graphify-out/` is gitignored (regenerable).
+
+**Layer 2 — the `wiki/`: a persistent knowledge base.** The "why / how it fits"
+layer on top of the graph's "where is it" — decisions, gotchas, architecture. It's
+committed, so a clone has it already (`wiki/index.md` is the catalog). Maintained via
+slash commands:
+
+| Command | Does |
+|---|---|
+| `/wiki-query <question>` | Answer from the wiki before scanning source |
+| `/wiki-ingest <path>` | Compile raw notes from `.raw/` into wiki pages |
+| `/wiki-lint` | Fix broken `[[wikilinks]]`, index missing pages |
+
+**The lookup order** (encoded in `CLAUDE.md`): `wiki/` → `graphify query` → raw source
+(last). Don't scan `graphify-out/` or `.raw/` directly — it invalidates prompt caching.
+
+**After cloning:** `wiki/`, `.claude/commands/`, and `.claude/skills/` come with the
+repo, but the graphify hooks live in `.claude/settings.json` (gitignored — they embed
+machine-specific paths). Run `pipx install graphifyy && graphify claude install --project`
+once to regenerate them for your machine. graphify also supports Cursor, Codex, Copilot,
+and others — see its docs.
+
+---
+
 ## Key flows
 
 ### Finding jobs
