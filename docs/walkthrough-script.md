@@ -22,6 +22,11 @@ what it speaks (the bracket tags below are direction, not spoken).
 3. `scripts/build-voiceover.sh` masters each line (trim edge silence, high-pass,
    gentle compression, a presence lift, loudness normalised to −16 LUFS) and places
    it at its SRT cue, then muxes onto `walkthrough.mp4`.
+4. A background music bed (`docs/audio/the-grey-room.mp3`, YouTube Audio Library,
+   attribution-free) is mixed under the narration: loudness-normalised to ~11 LU
+   below the voice, faded in/out, and **sidechain-ducked** by the voice so it dips
+   under speech and swells in the silent gaps. Recipe: `loudnorm` bed → `afade` →
+   `sidechaincompress` (music keyed by voice) → `amix` → `alimiter`.
 
 **Delivery:** bright and energetic, like showing a friend something you are
 pleased with — the bracket cues carry the arc (frustration → relief → confidence,
