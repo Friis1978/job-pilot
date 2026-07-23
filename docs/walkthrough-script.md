@@ -1,35 +1,37 @@
 # Walkthrough — voiceover script
 
-For `docs/walkthrough.mp4` (90s, 1280×720). A narrated version already exists as
-`docs/walkthrough-voiced.mp4`, generated with OpenAI `gpt-4o-mini-tts` (voice
-`ballad`, confident and enthusiastic). This is what it speaks.
+For `docs/walkthrough.mp4` (90s, 1280×720). A narrated version exists as
+`docs/walkthrough-voiced.mp4`, generated with Google's `gemini-3.1-flash-tts-preview`
+(voice **Iapetus**), with per-line delivery steered by inline bracket cues. This is
+what it speaks (the bracket tags below are direction, not spoken).
 
 ## How the audio is produced
 
-1. The whole script goes to `gpt-4o-mini-tts` in a **single** request (voice
-   `ballad`, speed 1.05) so it is one continuous performance. A request per line
-   made every line a fresh take — same voice, different delivery — which sounded
-   like several narrators.
-2. The take is transcribed for word timestamps and each line located in it.
-   Splitting on silence does not work: the model pauses at commas as well as
-   between lines.
-3. Light mastering only — rumble rolled off, gentle 2:1 compression, a touch of
-   presence, loudness normalised. `ballad` arrives lively enough that the heavy
-   processing an earlier flat voice needed would only have squashed it.
-
-The voice was chosen by listening to five candidates read the same lines, not by
-picking from a description.
+1. The whole tagged script goes to `gemini-3.1-flash-tts-preview` (voice Iapetus)
+   in a **single** generation in Google AI Studio
+   ([aistudio.google.com/generate-speech](https://aistudio.google.com/generate-speech)),
+   so it is one continuous performance. Inline cues like `[knowing]`, `[confident]`,
+   `[sincere]` steer the delivery per line and are not spoken. A generation per line
+   sounded like several narrators. (The browser path needs no key; scripting the API
+   needs `GOOGLE_API_KEY`.)
+2. The single take is split into 12 per-line files by `scripts/split-take` logic:
+   estimate each boundary from cumulative word count, then snap to the nearest real
+   silence gap. Pure silence-splitting fails — the model pauses at commas as well as
+   between lines — but snapping a word-count estimate to a real pause never cuts
+   mid-word. No Whisper needed.
+3. `scripts/build-voiceover.sh` masters each line (trim edge silence, high-pass,
+   gentle compression, a presence lift, loudness normalised to −16 LUFS) and places
+   it at its SRT cue, then muxes onto `walkthrough.mp4`.
 
 **Delivery:** bright and energetic, like showing a friend something you are
-pleased with. 12 lines, 148 words over 90 seconds — roughly a quarter of the
-runtime is silence, which is deliberate.
+pleased with — the bracket cues carry the arc (frustration → relief → confidence,
+`[sincere]` on the two integrity lines). 12 lines over 90 seconds; roughly a
+quarter of the runtime is silence, which is deliberate.
 
-Timecodes were read off the recording, not estimated from the spec.
-
-The whole script is generated as a **single** TTS request and then split by
-transcribing it for word timestamps. Generating a request per line made each
-line a fresh performance — the same voice name, but a different delivery every
-time, which sounded like several different narrators.
+Timecodes are read off the recording, not estimated from the spec. Iapetus reads
+a touch tighter than the previous voice, so line 1 is nudged ~9% faster (pitch
+preserved) to clear line 2's cue, and the video is held to its full length so the
+end card lingers after the last line.
 
 ---
 
