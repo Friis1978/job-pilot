@@ -20,13 +20,37 @@ async function requireUser() {
   return { insforge, userId: data.user.id };
 }
 
+/**
+ * Guarantees a JSON body on every path, including thrown errors.
+ *
+ * Without this, an exception (a missing BYOK_ENCRYPTION_KEY, an InsForge
+ * network blip, a DB error) returns Next's default empty 500. The client then
+ * calls res.json() on an empty body and the user sees "Unexpected end of JSON
+ * input" — a parser error standing in for whatever actually went wrong. Wrapped,
+ * the same failure arrives as a message they can read.
+ */
+async function handle(fn: () => Promise<NextResponse>): Promise<NextResponse> {
+  try {
+    return await fn();
+  } catch (err) {
+    console.error("[api/settings/ai-key]", err);
+    return NextResponse.json(
+      { error: "Something went wrong handling your API key. Please try again." },
+      { status: 500 },
+    );
+  }
+}
+
 export async function GET() {
-  const auth = await requireUser();
-  if (!auth) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  return NextResponse.json(await getKeyStatus(auth.userId));
+  return handle(async () => {
+    const auth = await requireUser();
+    if (!auth) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    return NextResponse.json(await getKeyStatus(auth.userId));
+  });
 }
 
 export async function POST(req: NextRequest) {
+  return handle(async () => {
   const auth = await requireUser();
   if (!auth) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
@@ -111,21 +135,24 @@ export async function POST(req: NextRequest) {
   clearCachedKey(auth.userId);
 
   return NextResponse.json(await getKeyStatus(auth.userId));
+  });
 }
 
 export async function DELETE() {
-  const auth = await requireUser();
-  if (!auth) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  return handle(async () => {
+    const auth = await requireUser();
+    if (!auth) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-  const { error } = await auth.insforge.database
-    .from("user_ai_keys")
-    .delete()
-    .eq("user_id", auth.userId);
+    const { error } = await auth.insforge.database
+      .from("user_ai_keys")
+      .delete()
+      .eq("user_id", auth.userId);
 
-  if (error) {
-    return NextResponse.json({ error: "Could not remove the key. Please try again." }, { status: 500 });
-  }
+    if (error) {
+      return NextResponse.json({ error: "Could not remove the key. Please try again." }, { status: 500 });
+    }
 
-  clearCachedKey(auth.userId);
-  return NextResponse.json({ hasKey: false, keyHint: null, status: null, lastVerifiedAt: null });
+    clearCachedKey(auth.userId);
+    return NextResponse.json({ hasKey: false, keyHint: null, status: null, lastVerifiedAt: null });
+  });
 }

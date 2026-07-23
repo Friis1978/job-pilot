@@ -76,3 +76,6 @@ playwright-report/
 
 # Your own voiceover recordings (raw takes, not published)
 docs/vo-human/
+
+# Local MCP / editor tooling — hold machine-specific API keys, never commit
+.mcp.json

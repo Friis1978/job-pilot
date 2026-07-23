@@ -9,6 +9,22 @@ export type KeyStatus = {
   lastVerifiedAt: string | null;
 };
 
+/**
+ * Reads a JSON body without assuming there is one. A crashed route can return
+ * an empty 500, and res.json() on an empty body throws "Unexpected end of JSON
+ * input" — which would replace the real HTTP failure with a parser error the
+ * user cannot act on.
+ */
+async function readJson(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
 export function ApiKeyClient({ initial }: { initial: KeyStatus }) {
   const [state, setState] = useState<KeyStatus>(initial);
   const [value, setValue] = useState("");
@@ -26,8 +42,8 @@ export function ApiKeyClient({ initial }: { initial: KeyStatus }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey: value }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not save the key.");
+      const data = await readJson(res);
+      if (!res.ok) throw new Error((data.error as string) ?? `Save failed (${res.status}).`);
       setState(data as KeyStatus);
       // Clear immediately on success — there is no reason for the key to sit in
       // a DOM node after it has been stored.
@@ -46,8 +62,8 @@ export function ApiKeyClient({ initial }: { initial: KeyStatus }) {
     setSaved(false);
     try {
       const res = await fetch("/api/settings/ai-key", { method: "DELETE" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not remove the key.");
+      const data = await readJson(res);
+      if (!res.ok) throw new Error((data.error as string) ?? `Remove failed (${res.status}).`);
       setState(data as KeyStatus);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
