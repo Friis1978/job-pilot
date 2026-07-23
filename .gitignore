@@ -47,7 +47,9 @@ next-env.d.ts
 .agent
 .agents
 .augment
-.claude
+.claude/*
+!.claude/commands/
+!.claude/skills/
 .cline
 .github/copilot*
 .kilocode
@@ -66,7 +68,6 @@ ds-bundle/
 .venv
 .playwright-mcp
 memory
-.claude
 .codex
 .agents
 
